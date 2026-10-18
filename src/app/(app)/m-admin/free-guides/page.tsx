@@ -22,6 +22,7 @@ import {
   Layers,
   Sparkles,
   ArrowUpRight,
+  Upload,
 } from "lucide-react";
 import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { checkClientPermission } from "@/lib/admin-permissions";
@@ -33,6 +34,7 @@ import {
   deleteFreeGuideAction,
   getAdminGuideLeadsAction,
   deleteGuideLeadAction,
+  uploadGuideFileAction,
 } from "@/app/actions/free-guides";
 import { useToast } from "@/hooks/use-toast";
 
@@ -132,6 +134,8 @@ export default function AdminFreeGuidesPage() {
   const [formData, setFormData] = useState<GuideFormState>(defaultFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   const canEdit = checkClientPermission(adminUser, "free-guides", "edit");
   const canDelete = checkClientPermission(adminUser, "free-guides", "delete");
@@ -280,6 +284,81 @@ export default function AdminFreeGuidesPage() {
         chapters: nextChapters,
       };
     });
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      toast({
+        title: "Invalid file",
+        description: "Please select a valid PDF (.pdf) file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingPdf(true);
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+      const res = await uploadGuideFileAction(uploadFormData);
+      if (res.success && res.url) {
+        setFormData((prev) => ({ ...prev, file_url: res.url! }));
+        toast({
+          title: "PDF Uploaded",
+          description: "PDF file saved locally on server. Users can now download it directly!",
+        });
+      } else {
+        toast({
+          title: "Upload Failed",
+          description: res.error || "Failed to upload PDF.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Upload Error",
+        description: err?.message || "Error uploading PDF file.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingPdf(false);
+    }
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingCover(true);
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+      const res = await uploadGuideFileAction(uploadFormData);
+      if (res.success && res.url) {
+        setFormData((prev) => ({ ...prev, cover_image: res.url! }));
+        toast({
+          title: "Cover Uploaded",
+          description: "Cover image saved successfully.",
+        });
+      } else {
+        toast({
+          title: "Upload Failed",
+          description: res.error || "Failed to upload image.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Upload Error",
+        description: err?.message || "Error uploading cover image.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingCover(false);
+    }
   };
 
   const handleSaveGuide = async (e: React.FormEvent) => {
@@ -906,20 +985,46 @@ export default function AdminFreeGuidesPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label className="text-xs font-semibold">PDF File Download URL *</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">PDF File Download URL *</Label>
+                  <label className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 cursor-pointer flex items-center gap-1">
+                    <Upload className="w-3 h-3" />
+                    <span>{isUploadingPdf ? "Uploading..." : "Upload PDF"}</span>
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      onChange={handlePdfUpload}
+                      disabled={isUploadingPdf}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
                 <Input
                   value={formData.file_url}
                   onChange={(e) => setFormData({ ...formData, file_url: e.target.value })}
-                  placeholder="/Business Growth Guide By Color Hut.pdf"
+                  placeholder="/Business Growth Guide By Color Hut.pdf or /uploads/guides/..."
                   className="mt-1"
                 />
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Direct URL or local path to downloadable PDF.
+                  Store PDF directly on website for instant direct download (avoids Google Drive).
                 </p>
               </div>
 
               <div>
-                <Label className="text-xs font-semibold">Cover Image Path / URL</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Cover Image Path / URL</Label>
+                  <label className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 cursor-pointer flex items-center gap-1">
+                    <Upload className="w-3 h-3" />
+                    <span>{isUploadingCover ? "Uploading..." : "Upload Image"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCoverUpload}
+                      disabled={isUploadingCover}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
                 <Input
                   value={formData.cover_image}
                   onChange={(e) => setFormData({ ...formData, cover_image: e.target.value })}

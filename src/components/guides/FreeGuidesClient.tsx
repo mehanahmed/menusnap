@@ -157,20 +157,16 @@ export function FreeGuidesClient({ initialGuides }: FreeGuidesClientProps) {
         formId: "ebook_lead_form",
       });
 
-      const fileToOpen =
-        res.fileUrl ||
-        activeGuide.file_url ||
-        "/Business Growth Guide By Color Hut.pdf";
-
-      setDownloadUrl(fileToOpen);
+      // Direct download endpoint that streams the PDF with Content-Disposition: attachment
+      const downloadEndpoint = `/api/guides/download/?id=${activeGuide.id}`;
+      setDownloadUrl(downloadEndpoint);
       setSubmitSuccess(true);
 
-      // Trigger instant direct download
+      // Trigger automatic direct browser file download without redirecting to Google Drive
       if (typeof window !== "undefined") {
         const link = document.createElement("a");
-        link.href = fileToOpen;
-        link.download = fileToOpen.split("/").pop() || "Business Growth Guide By Color Hut.pdf";
-        link.target = "_blank";
+        link.href = downloadEndpoint;
+        link.setAttribute("download", `${activeGuide.title || "Free Guide"}.pdf`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -405,13 +401,11 @@ export function FreeGuidesClient({ initialGuides }: FreeGuidesClientProps) {
                   <div className="mt-6">
                     <a
                       href={downloadUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm shadow-lg shadow-orange-500/25 transition-all"
+                      download={`${activeGuide.title || "Free Guide"}.pdf`}
+                      className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm shadow-lg shadow-orange-500/25 transition-all cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
                       <span>ডাউনলোড শুরু না হলে এখানে ক্লিক করুন</span>
-                      <ExternalLink className="w-4 h-4 opacity-75" />
                     </a>
                   </div>
                 )}

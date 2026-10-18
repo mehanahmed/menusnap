@@ -1,5 +1,7 @@
 "use server";
 
+import fs from "fs/promises";
+import path from "path";
 import pool from "@/lib/mysql";
 import { FreeGuide, GuideLead, GuideChapter } from "@/lib/menusnap-types";
 import { z } from "zod";
@@ -613,6 +615,49 @@ export async function deleteGuideLeadAction(id: number): Promise<{
   } catch (error: any) {
     console.error("deleteGuideLeadAction error:", error);
     return { success: false, error: error.message || "Failed to delete lead." };
+  }
+}
+
+/**
+ * Admin action: Upload guide PDF or image cover directly to public/uploads/guides.
+ * Zero dependency on sharp or external storage.
+ */
+export async function uploadGuideFileAction(formData: FormData): Promise<{
+  success: boolean;
+  url?: string;
+  error?: string;
+}> {
+  try {
+    const file = formData.get("file") as File;
+    if (!file || typeof file === "string") {
+      return { success: false, error: "No file provided" };
+    }
+
+    const bytes = await file.arrayBuffer();
+    if (!bytes || bytes.byteLength === 0) {
+      return { success: false, error: "Uploaded file is empty" };
+    }
+
+    const uploadDir = path.join(process.cwd(), "public", "uploads", "guides");
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    const rawName = file.name || "guide.pdf";
+    let fileExt = path.extname(rawName).toLowerCase();
+    if (!fileExt) {
+      fileExt = file.type === "application/pdf" ? ".pdf" : ".png";
+    }
+
+    const cleanBase = path.basename(rawName, fileExt).replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fileName = `${Date.now()}-${cleanBase}${fileExt}`;
+    const filePath = path.join(uploadDir, fileName);
+
+    await fs.writeFile(filePath, Buffer.from(bytes));
+
+    const finalUrl = `/uploads/guides/${fileName}`;
+    return { success: true, url: finalUrl };
+  } catch (err: any) {
+    console.error("uploadGuideFileAction error:", err);
+    return { success: false, error: err?.message || "Failed to upload file." };
   }
 }
 
