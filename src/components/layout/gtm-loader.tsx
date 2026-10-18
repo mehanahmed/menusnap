@@ -7,10 +7,7 @@ import { getGtmSettings, type GtmSettings } from '@/app/actions/gtm-settings';
 
 export function GtmScriptLoader() {
   const pathname = usePathname();
-  const [settings, setSettings] = useState<GtmSettings | null>(() => ({
-    isEnabled: true,
-    gtmId: process.env.NEXT_PUBLIC_GTM_ID || 'GTM-MXJ6F2W2',
-  }));
+  const [settings, setSettings] = useState<GtmSettings | null>(null);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -55,7 +52,8 @@ export function GtmScriptLoader() {
   return (
     <>
       <Script
-        id="gtm-script"
+        key={cleanGtmId}
+        id={`gtm-script-${cleanGtmId}`}
         strategy="afterInteractive"
         dangerouslySetInnerHTML={{
           __html: `

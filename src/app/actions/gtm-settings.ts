@@ -2,6 +2,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { revalidatePath } from 'next/cache';
 
 export interface GtmSettings {
   isEnabled: boolean;
@@ -20,7 +21,7 @@ export async function getGtmSettings(): Promise<GtmSettings> {
   } catch (error: any) {
     // If the file doesn't exist, return default settings
     if (error.code === 'ENOENT') {
-      return { isEnabled: true, gtmId: 'GTM-MXJ6F2W2' };
+      return { isEnabled: false, gtmId: '' };
     }
     console.error('Error reading GTM settings:', error);
     throw new Error('Could not read GTM settings file.');
@@ -38,6 +39,7 @@ export async function saveGtmSettings(settings: GtmSettings): Promise<void> {
     }
     const data = JSON.stringify(settings, null, 2);
     await fs.writeFile(SETTINGS_FILE_PATH, data, 'utf-8');
+    revalidatePath('/', 'layout');
   } catch (error: any) {
     console.error('Error saving GTM settings:', error);
     throw new Error(error.message || 'Could not save GTM settings file.');

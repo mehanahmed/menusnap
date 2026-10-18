@@ -28,6 +28,7 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { isValidWhatsApp } from '@/lib/utils';
 import { checkClientStatus } from '@/app/actions/clients';
+import { Logo } from '@/components/landing/Logo';
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg 
@@ -89,6 +90,21 @@ function LoginContent() {
   // Common state
   const [rememberMe, setRememberMe] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [homeHref, setHomeHref] = useState('/');
+  const [pricingHref, setPricingHref] = useState('/#pricing');
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const isFromV2 = 
+        document.cookie.includes('landing_source=v2') || 
+        sessionStorage.getItem('menusnap_landing_source') === 'v2' ||
+        document.referrer.includes('/v2');
+      if (isFromV2) {
+        setHomeHref('/v2/');
+        setPricingHref('/v2/#pricing');
+      }
+    }
+  }, []);
 
   const { login, loginWithCredentials, clientLoading, isClientLoggedIn } = useClientAuth();
   const { setTheme } = useTheme();
@@ -347,14 +363,12 @@ function LoginContent() {
       <header className="w-full px-6 sm:px-12 py-6 flex items-center justify-between z-20">
         {/* Brand Logo & Subtitle */}
         <div className="flex flex-col">
-          <Link href="/" className="flex items-center gap-1 group">
-            <span className="text-2xl font-black tracking-tight text-slate-900 group-hover:text-orange-600 transition-colors">
-              Menu<span className="text-orange-500">Snap</span>
-            </span>
+          <Link href={homeHref} className="inline-flex items-center group select-none cursor-pointer" aria-label="MenuSnap">
+            <Logo dark={false} />
           </Link>
           <Link 
             href="mailto:support@menusnap.app" 
-            className="text-[11px] font-medium text-slate-400 hover:text-slate-700 flex items-center gap-0.5 mt-0.5 transition-colors"
+            className="text-[11px] font-medium text-slate-400 hover:text-slate-700 flex items-center gap-0.5 mt-1.5 transition-colors"
           >
             <span>support@menusnap.app</span>
             <span className="text-[10px]">→</span>
@@ -369,14 +383,14 @@ function LoginContent() {
           </div>
 
           <Link
-            href="/#pricing"
+            href={pricingHref}
             className="text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
           >
             Pricing
           </Link>
 
           <Link
-            href="/#pricing"
+            href={pricingHref}
             className="text-xs sm:text-sm font-bold bg-[#F7B67C] hover:bg-[#EEA768] text-slate-900 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full transition-all shadow-sm active:scale-95 flex items-center gap-1"
           >
             <span>View Packages</span>

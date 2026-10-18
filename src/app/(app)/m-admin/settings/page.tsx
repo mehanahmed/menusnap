@@ -259,7 +259,7 @@ function GtmSettingsForm(): ReactNode {
         <CardContent className="p-0 space-y-4">
           <div className="space-y-1">
             <Label htmlFor="gtmId" className="text-xs font-semibold text-slate-700">Container ID</Label>
-            <Input id="gtmId" {...form.register("gtmId")} placeholder="GTM-MXJ6F2W2" className="h-10 rounded-xl border-slate-200 bg-slate-50/40 text-xs font-mono focus:bg-white focus:border-slate-400 focus:ring-0" />
+            <Input id="gtmId" {...form.register("gtmId")} placeholder="GTM-XXXXXXX" className="h-10 rounded-xl border-slate-200 bg-slate-50/40 text-xs font-mono focus:bg-white focus:border-slate-400 focus:ring-0" />
             <p className="text-[11px] text-slate-400 font-normal">Format: GTM-XXXXXXX</p>
           </div>
         </CardContent>
