@@ -142,18 +142,26 @@ export function HeroSection({
           {/* Primary CTA */}
           <Link
             href="#pricing"
-            onClick={() => trackEvent("hero_cta_clicked", { button: "primary_download" })}
+            onClick={(e) => {
+              trackEvent("hero_cta_clicked", { button: "primary_download" });
+              const el = document.getElementById("pricing");
+              if (el) {
+                e.preventDefault();
+                el.scrollIntoView({ behavior: "smooth" });
+                window.history.pushState(null, "", "#pricing");
+              }
+            }}
             className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-b from-[#e0f2fe] via-[#bae6fd] to-[#7dd3fc] border border-sky-300 text-[#0369a1] font-bold text-sm shadow-[0_4px_16px_rgba(56,189,248,0.25)] hover:shadow-[0_6px_20px_rgba(56,189,248,0.35)] active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <ChefHat className="w-4 h-4 text-[#0369a1]" />
-            <span>Start Building Free</span>
+            <span>Start Building</span>
           </Link>
 
-          {/* Secondary CTA: Scroll to demo/database */}
+          {/* Secondary CTA: Scroll to See MenuSnap in Action demo */}
           <button
             type="button"
             onClick={() => {
-              const el = document.getElementById("database") || document.getElementById("pricing");
+              const el = document.getElementById("demo") || document.getElementById("how-it-works");
               if (el) el.scrollIntoView({ behavior: "smooth" });
             }}
             className="w-full sm:w-auto px-5 py-3.5 rounded-2xl bg-white/90 backdrop-blur-md border border-neutral-200/90 text-neutral-800 font-semibold text-sm shadow-sm hover:bg-neutral-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"

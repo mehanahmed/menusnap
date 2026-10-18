@@ -41,10 +41,18 @@ export function HowItWorksSection() {
           >
             <Link
               href="#pricing"
-              onClick={() => trackEvent("hero_cta_clicked", { source: "infographic_bottom_cta" })}
+              onClick={(e) => {
+                trackEvent("hero_cta_clicked", { source: "infographic_bottom_cta" });
+                const el = document.getElementById("pricing");
+                if (el) {
+                  e.preventDefault();
+                  el.scrollIntoView({ behavior: "smooth" });
+                  window.history.pushState(null, "", "#pricing");
+                }
+              }}
               className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl bg-gradient-to-b from-[#e0f2fe] via-[#bae6fd] to-[#7dd3fc] border border-sky-300 text-[#0369a1] font-bold text-sm sm:text-base shadow-[0_4px_16px_rgba(56,189,248,0.25)] hover:shadow-[0_6px_22px_rgba(56,189,248,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
             >
-              <span>Start building for free</span>
+              <span>Start building</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </motion.div>
