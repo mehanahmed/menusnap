@@ -13,7 +13,7 @@ interface WhatsAppFloatProps {
 
 export function WhatsAppFloat({ 
   className, 
-  phoneNumber = "8801805561171",
+  phoneNumber = "+8801805561176",
   message = "Hello! I'm interested in your services."
 }: WhatsAppFloatProps) {
   const pathname = usePathname();
