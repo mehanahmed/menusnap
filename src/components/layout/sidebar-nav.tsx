@@ -111,7 +111,7 @@ export function SidebarNav() {
         "group-data-[state=expanded]:p-4 group-data-[state=expanded]:h-[80px]"
       )}>
         <Link 
-          href="/dashboard" 
+          href="/dashboard/" 
           className="group-data-[collapsible=icon]:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring rounded-sm flex items-center"
         >
           <div className="relative h-12 w-44 sm:w-48">

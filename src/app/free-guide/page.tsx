@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Navbar } from "@/components/landingv2/navbar";
 import { Footer } from "@/components/landingv2/footer";
 import { FreeGuidesClient } from "@/components/guides/FreeGuidesClient";
@@ -17,17 +18,30 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function FreeGuidesPage() {
+export default async function FreeGuidesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ from?: string; ref?: string }>;
+}) {
+  const resolvedParams = searchParams ? await searchParams : {};
+  const cookieStore = await cookies();
+  const savedSource = cookieStore.get("landing_source")?.value;
+
+  const isFromV2 =
+    resolvedParams?.from === "v2" ||
+    resolvedParams?.ref === "v2" ||
+    savedSource === "v2";
+
   const result = await getPublicFreeGuidesAction();
   const guides = result.success && result.data ? result.data : [];
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-[#FF5A36]/25 selection:text-white overflow-x-clip flex flex-col justify-between">
-      <Navbar theme="dark" />
+      <Navbar theme="dark" landingSource={isFromV2 ? "v2" : "default"} />
       <main className="flex-1">
         <FreeGuidesClient initialGuides={guides} />
       </main>
-      <Footer />
+      <Footer landingSource={isFromV2 ? "v2" : "default"} />
     </div>
   );
 }

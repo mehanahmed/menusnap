@@ -1,164 +1,337 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { cn } from "@/lib/cn";
-import { NAV_LINKS } from "@/lib/data";
-import { Logo } from "@/components/landing/Logo";
-import { Button } from "@/components/landing/ui";
-import { CloseIcon, MenuIcon } from "@/components/landing/icons";
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { Menu, X, ArrowRight } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { Logo } from "@/components/landing/Logo";
 
-export function Navbar() {
-  const { isClientLoggedIn } = useClientAuth();
+export interface NavItem {
+  label: string;
+  href: string;
+}
+
+export const NAV_ITEMS: NavItem[] = [
+  { label: "How It Works", href: "#how-it-works" },
+  { label: "Pricing", href: "#pricing" },
+  { label: "Free Guide", href: "/free-guide/" },
+  { label: "FAQ", href: "#faq" },
+];
+
+export interface NavbarProps {
+  dark?: boolean;
+  theme?: "light" | "dark";
+  landingSource?: "v2" | "default";
+}
+
+export function Navbar({ dark = false, theme = "light", landingSource }: NavbarProps) {
+  const isDark = theme === "dark" || dark;
+  const pathname = usePathname();
+  const currentPath = (pathname || "").replace(/\/$/, "") || "/";
+  const isDirectV2 = currentPath === "/v2" || currentPath === "/landingv2";
+
   const [scrolled, setScrolled] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [isV2Source, setIsV2Source] = useState(landingSource === "v2" || isDirectV2);
+  const { isClientLoggedIn, clientLoading } = useClientAuth();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    setMounted(true);
+    if (typeof document !== "undefined" && document.cookie.includes("admin_session=")) {
+      setIsAdminLoggedIn(true);
+    }
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Set cookie and track landing page source (v2 vs default) across page navigations
   useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [open]);
+    if (typeof window === "undefined") return;
+
+    if (landingSource) {
+      const isSrcV2 = landingSource === "v2";
+      setIsV2Source(isSrcV2);
+      try {
+        document.cookie = `landing_source=${isSrcV2 ? "v2" : "default"}; path=/; max-age=2592000; SameSite=Lax`;
+        sessionStorage.setItem("menusnap_landing_source", isSrcV2 ? "v2" : "default");
+      } catch {}
+      return;
+    }
+
+    if (isDirectV2) {
+      try {
+        document.cookie = "landing_source=v2; path=/; max-age=2592000; SameSite=Lax";
+        sessionStorage.setItem("menusnap_landing_source", "v2");
+      } catch {}
+      setIsV2Source(true);
+    } else if (currentPath === "/") {
+      try {
+        document.cookie = "landing_source=default; path=/; max-age=2592000; SameSite=Lax";
+        sessionStorage.setItem("menusnap_landing_source", "default");
+      } catch {}
+      setIsV2Source(false);
+    } else {
+      // Subpages like /free-guide or /login
+      const params = new URLSearchParams(window.location.search);
+      const fromParam = params.get("from") || params.get("ref");
+      let stored: string | null = null;
+      try {
+        stored = sessionStorage.getItem("menusnap_landing_source");
+      } catch {}
+      const cookieMatch = typeof document !== "undefined" ? document.cookie.match(/landing_source=([^;]+)/) : null;
+      const cookieVal = cookieMatch ? cookieMatch[1] : null;
+      const ref = typeof document !== "undefined" ? document.referrer : "";
+
+      const cameFromV2 =
+        fromParam === "v2" ||
+        stored === "v2" ||
+        cookieVal === "v2" ||
+        ref.includes("/v2") ||
+        ref.includes("/landingv2");
+
+      setIsV2Source(cameFromV2);
+      if (cameFromV2) {
+        try {
+          document.cookie = "landing_source=v2; path=/; max-age=2592000; SameSite=Lax";
+          sessionStorage.setItem("menusnap_landing_source", "v2");
+        } catch {}
+      }
+    }
+  }, [currentPath, isDirectV2, landingSource]);
+
+  const isV2 = isDirectV2 || isV2Source;
+  const baseLandingPath = isV2 ? "/v2/" : "/";
+
+  const loggedIn = mounted && !clientLoading && (isClientLoggedIn || isAdminLoggedIn);
+  const dashboardHref = isClientLoggedIn ? "/dashboard/" : "/m-admin/";
+
+  /**
+   * Resolves href so anchor links work correctly and stay in the respective landing version:
+   * - If link is "/free-guide":
+   *     - if from v2: "/free-guide/?from=v2"
+   *     - if from default: "/free-guide/"
+   * - If link starts with "#" (e.g. #how-it-works, #pricing, #faq):
+   *     - if on current landing page (either "/" or "/v2/"), keeps "#..." for smooth in-page scroll.
+   *     - if on subpage (like /free-guide/):
+   *         - if v2 context: "/v2/#..." (with trailing slash to prevent 308 redirect)
+   *         - if default context: "/#..."
+   */
+  const resolveHref = (href: string) => {
+    if (href === "/free-guide" || href === "/free-guide/") {
+      return isV2 ? "/free-guide/?from=v2" : "/free-guide/";
+    }
+
+    if (!href.startsWith("#")) return href;
+
+    if (currentPath === "/" && !isV2) return href;
+    if (isDirectV2 && isV2) return href;
+
+    return isV2 ? `/v2/${href}` : `/${href}`;
+  };
+
+  /**
+   * Resolves logo link:
+   * - If on default "/", stays on "/" (smooth scroll to top)
+   * - If on v2 ("/v2" or "/landingv2"), stays on "/v2/" (smooth scroll to top)
+   * - If on subpage (like /free-guide/):
+   *     - if v2 context: navigates to "/v2/"
+   *     - if default context: navigates to "/"
+   */
+  const resolveLogoHref = () => {
+    if (currentPath === "/" || isDirectV2) {
+      return isDirectV2 ? "/v2/" : "/";
+    }
+    return baseLandingPath;
+  };
+
+  const handleLogoClick = () => {
+    if (currentPath === "/" || isDirectV2) {
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  };
 
   return (
     <header
-      className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-all duration-300",
-        scrolled || open
-          ? "border-b border-line/80 bg-white/85 shadow-[0_1px_0_rgb(17_17_17/0.02),0_8px_24px_-16px_rgb(17_17_17/0.16)] backdrop-blur-xl"
-          : "border-b border-transparent bg-transparent",
-      )}
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? isDark
+            ? "bg-[#0a0a0a]/90 backdrop-blur-md border-b border-white/10 shadow-[0_4px_20px_rgba(0,0,0,0.5)] py-3"
+            : "bg-white/90 backdrop-blur-md border-b border-gray-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] py-3"
+          : "bg-transparent py-4 sm:py-5"
+      }`}
     >
-      <nav
-        className="container-site flex h-[68px] items-center justify-between gap-6"
-        aria-label="Main navigation"
-      >
-        {/* Left — logo */}
-        <a
-          href="#home"
-          className="rounded-lg"
-          aria-label="MenuSnap — back to top"
+      <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        {/* Brand Logo */}
+        <Link
+          href={resolveLogoHref()}
+          onClick={handleLogoClick}
+          className="flex items-center group select-none cursor-pointer"
+          aria-label="MenuSnap"
         >
-          <Logo />
-        </a>
+          <Logo dark={isDark} />
+        </Link>
 
-        {/* Center — desktop links */}
-        <ul className="hidden items-center gap-1 lg:flex">
-          {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <a
-                href={link.href}
-                className="rounded-lg px-3.5 py-2 text-[15px] font-medium text-muted transition-colors hover:bg-ink/5 hover:text-ink"
-              >
-                {link.label}
-              </a>
-            </li>
+        {/* Center Nav Items (Desktop Pill) */}
+        <nav
+          className={`hidden md:flex items-center gap-7 lg:gap-8 px-5 py-2 rounded-full backdrop-blur-sm transition-colors ${
+            isDark
+              ? "bg-white/10 border border-white/15 shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+              : "bg-white/80 border border-gray-200/60 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
+          }`}
+          aria-label="Main navigation"
+        >
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.label}
+              href={resolveHref(item.href)}
+              className={`text-[13.5px] lg:text-[14px] font-medium transition-colors cursor-pointer select-none ${
+                isDark
+                  ? "text-gray-200 hover:text-white"
+                  : "text-gray-600 hover:text-gray-950"
+              }`}
+            >
+              {item.label}
+            </Link>
           ))}
-        </ul>
+        </nav>
 
-        {/* Right — actions */}
-        <div className="hidden items-center gap-2 lg:flex">
-          {isClientLoggedIn ? (
-            <Button href="/magictab/" size="sm">
-              Open Dashboard
-            </Button>
+        {/* Right CTA / Login (Desktop) */}
+        <div className="hidden md:flex items-center gap-4">
+          {!loggedIn && (
+            <Link
+              href="/login"
+              className={`text-[14px] font-medium transition-colors px-3 py-1.5 cursor-pointer select-none ${
+                isDark
+                  ? "text-gray-200 hover:text-white"
+                  : "text-gray-700 hover:text-gray-950"
+              }`}
+            >
+              Login
+            </Link>
+          )}
+          {loggedIn ? (
+            <Link
+              href={dashboardHref}
+              className="inline-flex items-center gap-1.5 bg-[#FF5A36] hover:bg-[#e84d2a] text-white text-[13.5px] font-semibold px-4 sm:px-5 py-2.5 rounded-xl shadow-sm hover:shadow-md hover:shadow-orange-500/20 transition-all active:scale-[0.98] cursor-pointer"
+            >
+              <span>Dashboard</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           ) : (
-            <>
-              <a
-                href="/login"
-                className="rounded-lg px-3.5 py-2 text-[15px] font-semibold text-ink transition-colors hover:bg-ink/5"
-              >
-                Login
-              </a>
-              <Button href="#pricing" size="sm">
-                Get MenuSnap
-              </Button>
-            </>
+            <Link
+              href={resolveHref("#pricing")}
+              onClick={() => trackEvent("hero_cta_clicked", { source: "navbar" })}
+              className="inline-flex items-center gap-1.5 bg-[#FF5A36] hover:bg-[#e84d2a] text-white text-[13.5px] font-semibold px-4 sm:px-5 py-2.5 rounded-xl shadow-sm hover:shadow-md hover:shadow-orange-500/20 transition-all active:scale-[0.98] cursor-pointer"
+            >
+              <span>Get MenuSnap</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           )}
         </div>
 
-        {/* Mobile — hamburger */}
-        <button
-          type="button"
-          className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-white text-ink lg:hidden"
-          aria-expanded={open}
-          aria-controls="mobile-menu"
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <span className="relative block h-4 w-5" aria-hidden="true">
-            <span
-              className={cn(
-                "absolute left-0 top-0 h-[2px] w-full rounded-full bg-current transition-all duration-300",
-                open && "top-[7px] rotate-45",
-              )}
-            />
-            <span
-              className={cn(
-                "absolute left-0 top-[7px] h-[2px] w-full rounded-full bg-current transition-all duration-300",
-                open && "opacity-0",
-              )}
-            />
-            <span
-              className={cn(
-                "absolute left-0 top-[14px] h-[2px] w-full rounded-full bg-current transition-all duration-300",
-                open && "top-[7px] -rotate-45",
-              )}
-            />
-          </span>
-        </button>
-      </nav>
-
-      {/* Mobile menu panel */}
-      <div
-        id="mobile-menu"
-        className={cn(
-          "grid overflow-hidden border-line/80 transition-[grid-template-rows] duration-300 lg:hidden",
-          open ? "grid-rows-[1fr] border-t bg-white/95 backdrop-blur-xl" : "grid-rows-[0fr]",
-        )}
-      >
-        <div className="min-h-0">
-          <div className="container-site flex flex-col gap-1 py-4">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={() => setOpen(false)}
-                className="rounded-xl px-4 py-3 text-base font-semibold text-ink transition-colors hover:bg-ink/5"
-              >
-                {link.label}
-              </a>
-            ))}
-            <div className="mt-2 flex flex-col gap-2 border-t border-line pt-4">
-              {isClientLoggedIn ? (
-                <Button href="/magictab/" size="lg" className="w-full" onClick={() => setOpen(false)}>
-                  Open Dashboard
-                </Button>
-              ) : (
-                <>
-                  <a
-                    href="/login"
-                    onClick={() => setOpen(false)}
-                    className="rounded-xl px-4 py-3 text-center text-base font-semibold text-ink"
-                  >
-                    Login
-                  </a>
-                  <Button href="#pricing" size="lg" className="w-full" onClick={() => setOpen(false)}>
-                    Get MenuSnap
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
+        {/* Mobile Hamburger Toggle */}
+        <div className="md:hidden flex items-center">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className={`p-2 rounded-xl transition-colors focus:outline-none ${
+              isDark
+                ? "text-gray-200 hover:text-white hover:bg-white/10"
+                : "text-gray-700 hover:text-gray-950 hover:bg-gray-100/80"
+            }`}
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
       </div>
+
+      {/* Mobile Menu Dropdown Drawer */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            className={`md:hidden px-5 pt-3 pb-6 shadow-xl overflow-hidden border-b ${
+              isDark
+                ? "bg-[#0e0e0e] border-white/10 text-white"
+                : "bg-white border-gray-200"
+            }`}
+          >
+            <div className="flex flex-col space-y-1.5">
+              {NAV_ITEMS.map((item) => (
+                <Link
+                  key={item.label}
+                  href={resolveHref(item.href)}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-3 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
+                    isDark
+                      ? "text-gray-200 hover:bg-white/5 hover:text-white"
+                      : "text-gray-700 hover:bg-gray-50 hover:text-gray-950"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
+            <div
+              className={`pt-4 mt-3 border-t flex flex-col gap-2.5 ${
+                isDark ? "border-white/10" : "border-gray-100"
+              }`}
+            >
+              {!loggedIn && (
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`w-full text-center py-2.5 text-[14.5px] font-semibold rounded-xl transition-colors ${
+                    isDark
+                      ? "text-gray-200 hover:bg-white/5 hover:text-white"
+                      : "text-gray-800 hover:bg-gray-50"
+                  }`}
+                >
+                  Login
+                </Link>
+              )}
+              {loggedIn ? (
+                <Link
+                  href={dashboardHref}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full flex items-center justify-center gap-2 bg-[#FF5A36] text-white text-[14px] font-semibold py-3 rounded-xl shadow-md transition-all active:scale-[0.98]"
+                >
+                  <span>Dashboard</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <Link
+                  href={resolveHref("#pricing")}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    trackEvent("hero_cta_clicked", { source: "mobile_navbar" });
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-[#FF5A36] text-white text-[14px] font-semibold py-3 rounded-xl shadow-md transition-all active:scale-[0.98]"
+                >
+                  <span>Get MenuSnap</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 }

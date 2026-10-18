@@ -1,11 +1,55 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { MapPin } from "lucide-react";
 
-export function Footer() {
+export function Footer({ landingSource }: { landingSource?: "v2" | "default" } = {}) {
+  const pathname = usePathname();
+  const currentPath = (pathname || "").replace(/\/$/, "") || "/";
+  const isDirectV2 = currentPath === "/v2" || currentPath === "/landingv2";
+  const [isV2Source, setIsV2Source] = useState(landingSource === "v2" || isDirectV2);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (landingSource) {
+      setIsV2Source(landingSource === "v2");
+      return;
+    }
+
+    if (isDirectV2) {
+      setIsV2Source(true);
+    } else if (currentPath === "/") {
+      setIsV2Source(false);
+    } else {
+      const params = new URLSearchParams(window.location.search);
+      const fromParam = params.get("from") || params.get("ref");
+      const stored = sessionStorage.getItem("menusnap_landing_source");
+      const cookieMatch = document.cookie.match(/landing_source=([^;]+)/);
+      const cookieVal = cookieMatch ? cookieMatch[1] : null;
+      const ref = document.referrer || "";
+      setIsV2Source(
+        fromParam === "v2" ||
+        stored === "v2" ||
+        cookieVal === "v2" ||
+        ref.includes("/v2") ||
+        ref.includes("/landingv2")
+      );
+    }
+  }, [currentPath, isDirectV2, landingSource]);
+
+  const isV2 = isDirectV2 || isV2Source;
+  const baseLandingPath = isV2 ? "/v2/" : "/";
+  const resolveHref = (href: string) => {
+    if (!href.startsWith("#")) return href;
+    if (currentPath === "/" && !isV2) return href;
+    if (isDirectV2 && isV2) return href;
+    return isV2 ? `/v2/${href}` : `/${href}`;
+  };
+
   return (
     <footer className="w-full bg-[#111111] text-gray-400 py-16 px-4 sm:px-6 lg:px-8 border-t border-gray-800">
       <div className="max-w-[1240px] mx-auto">
@@ -13,7 +57,7 @@ export function Footer() {
           
           {/* Brand Info (Span 2) */}
           <div className="md:col-span-2 space-y-4">
-            <Link href="/" className="inline-flex items-center group select-none">
+            <Link href={baseLandingPath} className="inline-flex items-center group select-none">
               <Image
                 src="/menusnap-logo-white.png"
                 alt="MenuSnap Logo"
@@ -44,7 +88,7 @@ export function Footer() {
             </h4>
             <ul className="space-y-2">
               <li>
-                <Link href="#how-it-works" className="hover:text-white transition-colors">
+                <Link href={resolveHref("#how-it-works")} className="hover:text-white transition-colors">
                   How It Works
                 </Link>
               </li>
@@ -54,7 +98,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="#pricing" className="hover:text-white transition-colors">
+                <Link href={resolveHref("#pricing")} className="hover:text-white transition-colors">
                   Pricing Plans
                 </Link>
               </li>
@@ -73,12 +117,12 @@ export function Footer() {
             </h4>
             <ul className="space-y-2">
               <li>
-                <Link href="#how-it-works" className="hover:text-white transition-colors">
+                <Link href={resolveHref("#how-it-works")} className="hover:text-white transition-colors">
                   How It Works
                 </Link>
               </li>
               <li>
-                <Link href="#faq" className="hover:text-white transition-colors">
+                <Link href={resolveHref("#faq")} className="hover:text-white transition-colors">
                   Frequently Asked Questions
                 </Link>
               </li>
