@@ -200,6 +200,24 @@ export async function getOrderByIdFromMySql(id: string) {
   }
 }
 
+let categoryCountSynced = false;
+async function ensureCategoryCounts() {
+  if (categoryCountSynced) return;
+  categoryCountSynced = true;
+  try {
+    await pool.execute(`
+      UPDATE categories c
+      SET itemCount = (
+        SELECT COUNT(*) FROM menu_items m 
+        WHERE m.categoryId = c.id OR LOWER(TRIM(m.categoryId)) = LOWER(TRIM(c.name))
+      )
+      WHERE c.itemCount IS NULL OR c.itemCount = 0
+    `);
+  } catch {
+    // Non-blocking
+  }
+}
+
 /**
  * Fetch all categories from local MySQL.
  * @param type 'restaurant' or 'parlour'
@@ -207,24 +225,34 @@ export async function getOrderByIdFromMySql(id: string) {
  */
 export async function getCategoriesFromMySql(type?: 'restaurant' | 'parlour', visibleOnly = false) {
   try {
-    let query = "SELECT *, DATE_FORMAT(createdAt, '%Y-%m-%d %H:%i:%s') as createdAt FROM categories";
+    ensureCategoryCounts().catch(() => {});
+
+    let query = `
+      SELECT c.*,
+             GREATEST(
+               COALESCE(c.itemCount, 0),
+               (SELECT COUNT(*) FROM menu_items m WHERE m.categoryId = c.id OR LOWER(TRIM(m.categoryId)) = LOWER(TRIM(c.name)))
+             ) as itemCount,
+             DATE_FORMAT(c.createdAt, '%Y-%m-%d %H:%i:%s') as createdAt
+      FROM categories c
+    `;
     const params: any[] = [];
     const conditions: string[] = [];
 
     if (type) {
-      conditions.push('type = ?');
+      conditions.push('c.type = ?');
       params.push(type);
     }
     
     if (visibleOnly) {
-      conditions.push('visibleToUsers = 1');
+      conditions.push('c.visibleToUsers = 1');
     }
 
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
     
-    query += ' ORDER BY sortOrder ASC';
+    query += ' ORDER BY c.sortOrder ASC';
     
     const [rows] = await pool.execute(query, params);
     const plainCategories = (rows as any[]).map((cat: any) => ({ ...cat }));

@@ -643,7 +643,18 @@ export default function MagicTabPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>({});
-  const [selectedMenuType, setSelectedMenuType] = useState<string>('restaurant');
+  const [selectedMenuType, setSelectedMenuType] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('colorHutClientUser');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.type) return parsed.type;
+        }
+      } catch {}
+    }
+    return 'restaurant';
+  });
   const [itemsToSelectFromDraft, setItemsToSelectFromDraft] = useState<string[] | null>(null);
 
   const handleRefreshAccess = async () => {
@@ -729,14 +740,24 @@ export default function MagicTabPage() {
     const countMap = new Map<string, number>();
     for (const item of allMenuItems) {
       if (item.category) {
-        countMap.set(item.category, (countMap.get(item.category) || 0) + 1);
+        const catKey = String(item.category).trim().toLowerCase();
+        countMap.set(catKey, (countMap.get(catKey) || 0) + 1);
       }
     }
 
-    return [...apiCategories].map(cat => ({
-      ...cat,
-      itemCount: countMap.has(cat.id) ? countMap.get(cat.id)! : (cat.itemCount || 0)
-    })).sort((a, b) => {
+    return [...apiCategories].map(cat => {
+      const idKey = String(cat.id).trim().toLowerCase();
+      const nameKey = decodeHtmlEntities(cat.name).trim().toLowerCase();
+      const dynamicCount = countMap.get(idKey) ?? countMap.get(nameKey);
+      const finalCount = dynamicCount !== undefined && dynamicCount > 0
+        ? dynamicCount
+        : (Number(cat.itemCount) || 0);
+
+      return {
+        ...cat,
+        itemCount: finalCount,
+      };
+    }).sort((a, b) => {
       const diff = (b.itemCount || 0) - (a.itemCount || 0);
       if (diff !== 0) return diff;
       return a.name.localeCompare(b.name);
@@ -854,16 +875,21 @@ export default function MagicTabPage() {
           continue;
         }
 
-        const groupingKey = matchedCatId || catKey;
+        const groupingKey = (matchedCatId || catKey).toLowerCase();
         const currentCount = countPerCat.get(groupingKey) || 0;
+
+        const standardizedItem: MenuItem = {
+          ...item,
+          category: matchedCatId || item.category,
+        };
 
         if (packageLimits && !packageLimits.isItemUnlimited && packageLimits.itemLimit > 0) {
           if (currentCount < packageLimits.itemLimit) {
-            allowedServerItems.push(item);
+            allowedServerItems.push(standardizedItem);
             countPerCat.set(groupingKey, currentCount + 1);
           }
         } else {
-          allowedServerItems.push(item);
+          allowedServerItems.push(standardizedItem);
           countPerCat.set(groupingKey, currentCount + 1);
         }
       }
@@ -891,16 +917,18 @@ export default function MagicTabPage() {
       // Calculate item count per category
       const countByCatId = new Map<string, number>();
       for (const it of [...allowedServerItems, ...localItems]) {
-        const catKey = String(it.category || '').toLowerCase();
+        const catKey = String(it.category || '').trim().toLowerCase();
         countByCatId.set(catKey, (countByCatId.get(catKey) || 0) + 1);
       }
 
       const combinedCategories = [...allowedServerCategories, ...localCategories].map(cat => {
-        const calculatedCount =
-          countByCatId.get(String(cat.id).toLowerCase()) ||
-          countByCatId.get(decodeHtmlEntities(cat.name).trim().toLowerCase()) ||
-          Number(cat.itemCount) ||
-          0;
+        const idKey = String(cat.id).trim().toLowerCase();
+        const nameKey = decodeHtmlEntities(cat.name).trim().toLowerCase();
+        const dynamicCount = countByCatId.get(idKey) ?? countByCatId.get(nameKey);
+        const calculatedCount = dynamicCount !== undefined && dynamicCount > 0
+          ? dynamicCount
+          : (Number(cat.itemCount) || 0);
+
         return {
           ...cat,
           itemCount: calculatedCount,
@@ -1659,13 +1687,13 @@ export default function MagicTabPage() {
                                     }}
                                   >
                                     <span className="text-xl flex-shrink-0">{cat.icon}</span>
-                                    <span className="font-semibold">{decodeHtmlEntities(cat.name)}</span>
-                                    {cat.itemCount !== undefined && cat.itemCount > 0 && (
-                                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground ml-auto mr-1">
+                                    <span className="font-semibold flex-1 min-w-0 truncate text-left">{decodeHtmlEntities(cat.name)}</span>
+                                    {cat.itemCount !== undefined && Number(cat.itemCount) > 0 && (
+                                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground ml-auto mr-1 shrink-0">
                                         {cat.itemCount}
                                       </span>
                                     )}
-                                    {activeCategoryId === cat.id && <div className={cn("w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0", (cat.itemCount && cat.itemCount > 0) ? "" : "ml-auto")} />}
+                                    {activeCategoryId === cat.id && <div className={cn("w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0", (cat.itemCount && Number(cat.itemCount) > 0) ? "" : "ml-auto")} />}
                                   </Button>
                                 ))}
                             </div>

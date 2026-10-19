@@ -27,21 +27,34 @@ export default async function FreeGuidesPage({
   const cookieStore = await cookies();
   const savedSource = cookieStore.get("landing_source")?.value;
 
+  const fromSource = resolvedParams?.from || resolvedParams?.ref;
+  const isParlor =
+    fromSource === "parlor" ||
+    fromSource === "parlour" ||
+    savedSource === "parlor" ||
+    savedSource === "parlour";
+
   const isFromV2 =
-    resolvedParams?.from === "v2" ||
-    resolvedParams?.ref === "v2" ||
-    savedSource === "v2";
+    !isParlor &&
+    (fromSource === "v2" ||
+     savedSource === "v2");
+
+  const landingSource: "v2" | "default" | "parlor" = isParlor
+    ? "parlor"
+    : isFromV2
+    ? "v2"
+    : "default";
 
   const result = await getPublicFreeGuidesAction();
   const guides = result.success && result.data ? result.data : [];
 
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-[#FF5A36]/25 selection:text-white overflow-x-clip flex flex-col justify-between">
-      <Navbar theme="dark" landingSource={isFromV2 ? "v2" : "default"} />
+      <Navbar theme="dark" landingSource={landingSource} />
       <main className="flex-1">
         <FreeGuidesClient initialGuides={guides} />
       </main>
-      <Footer landingSource={isFromV2 ? "v2" : "default"} />
+      <Footer landingSource={landingSource} />
     </div>
   );
 }

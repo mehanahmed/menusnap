@@ -6,24 +6,29 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { MapPin } from "lucide-react";
 
-export function Footer({ landingSource }: { landingSource?: "v2" | "default" } = {}) {
+export function Footer({ landingSource }: { landingSource?: "v2" | "default" | "parlor" } = {}) {
   const pathname = usePathname();
   const currentPath = (pathname || "").replace(/\/$/, "") || "/";
   const isDirectV2 = currentPath === "/v2" || currentPath === "/landingv2";
-  const [isV2Source, setIsV2Source] = useState(landingSource === "v2" || isDirectV2);
+  const isDirectParlor = currentPath === "/parlor" || currentPath === "/parlour";
+  const [sourceMode, setSourceMode] = useState<"v2" | "default" | "parlor">(
+    landingSource || (isDirectParlor ? "parlor" : isDirectV2 ? "v2" : "default")
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     if (landingSource) {
-      setIsV2Source(landingSource === "v2");
+      setSourceMode(landingSource);
       return;
     }
 
-    if (isDirectV2) {
-      setIsV2Source(true);
+    if (isDirectParlor) {
+      setSourceMode("parlor");
+    } else if (isDirectV2) {
+      setSourceMode("v2");
     } else if (currentPath === "/") {
-      setIsV2Source(false);
+      setSourceMode("default");
     } else {
       const params = new URLSearchParams(window.location.search);
       const fromParam = params.get("from") || params.get("ref");
@@ -31,23 +36,37 @@ export function Footer({ landingSource }: { landingSource?: "v2" | "default" } =
       const cookieMatch = document.cookie.match(/landing_source=([^;]+)/);
       const cookieVal = cookieMatch ? cookieMatch[1] : null;
       const ref = document.referrer || "";
-      setIsV2Source(
-        fromParam === "v2" ||
-        stored === "v2" ||
-        cookieVal === "v2" ||
-        ref.includes("/v2") ||
-        ref.includes("/landingv2")
-      );
-    }
-  }, [currentPath, isDirectV2, landingSource]);
+      const cameFromParlor =
+        fromParam === "parlor" ||
+        fromParam === "parlour" ||
+        stored === "parlor" ||
+        stored === "parlour" ||
+        cookieVal === "parlor" ||
+        cookieVal === "parlour" ||
+        ref.includes("/parlor") ||
+        ref.includes("/parlour");
 
-  const isV2 = isDirectV2 || isV2Source;
-  const baseLandingPath = isV2 ? "/v2/" : "/";
+      const cameFromV2 =
+        !cameFromParlor &&
+        (fromParam === "v2" ||
+         stored === "v2" ||
+         cookieVal === "v2" ||
+         ref.includes("/v2") ||
+         ref.includes("/landingv2"));
+
+      setSourceMode(cameFromParlor ? "parlor" : cameFromV2 ? "v2" : "default");
+    }
+  }, [currentPath, isDirectV2, isDirectParlor, landingSource]);
+
+  const baseLandingPath = sourceMode === "parlor" ? "/parlor" : sourceMode === "v2" ? "/v2/" : "/";
   const resolveHref = (href: string) => {
     if (!href.startsWith("#")) return href;
-    if (currentPath === "/" && !isV2) return href;
-    if (isDirectV2 && isV2) return href;
-    return isV2 ? `/v2/${href}` : `/${href}`;
+    if (currentPath === "/" && sourceMode === "default") return href;
+    if (isDirectV2 && sourceMode === "v2") return href;
+    if (isDirectParlor && sourceMode === "parlor") return href;
+    if (sourceMode === "parlor") return `/parlor${href}`;
+    if (sourceMode === "v2") return `/v2/${href}`;
+    return `/${href}`;
   };
 
   return (

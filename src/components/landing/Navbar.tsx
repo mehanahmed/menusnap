@@ -24,7 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
 export interface NavbarProps {
   dark?: boolean;
   theme?: "light" | "dark";
-  landingSource?: "v2" | "default";
+  landingSource?: "v2" | "default" | "parlor";
 }
 
 export function Navbar({ dark = false, theme = "light", landingSource }: NavbarProps) {
@@ -32,12 +32,15 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
   const pathname = usePathname();
   const currentPath = (pathname || "").replace(/\/$/, "") || "/";
   const isDirectV2 = currentPath === "/v2" || currentPath === "/landingv2";
+  const isDirectParlor = currentPath === "/parlor" || currentPath === "/parlour";
 
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-  const [isV2Source, setIsV2Source] = useState(landingSource === "v2" || isDirectV2);
+  const [sourceMode, setSourceMode] = useState<"v2" | "default" | "parlor">(
+    landingSource || (isDirectParlor ? "parlor" : isDirectV2 ? "v2" : "default")
+  );
   const { isClientLoggedIn, clientLoading } = useClientAuth();
 
   useEffect(() => {
@@ -53,32 +56,37 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Set cookie and track landing page source (v2 vs default) across page navigations
+  // Set cookie and track landing page source (v2 vs default vs parlor) across page navigations
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     if (landingSource) {
-      const isSrcV2 = landingSource === "v2";
-      setIsV2Source(isSrcV2);
+      setSourceMode(landingSource);
       try {
-        document.cookie = `landing_source=${isSrcV2 ? "v2" : "default"}; path=/; max-age=2592000; SameSite=Lax`;
-        sessionStorage.setItem("menusnap_landing_source", isSrcV2 ? "v2" : "default");
+        document.cookie = `landing_source=${landingSource}; path=/; max-age=2592000; SameSite=Lax`;
+        sessionStorage.setItem("menusnap_landing_source", landingSource);
       } catch {}
       return;
     }
 
-    if (isDirectV2) {
+    if (isDirectParlor) {
+      try {
+        document.cookie = "landing_source=parlor; path=/; max-age=2592000; SameSite=Lax";
+        sessionStorage.setItem("menusnap_landing_source", "parlor");
+      } catch {}
+      setSourceMode("parlor");
+    } else if (isDirectV2) {
       try {
         document.cookie = "landing_source=v2; path=/; max-age=2592000; SameSite=Lax";
         sessionStorage.setItem("menusnap_landing_source", "v2");
       } catch {}
-      setIsV2Source(true);
+      setSourceMode("v2");
     } else if (currentPath === "/") {
       try {
         document.cookie = "landing_source=default; path=/; max-age=2592000; SameSite=Lax";
         sessionStorage.setItem("menusnap_landing_source", "default");
       } catch {}
-      setIsV2Source(false);
+      setSourceMode("default");
     } else {
       // Subpages like /free-guide or /login
       const params = new URLSearchParams(window.location.search);
@@ -91,25 +99,34 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
       const cookieVal = cookieMatch ? cookieMatch[1] : null;
       const ref = typeof document !== "undefined" ? document.referrer : "";
 
+      const cameFromParlor =
+        fromParam === "parlor" ||
+        fromParam === "parlour" ||
+        stored === "parlor" ||
+        stored === "parlour" ||
+        cookieVal === "parlor" ||
+        cookieVal === "parlour" ||
+        ref.includes("/parlor") ||
+        ref.includes("/parlour");
+
       const cameFromV2 =
-        fromParam === "v2" ||
-        stored === "v2" ||
-        cookieVal === "v2" ||
-        ref.includes("/v2") ||
-        ref.includes("/landingv2");
+        !cameFromParlor &&
+        (fromParam === "v2" ||
+         stored === "v2" ||
+         cookieVal === "v2" ||
+         ref.includes("/v2") ||
+         ref.includes("/landingv2"));
 
-      setIsV2Source(cameFromV2);
-      if (cameFromV2) {
-        try {
-          document.cookie = "landing_source=v2; path=/; max-age=2592000; SameSite=Lax";
-          sessionStorage.setItem("menusnap_landing_source", "v2");
-        } catch {}
-      }
+      const mode = cameFromParlor ? "parlor" : cameFromV2 ? "v2" : "default";
+      setSourceMode(mode);
+      try {
+        document.cookie = `landing_source=${mode}; path=/; max-age=2592000; SameSite=Lax`;
+        sessionStorage.setItem("menusnap_landing_source", mode);
+      } catch {}
     }
-  }, [currentPath, isDirectV2, landingSource]);
+  }, [currentPath, isDirectV2, isDirectParlor, landingSource]);
 
-  const isV2 = isDirectV2 || isV2Source;
-  const baseLandingPath = isV2 ? "/v2/" : "/";
+  const baseLandingPath = sourceMode === "parlor" ? "/parlor" : sourceMode === "v2" ? "/v2/" : "/";
 
   const loggedIn = mounted && !clientLoading && (isClientLoggedIn || isAdminLoggedIn);
   const dashboardHref = isClientLoggedIn ? "/dashboard/" : "/m-admin/";
@@ -117,44 +134,56 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
   /**
    * Resolves href so anchor links work correctly and stay in the respective landing version:
    * - If link is "/free-guide":
+   *     - if from parlor: "/free-guide/?from=parlor"
    *     - if from v2: "/free-guide/?from=v2"
    *     - if from default: "/free-guide/"
    * - If link starts with "#" (e.g. #how-it-works, #pricing, #faq):
-   *     - if on current landing page (either "/" or "/v2/"), keeps "#..." for smooth in-page scroll.
+   *     - if on current landing page, keeps "#..." for smooth in-page scroll.
    *     - if on subpage (like /free-guide/):
-   *         - if v2 context: "/v2/#..." (with trailing slash to prevent 308 redirect)
+   *         - if parlor context: "/parlor#..."
+   *         - if v2 context: "/v2/#..."
    *         - if default context: "/#..."
    */
   const resolveHref = (href: string) => {
     if (href === "/free-guide" || href === "/free-guide/") {
-      return isV2 ? "/free-guide/?from=v2" : "/free-guide/";
+      return sourceMode === "parlor"
+        ? "/free-guide/?from=parlor"
+        : sourceMode === "v2"
+        ? "/free-guide/?from=v2"
+        : "/free-guide/";
     }
 
     if (!href.startsWith("#")) return href;
 
-    if (currentPath === "/" && !isV2) return href;
-    if (isDirectV2 && isV2) return href;
+    if (currentPath === "/" && sourceMode === "default") return href;
+    if (isDirectV2 && sourceMode === "v2") return href;
+    if (isDirectParlor && sourceMode === "parlor") return href;
 
-    return isV2 ? `/v2/${href}` : `/${href}`;
+    if (sourceMode === "parlor") return `/parlor${href}`;
+    if (sourceMode === "v2") return `/v2/${href}`;
+    return `/${href}`;
   };
 
   /**
    * Resolves logo link:
    * - If on default "/", stays on "/" (smooth scroll to top)
-   * - If on v2 ("/v2" or "/landingv2"), stays on "/v2/" (smooth scroll to top)
+   * - If on v2, stays on "/v2/" (smooth scroll to top)
+   * - If on parlor, stays on "/parlor" (smooth scroll to top)
    * - If on subpage (like /free-guide/):
+   *     - if parlor context: navigates to "/parlor"
    *     - if v2 context: navigates to "/v2/"
    *     - if default context: navigates to "/"
    */
   const resolveLogoHref = () => {
-    if (currentPath === "/" || isDirectV2) {
+    if (currentPath === "/" || isDirectV2 || isDirectParlor) {
+      if (isDirectParlor) return "/parlor";
       return isDirectV2 ? "/v2/" : "/";
     }
     return baseLandingPath;
   };
 
   const handleLogoClick = () => {
-    if (currentPath === "/" || isDirectV2) {
+    if (currentPath === "/" || isDirectV2 || isDirectParlor) {
       if (typeof window !== "undefined") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }

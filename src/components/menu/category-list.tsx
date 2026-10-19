@@ -191,11 +191,11 @@ function CategoryListComponent({
                 onClick={() => handleSelectCategory(category.id)}
               >
                 <span className="text-xl flex-shrink-0 w-8 text-center">{category.icon || "📁"}</span>
-                <span className="flex-1 font-medium truncate text-sm">
+                <span className="flex-1 min-w-0 font-medium truncate text-sm">
                   {decodeHtmlEntities(category.name)}
                 </span>
-                {category.itemCount !== undefined && category.itemCount > 0 && (
-                  <span className="text-[11px] font-semibold text-muted-foreground/70 px-1.5 py-0.5 rounded-full bg-muted/60 shrink-0 group-hover:bg-muted/90 transition-colors">
+                {category.itemCount !== undefined && Number(category.itemCount) > 0 && (
+                  <span className="text-[11px] font-semibold text-muted-foreground/70 px-1.5 py-0.5 rounded-full bg-muted/60 shrink-0 group-hover:bg-muted/90 transition-colors ml-auto mr-0.5">
                     {category.itemCount}
                   </span>
                 )}

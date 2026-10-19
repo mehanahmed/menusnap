@@ -86,12 +86,15 @@ export function HowItWorksSection() {
             </p>
           </div>
 
-          {/* Centered Laptop Video Walkthrough Mockup */}
+          {/* Centered Video Walkthrough Mockup with Desktop / Mobile Switcher */}
           <ProductDemoLaptop
             videoUrl="https://v1.pinimg.com/videos/iht/expMp4/79/86/b7/7986b72a3da0ea79fcd1c5c482eefecf_720w.mp4"
+            mobileVideoUrl="/videos/demo%20mobile%20version.MOV"
             poster="https://i.pinimg.com/videos/thumbnails/originals/79/86/b7/7986b72a3da0ea79fcd1c5c482eefecf.0000000.jpg"
             title="MenuSnap Interactive Menu Intelligence"
-            badge="Live Walkthrough"
+            mobileTitle="MenuSnap Mobile Experience"
+            badge="Desktop View"
+            mobileBadge="Mobile View"
           />
 
           {/* Workflow Steps Pills */}

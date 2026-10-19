@@ -291,7 +291,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
   }, [packages, couponApplied, appliedCouponData]);
 
   return (
-    <section id="pricing" className="section-pad bg-cream" ref={pricingRef}>
+    <section id="pricing" className="pt-6 sm:pt-16 pb-16 sm:pb-24 bg-cream scroll-mt-14 sm:scroll-mt-20" ref={pricingRef}>
       <Container>
         <SectionHeading
           eyebrow="Lifetime Deal"
