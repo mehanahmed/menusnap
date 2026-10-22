@@ -300,26 +300,8 @@ export async function initiatePayStationPaymentAction(payload: {
         console.error('Error linking free subscriber to CRM:', crmErr);
       }
 
-      // Dispatch Meta Conversions API (CAPI) Purchase event for 100% discount activations
-      sendMetaCapiEventAsync({
-        eventName: 'Purchase',
-        eventId: `purchase_${invoiceNumber}`,
-        eventSourceUrl: `/checkout/result?invoice=${encodeURIComponent(invoiceNumber)}`,
-        userData: {
-          email: payload.email.trim(),
-          phone: payload.phone.trim(),
-          firstName: payload.fullName.trim(),
-        },
-        customData: {
-          value: 0,
-          currency: 'BDT',
-          content_name: `MenuSnap ${payload.plan}`,
-          content_type: 'product',
-          content_ids: [payload.plan.toLowerCase().replace(/\s+/g, '-')],
-          num_items: 1,
-          order_id: invoiceNumber,
-        },
-      });
+      // Note: Skip Meta CAPI Purchase event for 100% free coupon activations (amount <= 0)
+      // to avoid polluting ad optimization with zero-value conversions.
 
       // Record coupon redemption
       if (payload.coupon && payload.coupon.trim().toUpperCase() !== 'NONE') {
@@ -667,26 +649,29 @@ export async function verifyPayStationTransaction(
         console.error('Error linking subscriber to clients CRM:', crmErr);
       }
 
-      // Dispatch Meta Conversions API (CAPI) Purchase event (Page 21 of implementation guide)
-      sendMetaCapiEventAsync({
-        eventName: 'Purchase',
-        eventId: `purchase_${invoiceNumber}`,
-        eventSourceUrl: `/checkout/result?invoice=${encodeURIComponent(invoiceNumber)}`,
-        userData: {
-          email: currentTx.customer_email,
-          phone: currentTx.customer_phone,
-          firstName: currentTx.customer_name,
-        },
-        customData: {
-          value: Number(currentTx.amount) || 0,
-          currency: 'BDT',
-          content_name: `MenuSnap ${currentTx.plan}`,
-          content_type: 'product',
-          content_ids: [currentTx.plan.toLowerCase().replace(/\s+/g, '-')],
-          num_items: 1,
-          order_id: invoiceNumber,
-        },
-      });
+      // Dispatch Meta Conversions API (CAPI) Purchase event for verified paid orders
+      const paidAmount = Number(currentTx.amount) || 0;
+      if (paidAmount > 0) {
+        sendMetaCapiEventAsync({
+          eventName: 'Purchase',
+          eventId: `purchase_${invoiceNumber}`,
+          eventSourceUrl: `/checkout/result?invoice=${encodeURIComponent(invoiceNumber)}`,
+          userData: {
+            email: currentTx.customer_email,
+            phone: currentTx.customer_phone,
+            firstName: currentTx.customer_name,
+          },
+          customData: {
+            value: paidAmount,
+            currency: 'BDT',
+            content_name: `MenuSnap ${currentTx.plan}`,
+            content_type: 'product',
+            content_ids: [currentTx.plan.toLowerCase().replace(/\s+/g, '-')],
+            num_items: 1,
+            order_id: invoiceNumber,
+          },
+        });
+      }
 
       // Record coupon usage if applied
       if (currentTx.reference && currentTx.reference.startsWith('Coupon:')) {

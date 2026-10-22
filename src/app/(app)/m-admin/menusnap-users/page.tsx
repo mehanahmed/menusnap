@@ -18,6 +18,7 @@ import {
   Loader2, 
   Filter, 
   Eye, 
+  EyeOff,
   BadgeCheck, 
   Unlock, 
   Lock, 
@@ -142,6 +143,8 @@ export default function MenuSnapUsersPage() {
     subscriptionPackage: 'Pro Lifetime',
   });
   const [newPassword, setNewPassword] = useState<string>('');
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showInitialPassword, setShowInitialPassword] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Debounce search
@@ -899,6 +902,7 @@ export default function MenuSnapUsersPage() {
                                   onClick={() => {
                                     setSelectedUser(user);
                                     setNewPassword('');
+                                    setShowNewPassword(false);
                                     setIsPasswordDialogOpen(true);
                                   }}
                                   className="cursor-pointer text-xs"
@@ -1083,12 +1087,27 @@ export default function MenuSnapUsersPage() {
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">Initial Password (Optional)</label>
-              <Input
-                type="password"
-                placeholder="Minimum 6 characters"
-                value={formData.password}
-                onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-              />
+              <div className="relative">
+                <Input
+                  type={showInitialPassword ? "text" : "password"}
+                  placeholder="Minimum 6 characters"
+                  value={formData.password}
+                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowInitialPassword((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors"
+                  aria-label={showInitialPassword ? "Hide password" : "Show password"}
+                >
+                  {showInitialPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <DialogFooter className="pt-3 border-t">
@@ -1244,13 +1263,28 @@ export default function MenuSnapUsersPage() {
           <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">New Password *</label>
-              <Input
-                type="password"
-                required
-                placeholder="Minimum 6 characters"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  required
+                  placeholder="Minimum 6 characters"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors"
+                  aria-label={showNewPassword ? "Hide password" : "Show password"}
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <DialogFooter className="pt-3 border-t">

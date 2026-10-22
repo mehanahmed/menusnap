@@ -54,11 +54,11 @@ function CheckoutResultContent() {
     }
   }, [phone, email]);
 
-  // Track Purchase event on Meta Pixel & DataLayer with deduplication ID
+  // Track Purchase event on Meta Pixel & DataLayer with deduplication ID (only for paid orders > 0 BDT)
   React.useEffect(() => {
-    if (isSuccess && invoice && !purchaseTrackedRef.current) {
+    const cleanAmount = Number(amount) || 0;
+    if (isSuccess && invoice && cleanAmount > 0 && !purchaseTrackedRef.current) {
       purchaseTrackedRef.current = true;
-      const cleanAmount = Number(amount) || 0;
       const purchaseEventId = `purchase_${invoice}`;
 
       if (typeof window !== 'undefined') {
