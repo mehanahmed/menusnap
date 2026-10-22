@@ -6,6 +6,7 @@ import pool from "@/lib/mysql";
 import { FreeGuide, GuideLead, GuideChapter } from "@/lib/menusnap-types";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { sendMetaCapiEventAsync } from "@/lib/meta-capi";
 
 function parseChapters(raw: any): GuideChapter[] | null {
   if (!raw) return null;
@@ -257,6 +258,22 @@ export async function submitGuideLeadAction(data: {
     );
 
     const leadId = insertResult.insertId;
+
+    // Asynchronously dispatch Meta Conversions API (CAPI) event with identical eventId for deduplication
+    sendMetaCapiEventAsync({
+      eventName: "Lead",
+      eventId,
+      eventSourceUrl: "/free-guide/",
+      userData: {
+        email: validated.email,
+        phone: validated.phone,
+        firstName: validated.fullName,
+      },
+      customData: {
+        content_name: validated.guideName,
+        content_category: "free_ebook",
+      },
+    });
 
     // 2. Fetch guide file_url and increment download count
     let fileUrl: string | null = null;

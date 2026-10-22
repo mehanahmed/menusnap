@@ -23,6 +23,7 @@ function CheckoutResultContent() {
   const searchParams = useSearchParams();
   const [copied, setCopied] = React.useState(false);
   const [hasAccount, setHasAccount] = React.useState(false);
+  const purchaseTrackedRef = React.useRef(false);
 
   const status = searchParams.get('status') || '';
   const invoice = searchParams.get('invoice') || '';
@@ -52,6 +53,53 @@ function CheckoutResultContent() {
         .catch(() => {});
     }
   }, [phone, email]);
+
+  // Track Purchase event on Meta Pixel & DataLayer with deduplication ID
+  React.useEffect(() => {
+    if (isSuccess && invoice && !purchaseTrackedRef.current) {
+      purchaseTrackedRef.current = true;
+      const cleanAmount = Number(amount) || 0;
+      const purchaseEventId = `purchase_${invoice}`;
+
+      if (typeof window !== 'undefined') {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: 'purchase',
+          event_id: purchaseEventId,
+          ecommerce: {
+            transaction_id: invoice,
+            value: cleanAmount,
+            currency: 'BDT',
+            items: [
+              {
+                item_id: plan.toLowerCase().replace(/\s+/g, '-'),
+                item_name: `MenuSnap ${plan}`,
+                price: cleanAmount,
+                quantity: 1,
+              },
+            ],
+          },
+        });
+
+        if (typeof (window as any).fbq === 'function') {
+          (window as any).fbq(
+            'track',
+            'Purchase',
+            {
+              value: cleanAmount,
+              currency: 'BDT',
+              content_name: `MenuSnap ${plan}`,
+              content_type: 'product',
+              content_ids: [plan.toLowerCase().replace(/\s+/g, '-')],
+              num_items: 1,
+              order_id: invoice,
+            },
+            { eventID: purchaseEventId }
+          );
+        }
+      }
+    }
+  }, [isSuccess, invoice, amount, plan]);
 
   const registerParams = new URLSearchParams();
   registerParams.set('tab', 'register');

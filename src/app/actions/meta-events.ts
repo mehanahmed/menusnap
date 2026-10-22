@@ -1,19 +1,17 @@
-
 'use server';
 
-import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
 export interface MetaPixelSettings {
   isEnabled: boolean;
   pixelId?: string;
   accessToken?: string;
   testEventCode?: string;
+  graphVersion?: string;
 }
 
-// Use a file in a writable directory. In a real deployed environment,
-// you might use a more robust storage solution like a database or a proper config service.
 const SETTINGS_FILE_PATH = path.join(process.cwd(), '.meta-pixel-settings.json');
 
 /**
@@ -24,7 +22,6 @@ export async function getMetaPixelSettings(): Promise<MetaPixelSettings> {
     const fileContent = await fs.readFile(SETTINGS_FILE_PATH, 'utf-8');
     return JSON.parse(fileContent);
   } catch (error: any) {
-    // If the file doesn't exist, return default settings
     if (error.code === 'ENOENT') {
       return { isEnabled: false, pixelId: '', accessToken: '', testEventCode: '' };
     }
@@ -39,9 +36,8 @@ export async function getMetaPixelSettings(): Promise<MetaPixelSettings> {
  */
 export async function saveMetaPixelSettings(settings: MetaPixelSettings): Promise<void> {
   try {
-    // Basic validation
-    if (settings.isEnabled && (!settings.pixelId || !settings.accessToken)) {
-      throw new Error("Pixel ID and Access Token are required when tracking is enabled.");
+    if (settings.isEnabled && !settings.pixelId) {
+      throw new Error("Pixel ID is required when tracking is enabled.");
     }
     const data = JSON.stringify(settings, null, 2);
     await fs.writeFile(SETTINGS_FILE_PATH, data, 'utf-8');
@@ -53,59 +49,20 @@ export async function saveMetaPixelSettings(settings: MetaPixelSettings): Promis
 
 /**
  * Sends a server-side event to the Meta Conversions API.
- * This should be called from server-side logic or other Server Actions.
- *
- * @param eventName The name of the event (e.g., 'PageView', 'Purchase').
- * @param eventData Custom data associated with the event.
+ * Uses the enhanced CAPI engine with SHA-256 hashing and deduplication.
  */
 export async function sendServerEvent(
   eventName: string,
-  eventData: Record<string, any>
+  eventData: Record<string, any> = {}
 ) {
-  const settings = await getMetaPixelSettings();
+  const { sendMetaCapiEvent } = await import('@/lib/meta-capi');
+  const eventId = eventData.event_id || randomUUID();
 
-  if (!settings.isEnabled || !settings.pixelId || !settings.accessToken) {
-    // Silently fail if tracking is disabled or not configured
-    console.log('Meta Pixel server-side tracking is disabled or not configured.');
-    return;
-  }
-
-  const url = `https://graph.facebook.com/v19.0/${settings.pixelId}/events`;
-
-  const payload = {
-    data: [
-      {
-        event_name: eventName,
-        event_time: Math.floor(Date.now() / 1000),
-        action_source: 'website',
-        event_id: randomUUID(), // Generate a unique ID for deduplication
-        ...eventData,
-      },
-    ],
-    access_token: settings.accessToken,
-    ...(settings.testEventCode && { test_event_code: settings.testEventCode }),
-  };
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseBody = await response.json();
-
-    if (!response.ok) {
-      console.error('Meta Conversions API error:', responseBody);
-      throw new Error(responseBody.error?.message || 'Failed to send server event.');
-    }
-
-    console.log('Server event sent successfully to Meta:', responseBody);
-    return responseBody;
-  } catch (error) {
-    console.error('Error sending server event:', error);
-    // In a real app, you might want more robust error handling or logging.
-  }
+  return sendMetaCapiEvent({
+    eventName: eventName as any,
+    eventId,
+    eventSourceUrl: eventData.event_source_url,
+    userData: eventData.user_data || {},
+    customData: eventData.custom_data || {},
+  });
 }
