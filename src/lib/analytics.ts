@@ -47,7 +47,19 @@ declare global {
   interface Window {
     dataLayer?: Array<Record<string, unknown>>;
     gtag?: (...args: unknown[]) => void;
+    google_tag_manager?: Record<string, unknown>;
   }
+}
+
+/**
+ * Detects if Google Tag Manager (GTM) is active in the browser.
+ * When GTM is running (window.google_tag_manager exists), tags fire via GTM dataLayer pushes.
+ * Direct fbq calls are suppressed to prevent duplicate event dispatches.
+ * If GTM is absent or blocked, direct fbq serves as a fallback.
+ */
+export function isGtmActive(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean((window as any).google_tag_manager);
 }
 
 /** Track a funnel event by its key or string name. */
@@ -156,8 +168,8 @@ export function trackBeginCheckout({
       window.gtag("event", "begin_checkout", ecommercePayload);
     }
 
-    // 4. Forward to Meta Pixel if fbq is present
-    if (typeof window.fbq === "function") {
+    // 4. Forward to Meta Pixel only as fallback if GTM is not active
+    if (!isGtmActive() && typeof window.fbq === "function") {
       const pixelPayload: Record<string, unknown> = {
         content_name: formattedItemName,
         content_category: "Software Subscription",
@@ -193,7 +205,7 @@ export interface EbookLeadParams {
 
 /**
  * Pushes standard `ebook_lead` event to window.dataLayer for GTM
- * and optionally forwards Lead event to Meta Pixel (fbq).
+ * and optionally forwards Lead event to Meta Pixel (fbq) as fallback when GTM is absent.
  */
 export function trackEbookLead({
   eventId,
@@ -221,8 +233,8 @@ export function trackEbookLead({
 
     window.dataLayer.push(payload);
 
-    // Forward to Meta Pixel if fbq is present
-    if (typeof window.fbq === "function") {
+    // Forward to Meta Pixel only as fallback if GTM is not active
+    if (!isGtmActive() && typeof window.fbq === "function") {
       const pixelParams: Record<string, unknown> = {
         content_name: ebookName,
         content_category: leadType,
@@ -237,4 +249,3 @@ export function trackEbookLead({
     console.error("[MenuSnap analytics] Error pushing ebook_lead", err);
   }
 }
-

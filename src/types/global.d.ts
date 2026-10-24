@@ -12,6 +12,7 @@ declare global {
         };
         _fbq: any;
         dataLayer?: any[];
+        google_tag_manager?: any;
     }
     namespace JSX {
         interface IntrinsicElements {

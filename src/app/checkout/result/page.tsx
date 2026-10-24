@@ -17,6 +17,7 @@ import confetti from 'canvas-confetti';
 import Link from 'next/link';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { checkClientStatus } from '@/app/actions/clients';
+import { isGtmActive } from '@/lib/analytics';
 
 function CheckoutResultContent() {
   const { isClientLoggedIn } = useClientAuth();
@@ -81,7 +82,9 @@ function CheckoutResultContent() {
           },
         });
 
-        if (typeof (window as any).fbq === 'function') {
+        // Fallback: If GTM is active (google_tag_manager), GTM fires the tag via dataLayer.
+        // Direct fbq only fires as a backup if GTM is absent or blocked.
+        if (!isGtmActive() && typeof (window as any).fbq === 'function') {
           (window as any).fbq(
             'track',
             'Purchase',
