@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
@@ -33,7 +34,10 @@ app.prepare().then(() => {
           '.gif': 'image/gif',
           '.webp': 'image/webp',
           '.svg': 'image/svg+xml',
-          '.ico': 'image/x-icon'
+          '.ico': 'image/x-icon',
+          '.pdf': 'application/pdf',
+          '.mp4': 'video/mp4',
+          '.webm': 'video/webm'
         }[ext] || 'application/octet-stream';
 
         res.setHeader('Content-Type', contentType);
@@ -93,7 +97,7 @@ app.prepare().then(() => {
     });
   });
 
-  const PORT = process.env.PORT || 3007;
+  const PORT = process.env.PORT || 9002;
 
   httpServer.on('error', (err) => {
     if (err && err.code === 'EADDRINUSE') {
@@ -108,6 +112,23 @@ app.prepare().then(() => {
   httpServer.listen(PORT, (err) => {
     if (err) throw err;
     console.log(`> Unified Server ready on http://localhost:${PORT}`);
+
+    // Verify database connection on startup
+    try {
+      const mysql = require("mysql2/promise");
+      mysql.createConnection({
+        host: process.env.MYSQL_HOST || 'localhost',
+        user: process.env.MYSQL_USER || 'root',
+        password: process.env.MYSQL_PASSWORD || '',
+        database: process.env.MYSQL_DATABASE || 'menubldr',
+        port: Number(process.env.MYSQL_PORT) || 3306,
+      }).then((conn) => {
+        console.log(`> MySQL connected to database "${process.env.MYSQL_DATABASE || 'menubldr'}"`);
+        conn.end();
+      }).catch((dbErr) => {
+        console.warn(`> MySQL connection warning: ${dbErr.message}`);
+      });
+    } catch (_) {}
   });
 
   let shuttingDown = false;

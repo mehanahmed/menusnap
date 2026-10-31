@@ -96,7 +96,7 @@ export default function MagicDocViewClient({ params }: { params?: Promise<{ id: 
         <div className="flex justify-between items-start border-b-2 border-primary/20 pb-8 mb-4 mt-8 sm:mt-12 mx-4 sm:mx-16 px-2">
             <div className="bg-black rounded-lg shadow-[inset_0_0_20px_rgba(255,255,255,0.1)] print:shadow-none">
                 <Image
-                    src="https://erp.colorhutbd.xyz/file/uploads/68515c4146a92_Color%20hut%20logo.png"
+                    src="/menusnap-logo-white.png"
                     alt="Color Hut Logo"
                     width={180}
                     height={72}

@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Script from 'next/script';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { getMetaPixelSettings, type MetaPixelSettings } from '@/app/actions/meta-events';
@@ -10,6 +9,7 @@ export function MetaPixelScriptLoader() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [settings, setSettings] = useState<MetaPixelSettings | null>(null);
+  const lastTrackedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -23,9 +23,21 @@ export function MetaPixelScriptLoader() {
     fetchSettings();
   }, []);
 
-  // Track pageviews on route changes
+  // Track pageviews once per unique URL (initial load and SPA route changes)
   useEffect(() => {
-    if (settings?.isEnabled && settings?.pixelId && window.fbq) {
+    if (!settings?.isEnabled || !settings?.pixelId) return;
+
+    // Disable Meta Pixel tracking on admin pages
+    if (pathname?.startsWith('/m-admin') || pathname?.startsWith('/panel')) return;
+
+    if (typeof window !== 'undefined' && typeof window.fbq === 'function') {
+      const queryString = searchParams?.toString();
+      const currentUrl = pathname + (queryString ? `?${queryString}` : '');
+
+      // Prevent duplicate fires for the exact same URL
+      if (lastTrackedUrlRef.current === currentUrl) return;
+
+      lastTrackedUrlRef.current = currentUrl;
       window.fbq('track', 'PageView');
     }
   }, [pathname, searchParams, settings]);
@@ -55,7 +67,6 @@ export function MetaPixelScriptLoader() {
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
             fbq('init', '${settings.pixelId}');
-            fbq('track', 'PageView');
           `,
         }}
       />

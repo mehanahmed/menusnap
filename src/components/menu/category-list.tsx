@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
+import { usePreferences } from '@/context/PreferencesContext';
 
 // Re-defining the interface here to make the component self-contained
 interface Category {
@@ -47,6 +48,7 @@ function CategoryListComponent({
   error,
 }: CategoryListProps): ReactNode {
 
+  const { t, translateText, translateBatch, language } = usePreferences();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(activeCategoryId ?? null);
   const [catSearch, setCatSearch] = useState('');
 
@@ -57,6 +59,12 @@ function CategoryListComponent({
       setSelectedCategoryId(activeCategoryId);
     }
   }, [activeCategoryId]);
+
+  useEffect(() => {
+    if (language !== 'en' && categories.length > 0) {
+      translateBatch(categories.map(c => decodeHtmlEntities(c.name)));
+    }
+  }, [categories, language, translateBatch]);
 
   useEffect(() => {
     // If there's no selection or the current selection is no longer valid, select the top category (by item count)
@@ -110,12 +118,12 @@ function CategoryListComponent({
     <aside className="w-full md:w-72 md:h-full bg-card border-r border-border flex flex-col shrink-0">
       <div className="p-4 border-b border-border flex flex-col gap-3">
         <div className="flex justify-between items-center w-full">
-          <h2 className="text-lg font-bold tracking-tight text-foreground">Categories</h2>
+          <h2 className="text-lg font-bold tracking-tight text-foreground">{t('categories', 'Categories')}</h2>
         </div>
         <div className="relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <Input 
-            placeholder="Search categories..." 
+            placeholder={t('searchCategories', 'Search categories...')} 
             className="h-9 pl-9 pr-9 text-sm bg-muted/30 border-none focus-visible:ring-1 focus-visible:ring-primary/30 transition-all rounded-lg"
             value={catSearch}
             onChange={(e) => setCatSearch(e.target.value)}
@@ -179,7 +187,7 @@ function CategoryListComponent({
           
           {!loading && !error && filteredCategories.length > 0 && filteredCategories.map(category => (
             <div 
-              key={category.id} 
+              key={`${category.id}-${language}`} 
               className="group relative"
             >
               <div className={cn(
@@ -192,7 +200,7 @@ function CategoryListComponent({
               >
                 <span className="text-xl flex-shrink-0 w-8 text-center">{category.icon || "📁"}</span>
                 <span className="flex-1 min-w-0 font-medium truncate text-sm">
-                  {decodeHtmlEntities(category.name)}
+                  {translateText(decodeHtmlEntities(category.name))}
                 </span>
                 {category.itemCount !== undefined && Number(category.itemCount) > 0 && (
                   <span className="text-[11px] font-semibold text-muted-foreground/70 px-1.5 py-0.5 rounded-full bg-muted/60 shrink-0 group-hover:bg-muted/90 transition-colors ml-auto mr-0.5">

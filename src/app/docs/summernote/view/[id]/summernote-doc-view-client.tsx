@@ -80,7 +80,7 @@ export default function SummernoteDocViewClient({ params }: { params?: Promise<{
                 <div className="flex justify-between items-start border-b-2 border-amber-500/20 pb-8 mb-8">
                     <div className="bg-black rounded-lg p-2 shadow-sm">
                         <Image
-                            src="https://erp.colorhutbd.xyz/file/uploads/68515c4146a92_Color%20hut%20logo.png"
+                            src="/menusnap-logo-white.png"
                             alt="Color Hut Logo"
                             width={180}
                             height={72}

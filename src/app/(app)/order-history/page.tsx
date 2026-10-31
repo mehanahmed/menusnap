@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, isValid as isValidDate } from 'date-fns';
 import { cn, decodeHtmlEntities } from '@/lib/utils';
+import { usePreferences } from '@/context/PreferencesContext';
 import { getOrdersFromMySql } from '@/app/actions/orders';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -59,6 +60,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 const OrderCard = ({ order }: { order: ApiOrder }) => {
+    const { currencySymbol } = usePreferences();
     const [imgSrc, setImgSrc] = useState(order.templateImageUrl || '/placeholder.svg');
 
     useEffect(() => {
@@ -107,7 +109,7 @@ const OrderCard = ({ order }: { order: ApiOrder }) => {
                                 </span>
                                 <span className="text-[11px] font-mono font-bold text-muted-foreground/60">#{order.orderId.slice(-8).toUpperCase()}</span>
                             </div>
-                            <span className="text-sm font-black text-primary">৳{order.totalAmount?.toLocaleString()}</span>
+                            <span className="text-sm font-black text-primary">{currencySymbol}{order.totalAmount?.toLocaleString()}</span>
                         </div>
 
                         {/* Mid: Template Info */}

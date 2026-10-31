@@ -437,7 +437,7 @@ function MobileDashboardHeader({ businessName, type }: { businessName?: string |
       <div className="relative h-8 w-28 bg-black rounded-xl p-1 px-3 border border-white/10 flex items-center justify-center">
         <div className="relative h-full w-full">
           <img
-            src="https://erp.colorhutbd.xyz/file/uploads/68515c4146a92_Color%20hut%20logo.png"
+            src="/menusnap-logo-white.png"
             alt="Color Hut Logo"
             className="w-full h-full object-contain absolute inset-0"
           />

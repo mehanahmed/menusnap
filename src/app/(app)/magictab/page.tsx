@@ -67,6 +67,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { getCategoriesFromMySql, getMenuItemsFromMySql, getOrderItemsAndCategories } from '@/app/actions/orders';
+import { usePreferences } from '@/context/PreferencesContext';
 
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'colorHutCustomCategories';
@@ -110,6 +111,7 @@ interface MenuItemFormProps {
 }
 
 function MenuItemForm({ isOpen, onOpenChange, onSubmit, initialData, categoryName, isSubmitting }: MenuItemFormProps) {
+  const { currencySymbol, t, translateText } = usePreferences();
   const [scrolled, setScrolled] = useState(false);
 
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -223,7 +225,7 @@ function MenuItemForm({ isOpen, onOpenChange, onSubmit, initialData, categoryNam
                 {form.formState.errors.name && <p className="text-sm text-destructive mt-1">{form.formState.errors.name.message}</p>}
               </div>
               <div className="flex-[1] space-y-1.5">
-                <Label htmlFor="item-price" className="text-sm font-semibold text-foreground">Base Price (৳)</Label>
+                <Label htmlFor="item-price" className="text-sm font-semibold text-foreground">{t('basePrice', 'Base Price')} ({currencySymbol})</Label>
                 <Input
                   id="item-price"
                   type="number"
@@ -307,7 +309,7 @@ function MenuItemForm({ isOpen, onOpenChange, onSubmit, initialData, categoryNam
                             <>
                               <span className="text-xs text-muted-foreground">·</span>
                               <span className="text-sm font-medium text-orange-500 whitespace-nowrap">
-                                ৳{currentPrice.toLocaleString()}
+                                {currencySymbol}{currentPrice.toLocaleString()}
                               </span>
                             </>
                           )}
@@ -409,6 +411,7 @@ const MenuItemCard = React.memo(function MenuItemCard({
   isSubItemsExpanded,
   registerCardRef
 }: MenuItemCardProps) {
+  const { currencySymbol, t, translateText } = usePreferences();
   const handleCardRef = useCallback((el: HTMLDivElement | null) => {
     registerCardRef?.(item.id, el);
   }, [registerCardRef, item.id]);
@@ -435,11 +438,11 @@ const MenuItemCard = React.memo(function MenuItemCard({
               <span 
                 className="text-sm font-medium text-foreground cursor-pointer block truncate-2-lines"
               >
-                {decodeHtmlEntities(item.name)}
+                {translateText(decodeHtmlEntities(item.name))}
               </span>
               <div className="flex items-center gap-3 shrink-0">
                 <div className="text-sm text-muted-foreground font-semibold whitespace-nowrap">
-                  {item.price > 0 && `৳${item.price.toLocaleString()}`}
+                  {item.price > 0 && `${currencySymbol}${item.price.toLocaleString()}`}
                 </div>
                 <div className="h-7 w-7 flex items-center justify-center">
                   {isSelected && (
@@ -451,7 +454,7 @@ const MenuItemCard = React.memo(function MenuItemCard({
                         e.stopPropagation();
                         onEditItem(item);
                       }} 
-                      aria-label="Edit item"
+                      aria-label={t('editItem', 'Edit item')}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -461,7 +464,7 @@ const MenuItemCard = React.memo(function MenuItemCard({
             </div>
             {item.description && (
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed pr-2">
-                {decodeHtmlEntities(item.description)}
+                {translateText(decodeHtmlEntities(item.description))}
               </p>
             )}
           </div>
@@ -477,7 +480,7 @@ const MenuItemCard = React.memo(function MenuItemCard({
               }} 
               className="text-xs h-auto p-1 text-primary"
             >
-              {isSubItemsExpanded ? 'Hide' : 'Show'} Variations ({item.subItems.length})
+              {isSubItemsExpanded ? t('hideVariations', 'Hide') : t('showVariations', 'Show')} {t('variations', 'Variations')} ({item.subItems.length})
               {isSubItemsExpanded ? <ChevronDown className="h-3 w-3 ml-1" /> : <ChevronRight className="h-3 w-3 ml-1" />}
             </Button>
             {isSubItemsExpanded && (
@@ -487,8 +490,8 @@ const MenuItemCard = React.memo(function MenuItemCard({
               >
                 {item.subItems.map((subItem, index) => (
                   <div key={subItem.id || index} className="flex justify-between items-center text-xs p-1.5 rounded-md bg-card shadow-sm">
-                    <span className="text-foreground">{decodeHtmlEntities(subItem.name)}</span>
-                    {(typeof subItem.price === 'number' && subItem.price > 0) && <span className="text-foreground font-medium">৳{subItem.price.toLocaleString()}</span>}
+                    <span className="text-foreground">{translateText(decodeHtmlEntities(subItem.name))}</span>
+                    {(typeof subItem.price === 'number' && subItem.price > 0) && <span className="text-foreground font-medium">{currencySymbol}{subItem.price.toLocaleString()}</span>}
                   </div>
                 ))}
               </div>
@@ -636,6 +639,7 @@ export default function MagicTabPage() {
     isAdmin
   } = useClientAuth();
   const { toast } = useToast();
+  const { translateBatch, language, translateText, t } = usePreferences();
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [refreshingAccess, setRefreshingAccess] = useState(false);
   const [apiCategories, setApiCategories] = useState<Category[]>([]);
@@ -1232,6 +1236,22 @@ export default function MagicTabPage() {
     return items;
   }, [activeCategoryId, allMenuItems, debouncedSearchTerm]);
 
+  useEffect(() => {
+    if (language !== 'en' && currentMenuItems.length > 0) {
+      const batch: string[] = [];
+      currentMenuItems.slice(0, 50).forEach(item => {
+        if (item.name) batch.push(decodeHtmlEntities(item.name));
+        if (item.description) batch.push(decodeHtmlEntities(item.description));
+        if (item.subItems) {
+          item.subItems.forEach(s => {
+            if (s.name) batch.push(decodeHtmlEntities(s.name));
+          });
+        }
+      });
+      translateBatch(batch);
+    }
+  }, [currentMenuItems, language, translateBatch]);
+
   const handleSelectItem = useCallback((itemId: string, isSelected: boolean) => {
     setSelectedItems(prev => {
       const newSelected = { ...prev };
@@ -1497,6 +1517,7 @@ export default function MagicTabPage() {
 
         <div className="hidden md:block h-full">
           <CategoryList
+            key={`categories-${language}`}
             categories={sortedCategories}
             activeCategoryId={activeCategoryId}
             onCategoryChange={setActiveCategoryId}
@@ -1517,7 +1538,7 @@ export default function MagicTabPage() {
                 <div className={cn("relative flex-1 md:max-w-md transition-all duration-300", isMobileSearchActive && "flex-auto")}>
                    <Textarea 
                     ref={magicSearchRef}
-                    placeholder={selectedCategory ? `Search ${decodeHtmlEntities(selectedCategory.name)} items` : "Search Items"}
+                    placeholder={selectedCategory ? `Search ${translateText(decodeHtmlEntities(selectedCategory.name))} items` : t('searchItems', 'Search items...')}
                     className={cn(
                       "min-h-[40px] h-10 py-2.5 pl-5 rounded-3xl border-muted-foreground/20 bg-background focus:outline-none focus-visible:ring-0 transition-all shadow-sm resize-none overflow-hidden",
                       (searchTerm.includes('\n') || isMobileSearchActive) ? "pr-5" : "pr-12",
@@ -1726,7 +1747,7 @@ export default function MagicTabPage() {
               <div className={cn("grid grid-cols-1 gap-3 md:gap-4 pb-32 md:pb-6", gridLayoutClasses)}>
                   {currentMenuItems.map((item) => (
                     <MenuItemCard
-                      key={item.id}
+                      key={`${item.id}-${language}`}
                       registerCardRef={registerCardRef}
                       item={item}
                       isSelected={!!selectedItems[item.id]}

@@ -69,5 +69,15 @@ auth_info_baileys/
 .claude/
 .agentsroom/
 
-free_guides.sql
-menubldr.sql
+# Database dumps, exports & local database data
+*.sql
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+/database/
+/dumps/
+/backups/
+*.bak
+

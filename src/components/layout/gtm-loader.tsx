@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Script from 'next/script';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { getGtmSettings, type GtmSettings } from '@/app/actions/gtm-settings';
 
 export function GtmScriptLoader() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [settings, setSettings] = useState<GtmSettings | null>(null);
+  const lastTrackedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -21,7 +23,7 @@ export function GtmScriptLoader() {
     fetchSettings();
   }, []);
 
-  // Track pageviews on SPA route changes
+  // Track pageviews on SPA route changes with deduplication
   useEffect(() => {
     if (
       settings?.isEnabled &&
@@ -30,13 +32,19 @@ export function GtmScriptLoader() {
       !pathname?.startsWith('/panel') &&
       typeof window !== 'undefined'
     ) {
+      const queryString = searchParams?.toString();
+      const currentUrl = pathname + (queryString ? `?${queryString}` : '');
+
+      if (lastTrackedPathRef.current === currentUrl) return;
+      lastTrackedPathRef.current = currentUrl;
+
       window.dataLayer = window.dataLayer || [];
       window.dataLayer.push({
         event: 'page_view',
-        page_path: pathname,
+        page_path: currentUrl,
       });
     }
-  }, [pathname, settings]);
+  }, [pathname, searchParams, settings]);
 
   // Disable GTM on admin pages
   if (pathname?.startsWith('/m-admin') || pathname?.startsWith('/panel')) {

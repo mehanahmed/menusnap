@@ -28,6 +28,7 @@ import { CustomerDetailsForm, type CustomerDetailsFormValues } from './customer-
 import { useToast } from "@/hooks/use-toast";
 import type { ClientUser } from '@/hooks/use-client-auth';
 import { submitOrderToMySql } from '@/app/actions/orders';
+import { usePreferences } from '@/context/PreferencesContext';
 
 
 // Interfaces matching MenuItemsPage for consistency
@@ -453,6 +454,7 @@ interface CategoryReorderItemProps {
 }
 
 function CategoryReorderItem({ category, isSidebarCollapsed, isActive, onClick }: CategoryReorderItemProps) {
+  const { currencySymbol, translateText } = usePreferences();
   const controls = useDragControls();
   const timer = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -504,7 +506,7 @@ function CategoryReorderItem({ category, isSidebarCollapsed, isActive, onClick }
         </span>
         {!isSidebarCollapsed && (
           <span className="truncate flex-1 text-left text-sm">
-            {decodeHtmlEntities(category.name)}
+            {translateText(decodeHtmlEntities(category.name))}
           </span>
         )}
       </div>
@@ -531,6 +533,7 @@ interface MenuPreviewItemReorderItemProps {
 }
 
 function MenuPreviewItemReorderItem({ item, onRemove }: MenuPreviewItemReorderItemProps) {
+  const { currencySymbol, translateText } = usePreferences();
   const controls = useDragControls();
   const timer = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -578,13 +581,13 @@ function MenuPreviewItemReorderItem({ item, onRemove }: MenuPreviewItemReorderIt
         data-ai-hint="item illustration"
       />
       <div className="flex-1">
-        <p className="font-medium text-sm text-foreground">{decodeHtmlEntities(item.name)}</p>
+        <p className="font-medium text-sm text-foreground">{translateText(decodeHtmlEntities(item.name))}</p>
         {item.description && (
-          <p className="text-xs text-muted-foreground">{decodeHtmlEntities(item.description)}</p>
+          <p className="text-xs text-muted-foreground">{translateText(decodeHtmlEntities(item.description))}</p>
         )}
       </div>
       <div className="text-right">
-        <p className="font-semibold text-sm text-foreground">৳{item.price.toLocaleString()}</p>
+        <p className="font-semibold text-sm text-foreground">{currencySymbol}{item.price.toLocaleString()}</p>
         <Button
           variant="link"
           size="sm"

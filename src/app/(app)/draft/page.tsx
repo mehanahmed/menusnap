@@ -26,12 +26,15 @@ import {
   Square,
   Utensils,
   Sparkles,
-  FolderOpen
+  FolderOpen,
+  Share2
 } from "lucide-react";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
 import { format, formatDistanceToNowStrict, parseISO, isValid } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import { getCategoriesFromMySql } from '@/app/actions/orders';
+import { usePreferences } from '@/context/PreferencesContext';
+import { DraftShareDialog } from '@/components/menu/draft-share-dialog';
 
 const STATIC_AVATAR_IMAGE_URL = '/assets/image.svg';
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
@@ -73,6 +76,7 @@ interface DraftCardProps {
   onDelete: (id: string) => void;
   onToggleExpand: (id: string) => void;
   masterCategoryList: Category[];
+  onShare: (draft: DraftItem) => void;
 }
 
 const extractMenuTypeFromTag = (tag: string): string => {
@@ -88,7 +92,8 @@ const extractMenuTypeFromTag = (tag: string): string => {
   return 'Unknown Type';
 };
 
-function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, masterCategoryList }: DraftCardProps): ReactNode {
+function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, masterCategoryList, onShare }: DraftCardProps): ReactNode {
+  const { currencySymbol, t } = usePreferences();
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
     setHasMounted(true);
@@ -155,6 +160,9 @@ function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, mas
             </div>
           </div>
           <div className="flex items-center space-x-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => onShare(draft)} aria-label="Share draft" title="Share Draft">
+              <Share2 className="h-3.5 w-3.5" />
+            </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => console.log("Redo draft:", draft.id)} aria-label="Redo draft">
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
@@ -223,7 +231,7 @@ function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, mas
                           <Square className="h-4 w-4 text-muted-foreground mr-2 opacity-50 shrink-0" />
                           <span className="text-foreground truncate" title={decodeHtmlEntities(item.name)}>{decodeHtmlEntities(item.name)}</span>
                         </div>
-                        <span className="text-muted-foreground font-medium whitespace-nowrap">৳{item.price.toLocaleString()}</span>
+                        <span className="text-muted-foreground font-medium whitespace-nowrap">{currencySymbol}{item.price.toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
@@ -245,14 +253,25 @@ function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, mas
       </CardContent>
       <CardFooter className="bg-muted/20 px-2 py-1.5 flex justify-between items-center border-t border-border/50">
         <p className="text-[9px] text-muted-foreground opacity-70">Saved {formattedCreationDate}</p>
-        <Button
-          variant="default"
-          size="sm"
-          className="h-7 text-[10px] bg-foreground text-background hover:bg-foreground/80 font-bold px-3"
-          onClick={() => onRestore(draft.id)}
-        >
-          Restore
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-[10px] font-semibold px-2.5 flex items-center gap-1 border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+            onClick={() => onShare(draft)}
+          >
+            <Share2 className="h-3 w-3" />
+            Share
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            className="h-7 text-[10px] bg-foreground text-background hover:bg-foreground/80 font-bold px-3"
+            onClick={() => onRestore(draft.id)}
+          >
+            Restore
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );
@@ -308,6 +327,7 @@ export default function DraftPage(): ReactNode {
   const [error, setError] = useState<string | null>(null);
   const [expandedDrafts, setExpandedDrafts] = useState<Record<string, boolean>>({});
   const [masterCategoryList, setMasterCategoryList] = useState<Category[]>([]);
+  const [selectedDraftForShare, setSelectedDraftForShare] = useState<DraftItem | null>(null);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -462,10 +482,18 @@ export default function DraftPage(): ReactNode {
               onDelete={handleDeleteDraft}
               onToggleExpand={handleToggleExpand}
               masterCategoryList={masterCategoryList}
+              onShare={setSelectedDraftForShare}
             />
           ))
         )}
       </main>
+
+      <DraftShareDialog
+        isOpen={!!selectedDraftForShare}
+        onOpenChange={(open) => !open && setSelectedDraftForShare(null)}
+        draft={selectedDraftForShare}
+        masterCategoryList={masterCategoryList}
+      />
     </div>
   );
 }

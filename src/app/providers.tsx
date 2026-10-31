@@ -4,6 +4,7 @@
 import { Suspense, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { PreferencesProvider } from '@/context/PreferencesContext';
 import { ClientAuthProvider } from '@/hooks/use-client-auth';
 import { ClientSideOnlyToaster } from '@/components/layout/client-side-only-toaster';
 import { MetaPixelScriptLoader } from '@/components/layout/meta-pixel-loader';
@@ -101,6 +102,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ClientAuthProvider>
       <ThemeProvider>
+        <PreferencesProvider>
         <Suspense fallback={null}>
           <ChunkErrorAutoReloader />
           <MetaPixelScriptLoader />
@@ -109,6 +111,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         </Suspense>
         {children}
         <ClientSideOnlyToaster />
+        </PreferencesProvider>
       </ThemeProvider>
     </ClientAuthProvider>
   );

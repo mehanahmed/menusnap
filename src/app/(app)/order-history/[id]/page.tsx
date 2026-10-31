@@ -30,6 +30,7 @@ import { cn, decodeHtmlEntities } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { useToast } from "@/hooks/use-toast";
 import { getOrderByIdFromMySql, getCategoriesFromMySql } from '@/app/actions/orders';
+import { usePreferences } from '@/context/PreferencesContext';
 
 
 type OrderStatus = "Pending" | "Processing" | "In Progress" | "Shipped" | "Delivered" | "Cancelled" | "Refunded" | "On Hold" | "Out for Delivery";
@@ -88,6 +89,7 @@ const DetailRow = ({ icon: Icon, label, value }: { icon: React.ElementType, labe
 
 
 const OrderItem = ({ name, description, price, quantity, subItems }: { name: string, description?: string|null, price: number, quantity: number, subItems?: SubItem[] }) => {
+    const { currencySymbol, t } = usePreferences();
     const [isExpanded, setIsExpanded] = useState(false);
     const hasSubItems = subItems && subItems.length > 0;
 
@@ -98,7 +100,7 @@ const OrderItem = ({ name, description, price, quantity, subItems }: { name: str
                     <h3 className="font-bold text-foreground truncate">{decodeHtmlEntities(name)}</h3>
                     {description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{decodeHtmlEntities(description)}</p>}
                 </div>
-                {price > 0 && <p className="font-bold text-foreground ml-4 whitespace-nowrap">৳ {(price * quantity).toLocaleString()}</p>}
+                {price > 0 && <p className="font-bold text-foreground ml-4 whitespace-nowrap">{currencySymbol} {(price * quantity).toLocaleString()}</p>}
             </div>
             
             {hasSubItems && (
@@ -118,7 +120,7 @@ const OrderItem = ({ name, description, price, quantity, subItems }: { name: str
                     {subItems.map((sub, index) => (
                         <div key={sub.id || index} className="flex justify-between items-baseline text-sm p-1.5 bg-card/50 rounded-md">
                             <p className="text-foreground/90">{decodeHtmlEntities(sub.name)}</p>
-                            {typeof sub.price === 'number' && <p className="font-medium">৳ {sub.price.toLocaleString()}</p>}
+                            {typeof sub.price === 'number' && <p className="font-medium">{currencySymbol} {sub.price.toLocaleString()}</p>}
                         </div>
                     ))}
                 </div>

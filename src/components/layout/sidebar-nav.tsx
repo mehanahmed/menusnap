@@ -33,6 +33,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SidebarPreferences } from '@/components/layout/sidebar-preferences';
+import { usePreferences } from '@/context/PreferencesContext';
 
 const mainNavItems: { href: string, label: string, icon: React.ElementType, hasChevron?: boolean }[] = [
   { href: '/magictab/', label: 'MagicTab', icon: ListOrdered, hasChevron: true },
@@ -46,6 +48,19 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
 export function SidebarNav() {
   const pathname = usePathname();
   const { clientUser, logout, clientLoading, isSubscriber, currentPackage, isAdmin } = useClientAuth();
+  const { t } = usePreferences();
+
+  const getNavLabel = (href: string, fallback: string) => {
+    switch (href) {
+      case '/magictab/': return t('magictab', fallback);
+      case '/templates/': return t('templates', fallback);
+      case '/draft/': return t('draft', fallback);
+      case '/order-history/': return t('orderHistory', fallback);
+      case '/happy-clients/': return t('happyClients', fallback);
+      case 'https://store.colorhutbd.xyz': return t('store', fallback);
+      default: return fallback;
+    }
+  };
 
   const planDetails = useMemo(() => {
     const raw = currentPackage || clientUser?.subscriptionPackage;
@@ -146,7 +161,7 @@ export function SidebarNav() {
                     )}
                     isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
                     tooltip={{
-                      children: item.label,
+                      children: getNavLabel(item.href, item.label),
                       className: "bg-popover text-popover-foreground border-border shadow-md",
                       sideOffset: 10
                     }}
@@ -157,7 +172,7 @@ export function SidebarNav() {
                       rel={isExternal ? "noopener noreferrer" : undefined}
                     >
                       <item.icon className="h-5 w-5" />
-                      <span className="group-data-[collapsible=icon]:hidden flex-1">{item.label}</span>
+                      <span className="group-data-[collapsible=icon]:hidden flex-1">{getNavLabel(item.href, item.label)}</span>
                       {item.href.includes('/magictab') && !isSubscriber && (
                         <span className="group-data-[collapsible=icon]:hidden text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs mr-1">
                           PRO
@@ -176,6 +191,9 @@ export function SidebarNav() {
           </div>
         )}
       </nav>
+
+      {/* Language & Currency Preferences */}
+      <SidebarPreferences />
 
       {/* Modern User Info and Logout Section */}
       <div className="p-2.5 border-t border-sidebar-border mt-auto">
@@ -221,7 +239,7 @@ export function SidebarNav() {
                 {/* Quick Sleek Logout Button */}
                 <button
                   onClick={logout}
-                  title="Logout"
+                  title={t('logout', 'Logout')}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all shrink-0 cursor-pointer active:scale-95"
                 >
                   <LogOut className="w-4 h-4" />
@@ -230,7 +248,7 @@ export function SidebarNav() {
 
               {/* Bottom Row: Distinct Package Name Badge */}
               <div className="mt-2.5 pt-2 border-t border-white/[0.06] flex items-center justify-between gap-2">
-                <span className="text-[10px] text-slate-400 font-semibold tracking-wide uppercase">Plan</span>
+                <span className="text-[10px] text-slate-400 font-semibold tracking-wide uppercase">{t('plan', 'Plan')}</span>
                 <span className={cn(
                   "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9.5px] font-extrabold tracking-wider uppercase whitespace-nowrap border shadow-2xs max-w-[150px]",
                   planDetails.badgeClass
@@ -252,7 +270,7 @@ export function SidebarNav() {
               </div>
               <button
                 onClick={logout}
-                title="Logout"
+                title={t('logout', 'Logout')}
                 className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all cursor-pointer active:scale-95"
               >
                 <LogOut className="w-4 h-4" />
