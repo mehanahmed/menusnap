@@ -515,15 +515,12 @@ export default function UserDraftsAdminPage() {
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end shrink-0 pl-2">
+                        <div className="flex items-center shrink-0 pl-2">
                           <Badge className={`text-xs px-2 py-0.5 font-bold ${
                             isSelected ? 'bg-orange-600 text-white' : 'bg-slate-900 text-white'
                           }`}>
                             {user.draftCount} {user.draftCount === 1 ? 'draft' : 'drafts'}
                           </Badge>
-                          <span className="text-[11px] font-bold text-slate-800 mt-1 font-mono">
-                            ৳{user.totalValue.toLocaleString()}
-                          </span>
                         </div>
                       </button>
                     );
@@ -608,17 +605,13 @@ export default function UserDraftsAdminPage() {
 
                   {/* Summary Bar */}
                   <div className="p-4 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <div className="flex items-center gap-4 text-xs">
+                    <div className="flex items-center gap-3 text-xs">
                       <span className="font-semibold text-slate-700">
                         {displayedDrafts.length} {displayedDrafts.length === 1 ? 'Draft' : 'Drafts'}
                       </span>
-                      <span>·</span>
+                      <span className="text-slate-400">·</span>
                       <span className="text-slate-600">
                         {selectedUserDetails?.totalItems || 0} Total Saved Items
-                      </span>
-                      <span>·</span>
-                      <span className="font-bold text-slate-900 font-mono">
-                        Total Est. ৳{(selectedUserDetails?.totalValue || 0).toLocaleString()}
                       </span>
                     </div>
 
@@ -643,22 +636,19 @@ export default function UserDraftsAdminPage() {
                         <TableRow className="border-slate-200">
                           <TableHead className="font-semibold text-slate-700 text-xs min-w-[200px]">Draft Title & Date</TableHead>
                           <TableHead className="font-semibold text-slate-700 text-xs min-w-[280px]">Dishes & Items</TableHead>
-                          <TableHead className="font-semibold text-slate-700 text-xs min-w-[110px]">Est. Value</TableHead>
                           <TableHead className="font-semibold text-slate-700 text-xs text-right min-w-[150px]">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {displayedDrafts.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={4} className="py-12 text-center">
+                            <TableCell colSpan={3} className="py-12 text-center">
                               <p className="text-sm font-semibold text-slate-700">No Drafts Matching Search</p>
                               <p className="text-xs text-slate-400 mt-1">Try another search term.</p>
                             </TableCell>
                           </TableRow>
                         ) : (
                           displayedDrafts.map((draft) => {
-                            const totalValue = getDraftTotalValue(draft.items);
-
                             return (
                               <TableRow key={draft.id || draft.draftId} className="border-slate-100 hover:bg-slate-50/60 transition-colors">
                                 {/* Draft Title & Date */}
@@ -689,13 +679,6 @@ export default function UserDraftsAdminPage() {
                                       )}
                                     </p>
                                   </div>
-                                </TableCell>
-
-                                {/* Estimated Value */}
-                                <TableCell className="align-middle">
-                                  <span className="font-bold text-sm text-slate-900 font-mono">
-                                    ৳{totalValue.toLocaleString()}
-                                  </span>
                                 </TableCell>
 
                                 {/* Actions */}
