@@ -96,6 +96,7 @@ interface PackageFormData {
   price: number;
   original_price: number | "";
   billing_period_text: string;
+  billing_cycle_text: string;
   discount_tag: string;
   coupon_code: string;
   coupon_discount: number;
@@ -119,6 +120,7 @@ const DEFAULT_FORM_DATA: PackageFormData = {
   price: 999,
   original_price: 1999,
   billing_period_text: "Lifetime Access • One-time payment",
+  billing_cycle_text: "/ lifetime",
   discount_tag: "",
   coupon_code: "",
   coupon_discount: 0,
@@ -299,6 +301,7 @@ export default function AdminPackagesPage() {
       price: pkg.price,
       original_price: pkg.original_price !== null && pkg.original_price !== undefined ? pkg.original_price : "",
       billing_period_text: pkg.billing_period_text || "Lifetime Access • One-time payment",
+      billing_cycle_text: pkg.billing_cycle_text || "/ lifetime",
       discount_tag: pkg.discount_tag || "",
       coupon_code: pkg.coupon_code || "",
       coupon_discount: pkg.coupon_discount || 0,
@@ -367,6 +370,7 @@ export default function AdminPackagesPage() {
         price: Number(formData.price) || 0,
         original_price: formData.original_price !== "" ? Number(formData.original_price) : null,
         billing_period_text: formData.billing_period_text,
+        billing_cycle_text: formData.billing_cycle_text?.trim() || "/ lifetime",
         discount_tag: formData.discount_tag || undefined,
         coupon_code: formData.coupon_code || undefined,
         coupon_discount: Number(formData.coupon_discount) || 0,
@@ -788,7 +792,7 @@ export default function AdminPackagesPage() {
                       ৳{pkg.price.toLocaleString()}
                     </span>
                     <span className="text-xs text-neutral-400 font-normal ml-1">
-                      /lifetime
+                      {pkg.billing_cycle_text || "/ lifetime"}
                     </span>
                   </div>
 
@@ -912,7 +916,10 @@ export default function AdminPackagesPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-bold text-slate-900 dark:text-white text-xs">
-                    ৳{pkg.price.toLocaleString()}
+                    ৳{pkg.price.toLocaleString()}{" "}
+                    <span className="text-[10px] font-normal text-slate-400">
+                      {pkg.billing_cycle_text || "/ lifetime"}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {pkg.original_price ? (
@@ -1092,7 +1099,7 @@ export default function AdminPackagesPage() {
                 <Coins className="w-3 h-3" /> Lifetime Pricing & Discounts (BDT)
               </h4>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                 <div className="space-y-1">
                   <Label className="text-xs font-bold">Lifetime Price (৳) *</Label>
                   <Input
@@ -1125,7 +1132,20 @@ export default function AdminPackagesPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold">Period Label</Label>
+                  <Label className="text-xs font-bold">Price Suffix (Cycle)</Label>
+                  <Input
+                    placeholder="e.g. / lifetime"
+                    value={formData.billing_cycle_text}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, billing_cycle_text: e.target.value }))
+                    }
+                    className="rounded-xl h-9 text-xs font-semibold"
+                  />
+                  <p className="text-[10px] text-slate-400">e.g. / lifetime, / month</p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">Period Note</Label>
                   <Input
                     placeholder="Lifetime Access • One-time payment"
                     value={formData.billing_period_text}

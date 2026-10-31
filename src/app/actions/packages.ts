@@ -15,6 +15,7 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     price: 199,
     original_price: 499,
     billing_period_text: 'Lifetime Access • Pay once, use forever',
+    billing_cycle_text: '/ lifetime',
     discount_tag: '',
     coupon_code: '',
     coupon_discount: 0,
@@ -46,6 +47,7 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     price: 499,
     original_price: 1499,
     billing_period_text: 'Lifetime Access • One-time payment',
+    billing_cycle_text: '/ lifetime',
     discount_tag: '',
     coupon_code: '',
     coupon_discount: 0,
@@ -79,6 +81,7 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     price: 1499,
     original_price: 4999,
     billing_period_text: 'Lifetime Team Access • One-time payment',
+    billing_cycle_text: '/ lifetime',
     discount_tag: '',
     coupon_code: '',
     coupon_discount: 0,
@@ -118,6 +121,7 @@ export async function ensurePricingPackagesTable(): Promise<void> {
         price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         original_price DECIMAL(10,2) DEFAULT NULL,
         billing_period_text VARCHAR(100) DEFAULT 'Lifetime Access • One-time payment',
+        billing_cycle_text VARCHAR(50) DEFAULT '/ lifetime',
         discount_tag VARCHAR(100) DEFAULT NULL,
         coupon_code VARCHAR(100) DEFAULT NULL,
         coupon_discount DECIMAL(10,2) DEFAULT 0.00,
@@ -169,17 +173,28 @@ export async function ensurePricingPackagesTable(): Promise<void> {
       }
     }
 
+    // Migration Check: Check if `billing_cycle_text` column exists
+    const [cycleCols]: any = await (pool as any).execute("SHOW COLUMNS FROM pricing_packages LIKE 'billing_cycle_text'");
+    if (!cycleCols || cycleCols.length === 0) {
+      try {
+        await (pool as any).execute("ALTER TABLE pricing_packages ADD COLUMN billing_cycle_text VARCHAR(50) DEFAULT '/ lifetime' AFTER billing_period_text");
+        await (pool as any).execute("UPDATE pricing_packages SET billing_cycle_text = '/ lifetime' WHERE billing_cycle_text IS NULL OR billing_cycle_text = ''");
+      } catch (e) {
+        console.error('Migration error adding billing_cycle_text column:', e);
+      }
+    }
+
     // Check if table is empty and seed
     const [countRows]: any = await (pool as any).execute('SELECT COUNT(*) as count FROM pricing_packages');
     if (countRows[0]?.count === 0) {
       for (const pkg of DEFAULT_PACKAGES) {
         await (pool as any).execute(
           `INSERT INTO pricing_packages (
-            package_id, name, tagline, badge_text, price, original_price, billing_period_text,
+            package_id, name, tagline, badge_text, price, original_price, billing_period_text, billing_cycle_text,
             discount_tag, coupon_code, coupon_discount,
             features, feature_highlight_title, button_text, is_popular, is_active, sort_order,
             is_category_unlimited, category_limit, is_item_unlimited, item_limit
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             pkg.package_id,
             pkg.name,
@@ -188,6 +203,7 @@ export async function ensurePricingPackagesTable(): Promise<void> {
             pkg.price,
             pkg.original_price || null,
             pkg.billing_period_text || 'Lifetime Access • One-time payment',
+            pkg.billing_cycle_text || '/ lifetime',
             pkg.discount_tag || null,
             pkg.coupon_code || null,
             pkg.coupon_discount || 0,
@@ -241,6 +257,7 @@ function normalizePackageRow(row: any): PricingPackage {
     price_3_months: row.price_3_months !== undefined && row.price_3_months !== null ? Number(row.price_3_months) : null,
     original_price_3_months: row.original_price_3_months !== undefined && row.original_price_3_months !== null ? Number(row.original_price_3_months) : null,
     billing_period_text: row.billing_period_text || 'Lifetime Access • One-time payment',
+    billing_cycle_text: row.billing_cycle_text || '/ lifetime',
     discount_tag: row.discount_tag || '',
     coupon_code: row.coupon_code || '',
     coupon_discount: Number(row.coupon_discount) || 0,
@@ -330,6 +347,7 @@ export async function createPricingPackageAction(payload: {
   price: number;
   original_price?: number | null;
   billing_period_text?: string;
+  billing_cycle_text?: string;
   discount_tag?: string;
   coupon_code?: string;
   coupon_discount?: number;
@@ -379,11 +397,11 @@ export async function createPricingPackageAction(payload: {
 
     const [result]: any = await (pool as any).execute(
       `INSERT INTO pricing_packages (
-        package_id, name, tagline, badge_text, price, original_price, billing_period_text,
+        package_id, name, tagline, badge_text, price, original_price, billing_period_text, billing_cycle_text,
         discount_tag, coupon_code, coupon_discount,
         features, feature_highlight_title, button_text, is_popular, is_active, sort_order,
         is_category_unlimited, category_limit, is_item_unlimited, item_limit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cleanPackageId,
         payload.name.trim(),
@@ -392,6 +410,7 @@ export async function createPricingPackageAction(payload: {
         Number(payload.price) || 0,
         payload.original_price ? Number(payload.original_price) : null,
         payload.billing_period_text?.trim() || 'Lifetime Access • One-time payment',
+        payload.billing_cycle_text?.trim() || '/ lifetime',
         payload.discount_tag?.trim() || null,
         payload.coupon_code?.trim() || null,
         Number(payload.coupon_discount) || 0,
@@ -430,6 +449,7 @@ export async function updatePricingPackageAction(
     price?: number;
     original_price?: number | null;
     billing_period_text?: string;
+  billing_cycle_text?: string;
     discount_tag?: string;
     coupon_code?: string;
     coupon_discount?: number;
@@ -490,6 +510,7 @@ export async function updatePricingPackageAction(
         price = ?,
         original_price = ?,
         billing_period_text = ?,
+        billing_cycle_text = ?,
         discount_tag = ?,
         coupon_code = ?,
         coupon_discount = ?,
@@ -512,6 +533,7 @@ export async function updatePricingPackageAction(
         payload.price !== undefined ? Number(payload.price) : current.price,
         payload.original_price !== undefined ? (payload.original_price ? Number(payload.original_price) : null) : current.original_price,
         payload.billing_period_text !== undefined ? payload.billing_period_text.trim() : current.billing_period_text,
+        payload.billing_cycle_text !== undefined ? payload.billing_cycle_text.trim() : (current.billing_cycle_text || '/ lifetime'),
         payload.discount_tag !== undefined ? (payload.discount_tag.trim() || null) : (current.discount_tag || null),
         payload.coupon_code !== undefined ? (payload.coupon_code.trim() || null) : (current.coupon_code || null),
         payload.coupon_discount !== undefined ? Number(payload.coupon_discount) : current.coupon_discount,

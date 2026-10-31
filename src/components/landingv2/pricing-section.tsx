@@ -270,7 +270,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
                       ৳{pkg.price.toLocaleString()}
                     </span>
                     <span className="text-xs text-neutral-400 font-normal ml-1">
-                      /lifetime
+                      {pkg.billing_cycle_text || "/lifetime"}
                     </span>
                   </div>
 

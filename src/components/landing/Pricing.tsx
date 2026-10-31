@@ -29,6 +29,7 @@ const FALLBACK_LIFETIME_PACKAGES: Omit<PricingPackage, "id">[] = [
     price: 199,
     original_price: 499,
     billing_period_text: "Lifetime Access • Pay once, use forever",
+    billing_cycle_text: "/ lifetime",
     features: [
       "3,000+ Menu Database Access",
       "Restaurant & Cuisine Browse",
@@ -52,6 +53,7 @@ const FALLBACK_LIFETIME_PACKAGES: Omit<PricingPackage, "id">[] = [
     price: 499,
     original_price: 1499,
     billing_period_text: "Lifetime Access • One-time payment",
+    billing_cycle_text: "/ lifetime",
     features: [
       "Everything in Starter",
       "Advanced Item & Competitor Research",
@@ -77,6 +79,7 @@ const FALLBACK_LIFETIME_PACKAGES: Omit<PricingPackage, "id">[] = [
     price: 1499,
     original_price: 4999,
     billing_period_text: "Lifetime Team Access • One-time payment",
+    billing_cycle_text: "/ lifetime",
     features: [
       "Everything in Pro",
       "Multiple Restaurant Projects",
@@ -283,6 +286,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
         price: finalPrice,
         originalPrice: canApplyCoupon ? basePrice : originalPrice,
         billingPeriodText: pkg.billing_period_text || "Lifetime Access • One-time payment",
+        billingCycleText: pkg.billing_cycle_text || "/ lifetime",
         hasCouponDiscount: canApplyCoupon,
         couponDiscount: calculatedDiscount,
         couponCode: appliedCouponData?.code || pkg.coupon_code,
@@ -367,7 +371,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
                         ৳{formatTaka(plan.price)}
                       </span>
                       <span className={cn("text-xs font-bold uppercase tracking-wider", isPro ? "text-accent" : "text-muted")}>
-                        / lifetime
+                        {plan.billingCycleText || "/ lifetime"}
                       </span>
                     </p>
 

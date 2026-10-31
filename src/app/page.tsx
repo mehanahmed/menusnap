@@ -1,30 +1,18 @@
 "use client";
 
-import { Navbar } from "@/components/landing/Navbar";
-import { Hero } from "@/components/landing/Hero";
-import { Stats } from "@/components/landing/Stats";
-import { ProblemSection } from "@/components/landing/ProblemSection";
-import { DemoVideo } from "@/components/landing/DemoVideo";
-import { HowItWorks } from "@/components/landing/HowItWorks";
-import { RestaurantExplorer } from "@/components/landing/RestaurantExplorer";
-import { SmartSearch } from "@/components/landing/SmartSearch";
-import { PriceComparison } from "@/components/landing/PriceComparison";
-import { MenuBuilderPreview } from "@/components/landing/MenuBuilderPreview";
-import { FeatureBento } from "@/components/landing/FeatureBento";
-import { Benefits } from "@/components/landing/Benefits";
-import { Audience } from "@/components/landing/Audience";
-import { BeforeAfter } from "@/components/landing/BeforeAfter";
+import React from "react";
+import { Navbar } from "@/components/landingv2/navbar";
+import { HeroSection } from "@/components/landingv2/hero-section";
+import { StatsStrip } from "@/components/landingv2/stats-strip";
+import { HowItWorksSection } from "@/components/landingv2/how-it-works-section";
 import { Pricing } from "@/components/landing/Pricing";
-import { PurchaseFlow } from "@/components/landing/PurchaseFlow";
-import { Testimonials } from "@/components/landing/Testimonials";
-import { FAQ } from "@/components/landing/FAQ";
-import { FinalCTA } from "@/components/landing/FinalCTA";
-import { Footer } from "@/components/landing/Footer";
-import { StickyMobileCTA } from "@/components/landing/StickyMobileCTA";
+import { FAQSection } from "@/components/landingv2/faq-section";
+import { FinalCTASection } from "@/components/landingv2/final-cta-section";
+import { Footer } from "@/components/landingv2/footer";
+import { StickyMobileCTA } from "@/components/landingv2/sticky-mobile-cta";
 import { FAQS } from "@/lib/data";
 
 export default function HomePage() {
-
   const softwareJsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -53,29 +41,34 @@ export default function HomePage() {
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-white text-gray-900 selection:bg-[#FF5A36]/15 selection:text-[#FF5A36] overflow-x-clip">
+      {/* Premium Sticky Navigation */}
       <Navbar />
+
       <main id="main-content">
-        <Hero />
-        <Stats />
-        <ProblemSection />
-        <DemoVideo />
-        <HowItWorks />
-        <RestaurantExplorer />
-        <SmartSearch />
-        <PriceComparison />
-        <MenuBuilderPreview />
-        <FeatureBento />
-        <Benefits />
-        <Audience />
-        <BeforeAfter />
+        {/* 1. Hero Section with 3D Interactive Dashboard Mockup */}
+        <HeroSection />
+
+        {/* 2. Fast Proof Metrics Strip */}
+        <StatsStrip />
+
+        {/* 3. 3-Step Guided Workflow */}
+        <HowItWorksSection />
+
+        {/* 4. Interactive Pricing Table */}
         <Pricing />
-        <PurchaseFlow />
-        <Testimonials />
-        <FAQ />
-        <FinalCTA />
+
+        {/* 5. Accessible FAQ Accordion */}
+        <FAQSection />
+
+        {/* 6. Final High-Converting Closing CTA */}
+        <FinalCTASection />
       </main>
+
+      {/* Clean SaaS Footer */}
       <Footer />
+
+      {/* Sticky Bottom Bar for Mobile Visitors */}
       <StickyMobileCTA />
 
       <script
@@ -86,6 +79,6 @@ export default function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
-    </>
+    </div>
   );
 }

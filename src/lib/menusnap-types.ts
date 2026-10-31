@@ -25,6 +25,7 @@ export interface PricingPackage {
   price_3_months?: number | null;
   original_price_3_months?: number | null;
   billing_period_text?: string | null;
+  billing_cycle_text?: string | null;
   discount_tag?: string | null;
   coupon_code?: string | null;
   coupon_discount?: number | null;
