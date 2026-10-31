@@ -18,6 +18,7 @@ import {
 import { format, parseISO, isValid } from 'date-fns';
 import { decodeHtmlEntities } from '@/lib/utils';
 import { getCategoriesFromMySql } from '@/app/actions/orders';
+import { getUserDraftByIdAction } from '@/app/actions/user-drafts';
 import { usePreferences } from '@/context/PreferencesContext';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -57,18 +58,35 @@ export default function DraftViewPage() {
           );
         }
 
-        // Fetch draft from localStorage
+        // Fetch draft from localStorage first
         const stored = localStorage.getItem(DRAFTS_STORAGE_KEY);
+        let found: DraftItemData | null = null;
         if (stored) {
-          const drafts: DraftItemData[] = JSON.parse(stored);
-          const found = drafts.find((d) => String(d.id) === String(draftId));
-          if (found) {
-            setDraft(found);
-          } else {
-            setError('The requested draft could not be found in local drafts.');
+          try {
+            const drafts: DraftItemData[] = JSON.parse(stored);
+            found = drafts.find((d) => String(d.id) === String(draftId)) || null;
+          } catch (_) {}
+        }
+
+        // If not found in localStorage, fetch from MySQL
+        if (!found) {
+          const dbRes = await getUserDraftByIdAction(String(draftId));
+          if (dbRes.success && dbRes.draft) {
+            found = {
+              id: dbRes.draft.draftId,
+              name: dbRes.draft.draftName,
+              createdAt: dbRes.draft.createdAt,
+              itemCount: dbRes.draft.itemCount || dbRes.draft.items.length,
+              primaryTag: dbRes.draft.primaryTag || 'restaurant',
+              items: dbRes.draft.items as any,
+            };
           }
+        }
+
+        if (found) {
+          setDraft(found);
         } else {
-          setError('No saved drafts found in local storage.');
+          setError('The requested draft could not be found.');
         }
       } catch (err: any) {
         setError(err.message || 'Failed to load draft menu.');

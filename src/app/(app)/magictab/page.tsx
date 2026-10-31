@@ -68,6 +68,7 @@ import * as z from "zod";
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { getCategoriesFromMySql, getMenuItemsFromMySql, getOrderItemsAndCategories } from '@/app/actions/orders';
 import { usePreferences } from '@/context/PreferencesContext';
+import { saveUserDraftAction } from '@/app/actions/user-drafts';
 
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'colorHutCustomCategories';
@@ -1328,8 +1329,22 @@ export default function MagicTabPage() {
       // Error handling without toast
     }
 
+    // Persist draft to MySQL so admin can see what restaurants are saving
+    saveUserDraftAction({
+      draftId,
+      draftName,
+      businessName: clientUser?.businessName || (selectedMenuType === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
+      businessType: clientUser?.type || (selectedMenuType === 'parlour' ? 'parlour' : 'restaurant'),
+      whatsappNumber: clientUser?.whatsappNumber,
+      email: clientUser?.email,
+      clientId: clientUser?.id,
+      primaryTag: selectedMenuType,
+      items: itemsToSave,
+      itemCount: itemsToSave.length,
+    }).catch(err => console.error('Failed to sync draft to server:', err));
+
     setIsPreviewDialogOpen(true);
-  }, [allMenuItems, selectedItems, selectedMenuType]);
+  }, [allMenuItems, selectedItems, selectedMenuType, clientUser]);
 
   const preparedSelectedItemsForPreview = useMemo(() => {
     return allMenuItems.filter(item => selectedItems[item.id]);

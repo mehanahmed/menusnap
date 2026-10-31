@@ -9,6 +9,7 @@ import { ClientAuthProvider } from '@/hooks/use-client-auth';
 import { ClientSideOnlyToaster } from '@/components/layout/client-side-only-toaster';
 import { MetaPixelScriptLoader } from '@/components/layout/meta-pixel-loader';
 import { GtmScriptLoader } from '@/components/layout/gtm-loader';
+import { DraftAutoSyncer } from '@/components/common/draft-auto-syncer';
 
 function PageTitleManager() {
   const pathname = usePathname();
@@ -105,6 +106,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <PreferencesProvider>
         <Suspense fallback={null}>
           <ChunkErrorAutoReloader />
+          <DraftAutoSyncer />
           <MetaPixelScriptLoader />
           <GtmScriptLoader />
           <PageTitleManager />

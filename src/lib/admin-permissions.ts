@@ -5,6 +5,7 @@ export function getPermissionKey(pathname: string): string {
   const cleanPath = pathname.replace(/^\/panel/, '/m-admin'); // normalization if needed
   
   if (cleanPath === '/m-admin' || cleanPath === '/m-admin/') return 'dashboard';
+  if (cleanPath.startsWith('/m-admin/user-drafts')) return 'user-drafts';
   if (cleanPath.startsWith('/m-admin/quick-manager')) return 'quick-manager';
   if (cleanPath.startsWith('/m-admin/contacts')) return 'contacts';
   if (cleanPath.startsWith('/m-admin/manage-orders')) return 'manage-orders';
@@ -47,6 +48,7 @@ export function checkClientPermission(
   if (adminUser.role === 'User') {
     const defaultUserPermissions: Record<string, string[]> = {
       'dashboard': ['view'],
+      'user-drafts': ['view', 'create', 'edit', 'delete'],
       'menusnap-users': ['view', 'create', 'edit', 'delete'],
       'free-guides': ['view', 'create', 'edit', 'delete'],
       'packages': ['view', 'create', 'edit', 'delete'],

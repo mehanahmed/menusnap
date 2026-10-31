@@ -35,6 +35,8 @@ import { useToast } from "@/hooks/use-toast";
 import { getCategoriesFromMySql } from '@/app/actions/orders';
 import { usePreferences } from '@/context/PreferencesContext';
 import { DraftShareDialog } from '@/components/menu/draft-share-dialog';
+import { useClientAuth } from '@/hooks/use-client-auth';
+import { batchSyncUserDraftsAction, deleteUserDraftAction } from '@/app/actions/user-drafts';
 
 const STATIC_AVATAR_IMAGE_URL = '/assets/image.svg';
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
@@ -328,6 +330,7 @@ export default function DraftPage(): ReactNode {
   const [expandedDrafts, setExpandedDrafts] = useState<Record<string, boolean>>({});
   const [masterCategoryList, setMasterCategoryList] = useState<Category[]>([]);
   const [selectedDraftForShare, setSelectedDraftForShare] = useState<DraftItem | null>(null);
+  const { clientUser } = useClientAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -383,6 +386,40 @@ export default function DraftPage(): ReactNode {
           };
         });
         setDrafts(validatedDrafts);
+        if (validatedDrafts.length > 0) {
+          let bName = clientUser?.businessName;
+          let bType = clientUser?.type;
+          let wa = clientUser?.whatsappNumber;
+          let em = clientUser?.email;
+          let cid = clientUser?.id;
+
+          if (!bName && typeof window !== 'undefined') {
+            try {
+              const u = JSON.parse(localStorage.getItem('colorHutClientUser') || '{}');
+              if (u.businessName || u.name) bName = u.businessName || u.name;
+              if (u.type) bType = u.type;
+              if (u.whatsappNumber || u.phone) wa = u.whatsappNumber || u.phone;
+              if (u.email) em = u.email;
+              if (u.id) cid = u.id;
+            } catch {}
+          }
+
+          batchSyncUserDraftsAction(
+            validatedDrafts.map((d: any) => ({
+              draftId: String(d.id || d.draftId || `draft-${Date.now()}`),
+              draftName: String(d.name || d.draftName || 'Saved Draft'),
+              businessName: bName || (d.primaryTag === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
+              businessType: bType || (d.primaryTag === 'parlour' ? 'parlour' : 'restaurant'),
+              whatsappNumber: wa || undefined,
+              email: em || undefined,
+              clientId: typeof cid === 'number' ? cid : undefined,
+              primaryTag: d.primaryTag || undefined,
+              items: Array.isArray(d.items) ? d.items : [],
+              itemCount: typeof d.itemCount === 'number' ? d.itemCount : (Array.isArray(d.items) ? d.items.length : 0),
+              createdAt: d.createdAt || undefined,
+            }))
+          ).catch((syncErr) => console.error('Draft page sync error:', syncErr));
+        }
       } else {
         setDrafts([]);
       }
@@ -422,6 +459,7 @@ export default function DraftPage(): ReactNode {
         updatedDrafts = parsedDrafts.filter(draft => draft.id !== id);
         localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(updatedDrafts));
       }
+      deleteUserDraftAction(id).catch(() => {});
       setDrafts(prevDrafts => prevDrafts.filter(draft => draft.id !== id));
       setExpandedDrafts(prev => {
         const newExpanded = { ...prev };
