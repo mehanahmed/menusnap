@@ -223,37 +223,6 @@ export const TextCase = Extension.create({
                 }
 })
 
-export const CategoryAutodetect = Extension.create({
-    name: 'categoryAutodetect',
-    addOptions() {
-        return {
-            levels: [2],
-        }
-    },
-    onUpdate() {
-        const { state } = this.editor
-        const { selection } = state
-        const { $from } = selection
-        const node = $from.parent
-
-        if (node.type.name === 'paragraph') {
-            const text = node.textContent?.trim()
-            // Detect all-caps categories (at least 4 chars, no digits, no dashes/prices)
-            if (text && text === text.toUpperCase() && text.length >= 4 && !text.includes('-') && !text.includes(':') && !text.match(/\d/)) {
-                // Use setTimeout to avoid conflict with the current update cycle
-                setTimeout(() => {
-                    if (this.editor.isDestroyed) return
-                    const { state: currentState } = this.editor
-                    if (currentState.selection.$from.parent.textContent.trim() === text) {
-                        this.editor.commands.setNode('heading', { level: 2 })
-                    }
-                }, 10)
-            }
-        }
-    }
-})
-
-
 export const MultiSelection = Extension.create({
     name: 'multiSelection',
     addStorage() {
@@ -263,24 +232,70 @@ export const MultiSelection = Extension.create({
     },
     addCommands() {
         return {
-            runCommandOnAllSelections: (commandName: string, ...args: any[]) => ({ editor, chain }) => {
+            runCommandOnAllSelections: (commandName: string, ...args: any[]) => ({ editor }) => {
                 const ranges = [...this.storage.ranges]
-                // Include current selection if not already added
                 const { from, to } = editor.state.selection
                 if (from !== to && !ranges.some(r => r.from === from && r.to === to)) {
                     ranges.push({ from, to })
                 }
 
-                if (ranges.length === 0) return (editor.chain().focus() as any)[commandName](...args).run()
+                if (ranges.length === 0) {
+                    return (editor.chain().focus() as any)[commandName](...args).run()
+                }
 
-                let c = chain().focus()
-                ranges.forEach((range: { from: number, to: number }) => {
-                    c = (c.setTextSelection(range) as any)[commandName](...args)
+                // Sort descending so operations at higher positions don't affect lower positions
+                const sortedRanges = [...ranges].sort((a, b) => b.from - a.from)
+
+                sortedRanges.forEach((range) => {
+                    try {
+                        (editor.chain().setTextSelection(range) as any)[commandName](...args).run()
+                    } catch (e) {
+                        console.error('MultiSelection command error:', e)
+                    }
                 })
-                
-                // Reset multi-selection after command if desired, or keep it? Google docs keeps it.
-                // We'll keep it for better UX.
-                return c.run()
+
+                editor.commands.focus()
+                return true
+            }
+        }
+    },
+    addKeyboardShortcuts() {
+        return {
+            Backspace: () => {
+                const ranges = this.storage.ranges as { from: number; to: number }[]
+                if (ranges && ranges.length > 0) {
+                    const sorted = [...ranges].sort((a, b) => b.from - a.from)
+                    const tr = this.editor.state.tr
+                    sorted.forEach((r: { from: number; to: number }) => {
+                        if (r.from < r.to) tr.delete(r.from, r.to)
+                    })
+                    this.storage.ranges = []
+                    this.editor.view.dispatch(tr)
+                    return true
+                }
+                return false
+            },
+            Delete: () => {
+                const ranges = this.storage.ranges as { from: number; to: number }[]
+                if (ranges && ranges.length > 0) {
+                    const sorted = [...ranges].sort((a, b) => b.from - a.from)
+                    const tr = this.editor.state.tr
+                    sorted.forEach((r: { from: number; to: number }) => {
+                        if (r.from < r.to) tr.delete(r.from, r.to)
+                    })
+                    this.storage.ranges = []
+                    this.editor.view.dispatch(tr)
+                    return true
+                }
+                return false
+            },
+            Escape: () => {
+                if (this.storage.ranges.length > 0) {
+                    this.storage.ranges = []
+                    this.editor.view.dispatch(this.editor.state.tr)
+                    return true
+                }
+                return false
             }
         }
     },
@@ -289,32 +304,60 @@ export const MultiSelection = Extension.create({
             new Plugin({
                 props: {
                     decorations: (state) => {
-                        const { ranges } = this.storage
+                        const ranges = this.storage.ranges as { from: number; to: number }[]
                         if (!ranges || ranges.length === 0) return DecorationSet.empty
-                        
-                        const decorations = ranges.map((range: { from: number, to: number }) => 
+
+                        const docSize = state.doc.content.size
+                        const validRanges = ranges.filter((r: { from: number; to: number }) => r.from >= 0 && r.to <= docSize && r.from < r.to)
+                        if (validRanges.length === 0) return DecorationSet.empty
+
+                        const decorations = validRanges.map((range: { from: number, to: number }) => 
                             Decoration.inline(range.from, range.to, { class: 'multi-selection-highlight' })
                         )
                         return DecorationSet.create(state.doc, decorations)
                     },
                     handleDOMEvents: {
                         mousedown: (view, event) => {
-                            if (!event.ctrlKey && !event.metaKey) {
-                                this.storage.ranges = []
-                                view.dispatch(view.state.tr)
-                            }
-                            return false
-                        },
-                        mouseup: (view, event) => {
-                            if (event.ctrlKey || event.metaKey) {
+                            const isCtrl = event.ctrlKey || event.metaKey
+                            if (isCtrl) {
+                                // Capture existing active selection before user begins clicking/selecting new text
                                 const { from, to } = view.state.selection
                                 if (from !== to) {
-                                    // Avoid duplicates
                                     if (!this.storage.ranges.some((r: any) => r.from === from && r.to === to)) {
                                         this.storage.ranges.push({ from, to })
                                         view.dispatch(view.state.tr)
                                     }
                                 }
+                            } else {
+                                // Normal click without Ctrl clears previous multi-selection
+                                if (this.storage.ranges.length > 0) {
+                                    this.storage.ranges = []
+                                    view.dispatch(view.state.tr)
+                                }
+                            }
+                            return false
+                        },
+                        dragstart: (view, event) => {
+                            // Prevent native HTML5 drag and drop of selected text when dragging with Ctrl
+                            if (event.ctrlKey || event.metaKey) {
+                                event.preventDefault()
+                                return true
+                            }
+                            return false
+                        },
+                        mouseup: (view, event) => {
+                            const isCtrl = event.ctrlKey || event.metaKey
+                            if (isCtrl) {
+                                setTimeout(() => {
+                                    if (view.isDestroyed) return
+                                    const { from, to } = view.state.selection
+                                    if (from !== to) {
+                                        if (!this.storage.ranges.some((r: any) => r.from === from && r.to === to)) {
+                                            this.storage.ranges.push({ from, to })
+                                            view.dispatch(view.state.tr)
+                                        }
+                                    }
+                                }, 15)
                             }
                             return false
                         }
@@ -359,6 +402,8 @@ function GoogleDocsEditorInner({
     onUpdateContent
 }: EditorProps & { socket: Socket | null, onlineUsers: any[] }) {
     const isRemoteUpdate = useRef(false)
+    const socketRef = useRef(socket)
+    socketRef.current = socket
 
     const editor = useEditor({
         parseOptions: {
@@ -390,7 +435,6 @@ function GoogleDocsEditorInner({
             TabNode,
             TextCase,
             MultiSelection,
-            CategoryAutodetect,
             Extension.create({
                 name: 'tabKey',
                 priority: 1000,
@@ -524,8 +568,8 @@ function GoogleDocsEditorInner({
             const html = editor.getHTML()
             onChange(html)
             if (onUpdateContent) onUpdateContent(html)
-            if (!isRemoteUpdate.current && socket && docId) {
-                socket.emit('content-change', { docId, content: html })
+            if (!isRemoteUpdate.current && socketRef.current && docId) {
+                socketRef.current.emit('content-change', { docId, content: html })
             }
             isRemoteUpdate.current = false
         },
@@ -537,7 +581,7 @@ function GoogleDocsEditorInner({
         },
         autofocus: false,
         immediatelyRender: false,
-    }, [socket, docId]) // Re-initialized when socket connects
+    }, [docId]) // Stable editor instance, does not reset when socket connects
 
     useEffect(() => {
         if (editor) onReady(editor)
@@ -558,12 +602,14 @@ function GoogleDocsEditorInner({
         }
     }, [editor, socket, docId])
 
-    const initializedRef = React.useRef(false)
+    const loadedDocIdRef = React.useRef<string | null>(null)
     useEffect(() => {
-        if (!editor || !content || initializedRef.current) return
-        initializedRef.current = true
-        editor.commands.setContent(content)
-    }, [editor, content])
+        if (!editor || !content) return
+        if (loadedDocIdRef.current !== (docId || 'default')) {
+            loadedDocIdRef.current = docId || 'default'
+            editor.commands.setContent(content)
+        }
+    }, [editor, content, docId])
 
     useEffect(() => {
         if (editor && tabStops) (editor.storage as any).tabKey.tabStops = tabStops

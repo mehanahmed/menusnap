@@ -35,7 +35,24 @@ export default function Header({
     const [isStarred, setIsStarred] = useState(false)
     const [showShareMenu, setShowShareMenu] = useState(false)
     const [copiedType, setCopiedType] = useState<'editor' | 'viewer' | null>(null)
+    const [isBrowserOnline, setIsBrowserOnline] = useState(true)
     const dropdownRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setIsBrowserOnline(navigator.onLine)
+            const handleOnline = () => setIsBrowserOnline(true)
+            const handleOffline = () => setIsBrowserOnline(false)
+            window.addEventListener('online', handleOnline)
+            window.addEventListener('offline', handleOffline)
+            return () => {
+                window.removeEventListener('online', handleOnline)
+                window.removeEventListener('offline', handleOffline)
+            }
+        }
+    }, [])
+
+    const isLive = isConnected || isBrowserOnline
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -88,7 +105,7 @@ export default function Header({
                         <div className="bg-[#4285f4] p-1 sm:p-1.5 rounded-sm shadow-sm relative">
                             <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                             {!readOnly && (
-                                <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${isConnected ? 'bg-green-500 shadow-[0_0_4px_#22c55e]' : 'bg-red-500 shadow-[0_0_4px_#ef4444]'}`}></div>
+                                <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${isLive ? 'bg-green-500 shadow-[0_0_4px_#22c55e]' : 'bg-amber-500 shadow-[0_0_4px_#f59e0b]'}`}></div>
                             )}
                         </div>
                     </motion.div>
@@ -129,9 +146,9 @@ export default function Header({
                                         <motion.span
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
-                                            className={`text-[9px] sm:text-[10px] hidden sm:inline px-1.5 py-0.5 rounded-sm border ${isConnected ? 'text-green-600 bg-green-50 border-green-100' : 'text-red-500 bg-red-50 border-red-100'}`}
+                                            className={`text-[9px] sm:text-[10px] hidden sm:inline px-1.5 py-0.5 rounded-sm border ${isLive ? 'text-green-600 bg-green-50 border-green-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}
                                         >
-                                            {isConnected ? 'Live' : 'Offline'}
+                                            {isLive ? 'Live' : 'Offline'}
                                         </motion.span>
                                     )}
                                 </div>

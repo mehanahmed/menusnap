@@ -87,6 +87,12 @@ export default function Toolbar({ editor, title, isVibeMode = false }: ToolbarPr
             if (attrs.fontSize) {
                 const size = parseInt(attrs.fontSize)
                 if (!isNaN(size)) setFontSize(size)
+            } else if (editor.isActive('heading', { level: 1 })) {
+                setFontSize(18)
+            } else if (editor.isActive('heading', { level: 2 })) {
+                setFontSize(14)
+            } else if (editor.isActive('heading', { level: 3 })) {
+                setFontSize(12)
             } else {
                 setFontSize(11)
             }

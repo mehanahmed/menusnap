@@ -85,50 +85,69 @@ export default function GoogleDocsApp({
   const [isConnected, setIsConnected] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState<any[]>([])
 
+  // Keep content and title synced when initial values load asynchronously from MySQL
+  useEffect(() => {
+    if (initialContent && initialContent !== content && !content) {
+      setContent(initialContent)
+    }
+  }, [initialContent])
+
+  useEffect(() => {
+    if (initialTitle && initialTitle !== title) {
+      setTitle(initialTitle)
+    }
+  }, [initialTitle])
+
   // Socket initialization
   useEffect(() => {
     if (!docId) return
     
-    // Determine the socket URL
-    const isProd = process.env.NODE_ENV === 'production';
-    const socketUrl = isProd 
-        ? window.location.origin 
-        : (process.env.NEXT_PUBLIC_COLLAB_WS_URL || 'http://localhost:1234');
+    // Determine the socket URL (connect to current origin or configured WS URL)
+    const socketUrl = process.env.NEXT_PUBLIC_COLLAB_WS_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+    if (!socketUrl) return
 
-    const socketInstance = io(socketUrl, {
-        path: '/socket.io',
-        transports: ['polling', 'websocket'], 
-        upgrade: true,
-        rememberUpgrade: true,
-        timeout: 20000,
-        reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1000
-    });
-    
-    const user = { name: getGuestName(), color: getRandomColor() };
-    
-    socketInstance.on('connect', () => {
-        setIsConnected(true)
-        socketInstance.emit('join-room', { docId, user })
-    })
+    let socketInstance: Socket | null = null;
+    try {
+      socketInstance = io(socketUrl, {
+          path: '/socket.io',
+          transports: ['polling', 'websocket'], 
+          upgrade: true,
+          rememberUpgrade: true,
+          timeout: 10000,
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 2000,
+          autoConnect: true
+      });
+      
+      const user = { name: getGuestName(), color: getRandomColor() };
+      
+      socketInstance.on('connect', () => {
+          setIsConnected(true)
+          socketInstance?.emit('join-room', { docId, user })
+      })
 
-    socketInstance.on('disconnect', () => {
-        setIsConnected(false)
-    })
+      socketInstance.on('disconnect', () => {
+          setIsConnected(false)
+      })
 
-    socketInstance.on('connect_error', () => {
-        setIsConnected(false)
-    })
+      socketInstance.on('connect_error', () => {
+          setIsConnected(false)
+      })
 
-    socketInstance.on('users-update', (users: any[]) => {
-        setOnlineUsers(users)
-    })
+      socketInstance.on('users-update', (users: any[]) => {
+          setOnlineUsers(users)
+      })
 
-    setSocket(socketInstance)
+      setSocket(socketInstance)
+    } catch (e) {
+      console.warn('Socket connect skipped:', e)
+    }
 
     return () => {
-        socketInstance.disconnect()
+        if (socketInstance) {
+          socketInstance.disconnect()
+        }
     }
   }, [docId])
 
