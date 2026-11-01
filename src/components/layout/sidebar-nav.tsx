@@ -22,6 +22,7 @@ import {
   Crown,
   Zap,
   ShieldCheck,
+  Calculator,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import {
@@ -40,6 +41,7 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
   { href: '/magictab/', label: 'MagicTab', icon: ListOrdered, hasChevron: true },
   { href: '/templates/', label: 'Templates', icon: Layers, hasChevron: true },
   { href: '/draft/', label: 'Draft', icon: FileEdit, hasChevron: true },
+  { href: '/magic-calculation/', label: 'Magic Calculation', icon: Calculator, hasChevron: true },
   { href: '/order-history/', label: 'Order History', icon: HistoryIcon, hasChevron: true },
   { href: '/happy-clients/', label: 'Happy Clients', icon: HeartHandshake, hasChevron: true },
   { href: 'https://store.colorhutbd.xyz', label: 'Store', icon: ShoppingBag },
@@ -55,6 +57,7 @@ export function SidebarNav() {
       case '/magictab/': return t('magictab', fallback);
       case '/templates/': return t('templates', fallback);
       case '/draft/': return t('draft', fallback);
+      case '/magic-calculation/': return t('magicCalc', fallback);
       case '/order-history/': return t('orderHistory', fallback);
       case '/happy-clients/': return t('happyClients', fallback);
       case 'https://store.colorhutbd.xyz': return t('store', fallback);

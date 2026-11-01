@@ -40,6 +40,7 @@ export const CURRENCIES: CurrencyOption[] = [
 const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   en: {
     magictab: 'MagicTab',
+    magicCalc: 'Magic Calculation',
     templates: 'Templates',
     draft: 'Draft',
     orderHistory: 'Order History',
@@ -70,6 +71,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   bn: {
     magictab: 'ম্যাজিকট্যাব',
+    magicCalc: 'ম্যাজিক ক্যালকুলেশন',
     templates: 'টেমপ্লেট',
     draft: 'ড্রাফট',
     orderHistory: 'অর্ডার হিস্ট্রি',
@@ -100,6 +102,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   ar: {
     magictab: 'ماجيك تاب',
+    magicCalc: 'الحساب السحري',
     templates: 'القوالب',
     draft: 'المسودات',
     orderHistory: 'سجل الطلبات',
@@ -130,6 +133,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
   },
   es: {
     magictab: 'MagicTab',
+    magicCalc: 'Cálculo Mágico',
     templates: 'Plantillas',
     draft: 'Borradores',
     orderHistory: 'Historial',
