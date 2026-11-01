@@ -30,6 +30,9 @@ export interface PackageLimits {
   categoryLimit: number;
   isItemUnlimited: boolean;
   itemLimit: number;
+  isAiScanUnlimited?: boolean;
+  aiScanLimit?: number;
+  aiScansUsed?: number;
 }
 
 export interface ClientAuthContextType {
@@ -82,6 +85,9 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       categoryLimit: 0,
       isItemUnlimited: true,
       itemLimit: 0,
+      isAiScanUnlimited: false,
+      aiScanLimit: 0,
+      aiScansUsed: 0,
     };
   });
   const [isAdmin, setIsAdmin] = useState(false);
@@ -477,6 +483,9 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       categoryLimit: 0,
       isItemUnlimited: true,
       itemLimit: 0,
+      isAiScanUnlimited: false,
+      aiScanLimit: 0,
+      aiScansUsed: 0,
     });
     router.push('/login');
     toast({

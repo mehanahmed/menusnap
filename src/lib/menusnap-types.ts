@@ -39,6 +39,8 @@ export interface PricingPackage {
   category_limit?: number;
   is_item_unlimited?: boolean;
   item_limit?: number;
+  is_ai_scan_unlimited?: boolean;
+  ai_scan_limit?: number;
   created_at?: string;
   updated_at?: string;
 }

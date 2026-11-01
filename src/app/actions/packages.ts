@@ -38,6 +38,8 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     category_limit: 5,
     is_item_unlimited: false,
     item_limit: 10,
+    is_ai_scan_unlimited: false,
+    ai_scan_limit: 5,
   },
   {
     package_id: 'pro',
@@ -72,6 +74,8 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     category_limit: 10,
     is_item_unlimited: false,
     item_limit: 20,
+    is_ai_scan_unlimited: false,
+    ai_scan_limit: 25,
   },
   {
     package_id: 'agency',
@@ -103,6 +107,8 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     category_limit: 0,
     is_item_unlimited: true,
     item_limit: 0,
+    is_ai_scan_unlimited: true,
+    ai_scan_limit: 0,
   },
 ];
 
@@ -135,6 +141,8 @@ export async function ensurePricingPackagesTable(): Promise<void> {
         category_limit INT NOT NULL DEFAULT 0,
         is_item_unlimited TINYINT(1) NOT NULL DEFAULT 1,
         item_limit INT NOT NULL DEFAULT 0,
+        is_ai_scan_unlimited TINYINT(1) NOT NULL DEFAULT 0,
+        ai_scan_limit INT NOT NULL DEFAULT 10,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_active_sort (is_active, sort_order)
@@ -173,6 +181,17 @@ export async function ensurePricingPackagesTable(): Promise<void> {
       }
     }
 
+    // Migration Check: Check if ai scan limit columns exist
+    const [aiScanCols]: any = await (pool as any).execute("SHOW COLUMNS FROM pricing_packages LIKE 'is_ai_scan_unlimited'");
+    if (!aiScanCols || aiScanCols.length === 0) {
+      try {
+        await (pool as any).execute("ALTER TABLE pricing_packages ADD COLUMN is_ai_scan_unlimited TINYINT(1) NOT NULL DEFAULT 0 AFTER item_limit");
+        await (pool as any).execute("ALTER TABLE pricing_packages ADD COLUMN ai_scan_limit INT NOT NULL DEFAULT 10 AFTER is_ai_scan_unlimited");
+      } catch (e) {
+        console.error('Migration error adding ai_scan limit columns:', e);
+      }
+    }
+
     // Migration Check: Check if `billing_cycle_text` column exists
     const [cycleCols]: any = await (pool as any).execute("SHOW COLUMNS FROM pricing_packages LIKE 'billing_cycle_text'");
     if (!cycleCols || cycleCols.length === 0) {
@@ -193,8 +212,8 @@ export async function ensurePricingPackagesTable(): Promise<void> {
             package_id, name, tagline, badge_text, price, original_price, billing_period_text, billing_cycle_text,
             discount_tag, coupon_code, coupon_discount,
             features, feature_highlight_title, button_text, is_popular, is_active, sort_order,
-            is_category_unlimited, category_limit, is_item_unlimited, item_limit
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            is_category_unlimited, category_limit, is_item_unlimited, item_limit, is_ai_scan_unlimited, ai_scan_limit
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             pkg.package_id,
             pkg.name,
@@ -217,6 +236,8 @@ export async function ensurePricingPackagesTable(): Promise<void> {
             pkg.category_limit || 0,
             pkg.is_item_unlimited ? 1 : 0,
             pkg.item_limit || 0,
+            pkg.is_ai_scan_unlimited ? 1 : 0,
+            pkg.ai_scan_limit || 0,
           ]
         );
       }
@@ -271,6 +292,8 @@ function normalizePackageRow(row: any): PricingPackage {
     category_limit: Number(row.category_limit) || 0,
     is_item_unlimited: row.is_item_unlimited !== undefined && row.is_item_unlimited !== null ? Boolean(row.is_item_unlimited) : true,
     item_limit: Number(row.item_limit) || 0,
+    is_ai_scan_unlimited: row.is_ai_scan_unlimited !== undefined && row.is_ai_scan_unlimited !== null ? Boolean(row.is_ai_scan_unlimited) : false,
+    ai_scan_limit: Number(row.ai_scan_limit) || 0,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   };
@@ -361,6 +384,8 @@ export async function createPricingPackageAction(payload: {
   category_limit?: number;
   is_item_unlimited?: boolean;
   item_limit?: number;
+  is_ai_scan_unlimited?: boolean;
+  ai_scan_limit?: number;
 }): Promise<{
   success: boolean;
   data?: PricingPackage;
@@ -400,8 +425,8 @@ export async function createPricingPackageAction(payload: {
         package_id, name, tagline, badge_text, price, original_price, billing_period_text, billing_cycle_text,
         discount_tag, coupon_code, coupon_discount,
         features, feature_highlight_title, button_text, is_popular, is_active, sort_order,
-        is_category_unlimited, category_limit, is_item_unlimited, item_limit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        is_category_unlimited, category_limit, is_item_unlimited, item_limit, is_ai_scan_unlimited, ai_scan_limit
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cleanPackageId,
         payload.name.trim(),
@@ -424,6 +449,8 @@ export async function createPricingPackageAction(payload: {
         Number(payload.category_limit) || 0,
         payload.is_item_unlimited !== false ? 1 : 0,
         Number(payload.item_limit) || 0,
+        payload.is_ai_scan_unlimited ? 1 : 0,
+        Number(payload.ai_scan_limit) || 0,
       ]
     );
 
@@ -463,6 +490,8 @@ export async function updatePricingPackageAction(
     category_limit?: number;
     is_item_unlimited?: boolean;
     item_limit?: number;
+    is_ai_scan_unlimited?: boolean;
+    ai_scan_limit?: number;
   }
 ): Promise<{
   success: boolean;
@@ -523,7 +552,9 @@ export async function updatePricingPackageAction(
         is_category_unlimited = ?,
         category_limit = ?,
         is_item_unlimited = ?,
-        item_limit = ?
+        item_limit = ?,
+        is_ai_scan_unlimited = ?,
+        ai_scan_limit = ?
       WHERE id = ?`,
       [
         cleanPackageId,
@@ -547,6 +578,8 @@ export async function updatePricingPackageAction(
         payload.category_limit !== undefined ? Number(payload.category_limit) : (current.category_limit || 0),
         payload.is_item_unlimited !== undefined ? (payload.is_item_unlimited ? 1 : 0) : (current.is_item_unlimited ? 1 : 0),
         payload.item_limit !== undefined ? Number(payload.item_limit) : (current.item_limit || 0),
+        payload.is_ai_scan_unlimited !== undefined ? (payload.is_ai_scan_unlimited ? 1 : 0) : (current.is_ai_scan_unlimited ? 1 : 0),
+        payload.ai_scan_limit !== undefined ? Number(payload.ai_scan_limit) : (current.ai_scan_limit || 0),
         id,
       ]
     );
@@ -571,6 +604,8 @@ export async function getPackageLimitsAction(packageIdOrSlug: string): Promise<{
     categoryLimit: number;
     isItemUnlimited: boolean;
     itemLimit: number;
+    isAiScanUnlimited: boolean;
+    aiScanLimit: number;
   };
   error?: string;
 }> {
@@ -578,7 +613,7 @@ export async function getPackageLimitsAction(packageIdOrSlug: string): Promise<{
     await ensurePricingPackagesTable();
     const cleanId = (packageIdOrSlug || '').trim().toLowerCase();
     const [rows]: any = await (pool as any).execute(
-      `SELECT package_id, name, is_category_unlimited, category_limit, is_item_unlimited, item_limit 
+      `SELECT package_id, name, is_category_unlimited, category_limit, is_item_unlimited, item_limit, is_ai_scan_unlimited, ai_scan_limit 
        FROM pricing_packages 
        WHERE package_id = ? 
           OR LOWER(name) = ? 
@@ -606,6 +641,8 @@ export async function getPackageLimitsAction(packageIdOrSlug: string): Promise<{
           categoryLimit: 0,
           isItemUnlimited: true,
           itemLimit: 0,
+          isAiScanUnlimited: false,
+          aiScanLimit: 0,
         },
       };
     }
@@ -620,6 +657,8 @@ export async function getPackageLimitsAction(packageIdOrSlug: string): Promise<{
         categoryLimit: Number(row.category_limit) || 0,
         isItemUnlimited: row.is_item_unlimited !== undefined && row.is_item_unlimited !== null ? Boolean(row.is_item_unlimited) : true,
         itemLimit: Number(row.item_limit) || 0,
+        isAiScanUnlimited: row.is_ai_scan_unlimited !== undefined && row.is_ai_scan_unlimited !== null ? Boolean(row.is_ai_scan_unlimited) : false,
+        aiScanLimit: Number(row.ai_scan_limit) || 0,
       },
     };
   } catch (error: any) {

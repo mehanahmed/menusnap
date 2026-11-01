@@ -27,7 +27,8 @@ import {
   Utensils,
   Sparkles,
   FolderOpen,
-  Share2
+  Share2,
+  Camera
 } from "lucide-react";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
 import { format, formatDistanceToNowStrict, parseISO, isValid } from 'date-fns';
@@ -35,6 +36,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getCategoriesFromMySql } from '@/app/actions/orders';
 import { usePreferences } from '@/context/PreferencesContext';
 import { DraftShareDialog } from '@/components/menu/draft-share-dialog';
+import { MenuScannerDialog } from '@/components/menu/menu-scanner-dialog';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { batchSyncUserDraftsAction, deleteUserDraftAction } from '@/app/actions/user-drafts';
 
@@ -121,32 +123,51 @@ function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, mas
   }, [draft.primaryTag]);
 
   const itemsByCategoryId = useMemo(() => {
-    if (!draft.items || idPrefixForDraft === "unknown") return {};
+    if (!draft.items) return {};
     return draft.items.reduce((acc, item) => {
-      const prefixedCatId = `${idPrefixForDraft}-${item.categoryId}`;
-      if (!acc[prefixedCatId]) acc[prefixedCatId] = [];
-      acc[prefixedCatId].push(item);
+      const catKey = String(item.categoryId || (item as any).category || 'general');
+      if (!acc[catKey]) acc[catKey] = [];
+      acc[catKey].push(item);
       return acc;
     }, {} as Record<string, DraftSubItem[]>);
-  }, [draft.items, idPrefixForDraft]);
+  }, [draft.items]);
 
   const categoriesInDraftOrder = useMemo(() => {
-    if (!draft.items || !masterCategoryList || idPrefixForDraft === "unknown") return [];
+    if (!draft.items) return [];
 
-    const categoryIdsInDraft = new Set<string>();
-    const orderedPrefixedCategoryIds: string[] = [];
+    const categoryMap = new Map<string, { id: string; name: string; icon: string | ReactNode }>();
 
     draft.items.forEach(item => {
-      const prefixedCatId = `${idPrefixForDraft}-${item.categoryId}`;
-      if (!categoryIdsInDraft.has(prefixedCatId)) {
-        categoryIdsInDraft.add(prefixedCatId);
-        orderedPrefixedCategoryIds.push(prefixedCatId);
+      const catKey = String(item.categoryId || (item as any).category || 'general');
+      const prefixedId = idPrefixForDraft !== 'unknown' ? `${idPrefixForDraft}-${catKey}` : catKey;
+
+      if (!categoryMap.has(catKey)) {
+        // Try finding matching category from masterCategoryList
+        const masterCat = masterCategoryList?.find(c =>
+          c.id === prefixedId ||
+          c.id === catKey ||
+          c.name.toLowerCase() === catKey.toLowerCase()
+        );
+
+        if (masterCat) {
+          categoryMap.set(catKey, {
+            id: catKey,
+            name: masterCat.name,
+            icon: masterCat.icon || (idPrefixForDraft === 'parlour' ? '✨' : '📁')
+          });
+        } else {
+          // Dynamic category from scanned menu or custom draft
+          const displayName = (item as any).category || (catKey !== 'unknown' && catKey !== 'general' ? catKey : 'General');
+          categoryMap.set(catKey, {
+            id: catKey,
+            name: decodeHtmlEntities(displayName),
+            icon: idPrefixForDraft === 'parlour' ? '✨' : '🍽️'
+          });
+        }
       }
     });
 
-    return orderedPrefixedCategoryIds
-      .map(prefixedId => masterCategoryList.find(cat => cat.id === prefixedId))
-      .filter((cat): cat is Category => cat !== undefined);
+    return Array.from(categoryMap.values());
   }, [draft.items, masterCategoryList, idPrefixForDraft]);
 
 
@@ -330,9 +351,15 @@ export default function DraftPage(): ReactNode {
   const [expandedDrafts, setExpandedDrafts] = useState<Record<string, boolean>>({});
   const [masterCategoryList, setMasterCategoryList] = useState<Category[]>([]);
   const [selectedDraftForShare, setSelectedDraftForShare] = useState<DraftItem | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const { clientUser } = useClientAuth();
   const { toast } = useToast();
   const router = useRouter();
+
+  const handleDraftCreated = (newDraft: DraftItem) => {
+    setDrafts(prev => [newDraft, ...prev]);
+    setExpandedDrafts(prev => ({ ...prev, [newDraft.id]: true }));
+  };
 
   useEffect(() => {
     async function fetchAllCategories() {
@@ -489,6 +516,26 @@ export default function DraftPage(): ReactNode {
   return (
     <div className="container mx-auto p-2 sm:p-3 lg:p-4 space-y-4 pb-24 md:pb-10">
 
+      {/* Top Header & Actions */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/60 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-border shadow-sm">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search saved drafts by title, dish, or date..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 h-9 text-xs sm:text-sm bg-background border-border/70 rounded-xl"
+          />
+        </div>
+        <Button
+          onClick={() => setIsScannerOpen(true)}
+          className="h-9 text-xs sm:text-sm font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-sm shrink-0"
+        >
+          <Sparkles className="w-4 h-4" />
+          Scan Menu Photo
+        </Button>
+      </div>
+
       <main className="space-y-6">
         {isLoading || isLoadingCategories ? (
           Array.from({ length: 3 }).map((_, index) => <DraftSkeletonCard key={index} />)
@@ -499,15 +546,37 @@ export default function DraftPage(): ReactNode {
             <p className="text-muted-foreground max-w-md">{error}</p>
           </div>
         ) : filteredDrafts.length === 0 ? (
-          <div className="text-center py-10 bg-card rounded-lg shadow border border-border">
-            <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <p className="text-muted-foreground text-lg font-medium">
-              {searchTerm ? "No drafts match your search." : "You have no saved drafts."}
-            </p>
-            {!searchTerm && drafts.length === 0 && (
-              <p className="text-sm text-muted-foreground mt-2">
-                Looks like your draft list is empty. Go to the MagicTab page to start selecting!
+          <div className="text-center py-12 px-4 bg-card rounded-2xl shadow-sm border border-border space-y-4">
+            <div className="w-16 h-16 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center mx-auto">
+              <Camera className="h-8 w-8" />
+            </div>
+            <div className="space-y-1 max-w-md mx-auto">
+              <p className="text-foreground text-lg font-bold">
+                {searchTerm ? "No drafts match your search." : "No saved drafts yet"}
               </p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                {searchTerm
+                  ? "Try searching for a different dish name or menu type."
+                  : "Upload a photo of your old printed menu or price list to instantly create a digital draft using AI."}
+              </p>
+            </div>
+            {!searchTerm && (
+              <div className="flex flex-wrap justify-center gap-2 pt-2">
+                <Button
+                  onClick={() => setIsScannerOpen(true)}
+                  className="h-9 text-xs font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-md"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Scan Menu Photo
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/magictab')}
+                  className="h-9 text-xs font-semibold rounded-xl"
+                >
+                  Browse Item Database
+                </Button>
+              </div>
             )}
           </div>
         ) : (
@@ -531,6 +600,12 @@ export default function DraftPage(): ReactNode {
         onOpenChange={(open) => !open && setSelectedDraftForShare(null)}
         draft={selectedDraftForShare}
         masterCategoryList={masterCategoryList}
+      />
+
+      <MenuScannerDialog
+        isOpen={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onDraftCreated={handleDraftCreated}
       />
     </div>
   );

@@ -79,6 +79,15 @@ async function ensureClientsTable() {
       } catch {}
     }
 
+    // Check for ai_scans_used column
+    const [aiScansCol]: any = await pool.execute("SHOW COLUMNS FROM clients LIKE 'ai_scans_used'");
+    if (aiScansCol.length === 0) {
+      console.log("Adding 'ai_scans_used' column to clients table...");
+      try {
+        await pool.execute("ALTER TABLE clients ADD COLUMN ai_scans_used INT NOT NULL DEFAULT 0 AFTER subscription_package");
+      } catch {}
+    }
+
     // 5. Create client_notes table for history
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS client_notes (
@@ -778,6 +787,9 @@ export async function checkClientSubscription(
     categoryLimit: number;
     isItemUnlimited: boolean;
     itemLimit: number;
+    isAiScanUnlimited: boolean;
+    aiScanLimit: number;
+    aiScansUsed: number;
   };
   error?: string;
 }> {
@@ -809,6 +821,9 @@ export async function checkClientSubscription(
             categoryLimit: 0,
             isItemUnlimited: true,
             itemLimit: 0,
+            isAiScanUnlimited: true,
+            aiScanLimit: 0,
+            aiScansUsed: 0,
           },
         };
       }
@@ -822,7 +837,7 @@ export async function checkClientSubscription(
       const cleanP = (planName || '').toLowerCase().trim();
       try {
         const [pkgRows]: any = await pool.execute(
-          `SELECT is_category_unlimited, category_limit, is_item_unlimited, item_limit 
+          `SELECT is_category_unlimited, category_limit, is_item_unlimited, item_limit, is_ai_scan_unlimited, ai_scan_limit 
            FROM pricing_packages 
            WHERE package_id = ? 
               OR LOWER(name) = ? 
@@ -846,6 +861,8 @@ export async function checkClientSubscription(
             categoryLimit: Number(row.category_limit) || 0,
             isItemUnlimited: Number(row.is_item_unlimited) === 1,
             itemLimit: Number(row.item_limit) || 0,
+            isAiScanUnlimited: Number(row.is_ai_scan_unlimited) === 1,
+            aiScanLimit: Number(row.ai_scan_limit) || 0,
           };
         }
       } catch (err) {
@@ -857,6 +874,8 @@ export async function checkClientSubscription(
         categoryLimit: 0,
         isItemUnlimited: true,
         itemLimit: 0,
+        isAiScanUnlimited: false,
+        aiScanLimit: 0,
       };
     };
 
@@ -864,7 +883,7 @@ export async function checkClientSubscription(
     let clientRow: any = null;
     try {
       const [cRows]: any = await pool.execute(
-        `SELECT id, stage, is_subscriber, subscription_package FROM clients 
+        `SELECT id, stage, is_subscriber, subscription_package, ai_scans_used FROM clients 
          WHERE (whatsapp_number = ? AND ? != '') OR (email = ? AND ? != '') 
          LIMIT 1`,
         [cleanPhone, cleanPhone, cleanEmail, cleanEmail]
@@ -876,7 +895,7 @@ export async function checkClientSubscription(
       if (queryErr?.message?.includes('subscription_package')) {
         await pool.execute('ALTER TABLE clients ADD COLUMN subscription_package VARCHAR(100) NULL DEFAULT NULL AFTER is_subscriber').catch(() => {});
         const [cRows]: any = await pool.execute(
-          `SELECT id, stage, is_subscriber, subscription_package FROM clients 
+          `SELECT id, stage, is_subscriber, subscription_package, ai_scans_used FROM clients 
            WHERE (whatsapp_number = ? AND ? != '') OR (email = ? AND ? != '') 
            LIMIT 1`,
           [cleanPhone, cleanPhone, cleanEmail, cleanEmail]
@@ -921,7 +940,11 @@ export async function checkClientSubscription(
     }
 
     // 4. Fetch dynamic limits for the resolved plan
-    const limits = await getLimitsForPlan(resolvedPlan);
+    const planLimits = await getLimitsForPlan(resolvedPlan);
+    const limits = {
+      ...planLimits,
+      aiScansUsed: Number(clientRow?.ai_scans_used) || 0,
+    };
 
     return {
       success: true,
