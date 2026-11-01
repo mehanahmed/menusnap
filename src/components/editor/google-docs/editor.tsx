@@ -590,23 +590,33 @@ function GoogleDocsEditorInner({
     useEffect(() => {
         if (!editor || !socket || !docId) return
 
-        socket.on('document-update', (newContent: string) => {
+        const handleDocUpdate = (newContent: string) => {
             if (editor.getHTML() !== newContent) {
                 isRemoteUpdate.current = true
                 editor.commands.setContent(newContent, { emitUpdate: false })
+                onChange(newContent)
+                if (onUpdateContent) onUpdateContent(newContent)
             }
-        })
+        }
+
+        socket.on('document-update', handleDocUpdate)
 
         return () => {
-            socket.off('document-update')
+            socket.off('document-update', handleDocUpdate)
         }
-    }, [editor, socket, docId])
+    }, [editor, socket, docId, onChange, onUpdateContent])
 
     const loadedDocIdRef = React.useRef<string | null>(null)
+    const initialContentLoadedRef = React.useRef<boolean>(false)
     useEffect(() => {
-        if (!editor || !content) return
-        if (loadedDocIdRef.current !== (docId || 'default')) {
-            loadedDocIdRef.current = docId || 'default'
+        if (!editor) return
+        const currentId = docId || 'default'
+        if (loadedDocIdRef.current !== currentId) {
+            loadedDocIdRef.current = currentId
+            initialContentLoadedRef.current = false
+        }
+        if (content && !initialContentLoadedRef.current) {
+            initialContentLoadedRef.current = true
             editor.commands.setContent(content)
         }
     }, [editor, content, docId])

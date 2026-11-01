@@ -52,7 +52,7 @@ export default function Header({
         }
     }, [])
 
-    const isLive = isConnected || isBrowserOnline
+    const isLive = isConnected
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -148,7 +148,7 @@ export default function Header({
                                             animate={{ opacity: 1 }}
                                             className={`text-[9px] sm:text-[10px] hidden sm:inline px-1.5 py-0.5 rounded-sm border ${isLive ? 'text-green-600 bg-green-50 border-green-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}
                                         >
-                                            {isLive ? 'Live' : 'Offline'}
+                                            {isLive ? 'Live' : (isBrowserOnline ? 'Connecting...' : 'Offline')}
                                         </motion.span>
                                     )}
                                 </div>

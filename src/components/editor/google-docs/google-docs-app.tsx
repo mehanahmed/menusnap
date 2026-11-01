@@ -42,6 +42,26 @@ const SummernoteEditorComponent = dynamic(() => import('@/components/editor/summ
   )
 })
 
+function getSocketUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const hostname = window.location.hostname;
+  const isLocal = hostname === 'localhost' || 
+                  hostname === '127.0.0.1' || 
+                  hostname.startsWith('192.168.') || 
+                  hostname.startsWith('10.');
+
+  if (isLocal) {
+    const configured = process.env.NEXT_PUBLIC_COLLAB_WS_URL;
+    if (configured) {
+      const httpUrl = configured.replace(/^ws:\/\//i, 'http://').replace(/^wss:\/\//i, 'https://');
+      return httpUrl.replace('localhost', hostname).replace('127.0.0.1', hostname);
+    }
+    return `${window.location.protocol}//${hostname}:1234`;
+  }
+
+  return window.location.origin;
+}
+
 export default function GoogleDocsApp({
   initialTitle = "Untitled Document",
   initialContent = "",
@@ -102,9 +122,9 @@ export default function GoogleDocsApp({
   useEffect(() => {
     if (!docId) return
     
-    // Determine the socket URL (connect to current origin or configured WS URL)
-    const socketUrl = process.env.NEXT_PUBLIC_COLLAB_WS_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-    if (!socketUrl) return
+    // Determine the socket URL
+    const socketUrl = getSocketUrl();
+    if (!socketUrl) return;
 
     let socketInstance: Socket | null = null;
     try {
@@ -115,8 +135,9 @@ export default function GoogleDocsApp({
           rememberUpgrade: true,
           timeout: 10000,
           reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 2000,
+          reconnectionAttempts: Infinity,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
           autoConnect: true
       });
       

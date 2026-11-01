@@ -3,6 +3,14 @@ import { Server } from 'socket.io';
 
 const PORT = process.env.SOCKET_PORT || 1234;
 const httpServer = createServer();
+
+httpServer.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.log(`🚀 Socket.io Server: Port ${PORT} is already in use, assuming active.`);
+    process.exit(0);
+  }
+  console.error('Socket server error:', err);
+});
 const io = new Server(httpServer, {
   cors: {
     origin: "*",
