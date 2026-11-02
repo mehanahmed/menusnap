@@ -1,254 +1,131 @@
-
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import Image from 'next/image';
-import { Button } from '@/components/ui/button';
-import { MessagesSquare, X, Phone, MessageCircle } from 'lucide-react';
-
-interface ContactOption {
-  name: string;
-  IconComponent: React.ElementType;
-  iconColor: string;
-  bgColor: string;
-  action: () => void;
-  ariaLabel: string;
-}
-
-const contactOptionsList: ContactOption[] = [
-  {
-    name: 'WhatsApp',
-    IconComponent: MessageCircle,
-    iconColor: 'text-white',
-    bgColor: 'bg-green-500 hover:bg-green-600',
-    action: () => { console.log('WhatsApp clicked'); window.open('https://wa.me/8801805561171', '_blank'); },
-    ariaLabel: 'Chat on WhatsApp'
-  },
-  {
-    name: 'Messenger',
-    IconComponent: MessagesSquare,
-    iconColor: 'text-white',
-    bgColor: 'bg-blue-500 hover:bg-blue-600',
-    action: () => { console.log('Messenger clicked'); window.open('https://www.facebook.com/messages/t/100335266150128', '_blank'); },
-    ariaLabel: 'Chat on Messenger'
-  },
-  {
-    name: 'Call Us',
-    IconComponent: Phone,
-    iconColor: 'text-white',
-    bgColor: 'bg-orange-500 hover:bg-orange-600',
-    action: () => { console.log('Call Us clicked'); window.location.href = 'tel:+8801919760626'; },
-    ariaLabel: 'Call us'
-  },
-];
-
-const helpText = "Need Help?";
-const helpTextCharacters = Array.from(helpText);
-
-const textContainerVariants = {
-  hidden: { opacity: 0 },
-  visible: (i = 1) => ({
-    opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.2 * i },
-  }),
-  exit: {
-    opacity: 0,
-    y: 10,
-    transition: { duration: 0.2 }
-  }
-};
-
-const characterVariants = {
-  hidden: {
-    opacity: 0,
-    y: 10,
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: 'spring',
-      damping: 12,
-      stiffness: 200,
-    },
-  },
-};
-
+import { X, MessageCircle } from 'lucide-react';
+import { usePreferences } from '@/context/PreferencesContext';
 
 export function SpeedDialFAB(): ReactNode {
-  const [isOpen, setIsOpen] = useState(false);
-  const [showHelpTextVisual, setShowHelpTextVisual] = useState(true);
-  const [showHelpImage, setShowHelpImage] = useState(false); // State for icon cycle
+  const [showBubble, setShowBubble] = useState(true);
+  const { language } = usePreferences();
   const fabControls = useAnimation();
   const fabIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const helpTextCycleTimers = useRef<{ visible?: NodeJS.Timeout, hidden?: NodeJS.Timeout }>({});
-  const iconCycleIntervalRef = useRef<NodeJS.Timeout | null>(null); // Ref for icon cycle timer
 
   useEffect(() => {
-    // FAB pop animation logic
     const animateFAB = async () => {
-      await fabControls.start({ // Base breathing animation
-        scale: [1, 1.05, 1],
-        y: [0, -4, 0], // Adding a subtle y-axis movement for bobbing
+      await fabControls.start({
+        scale: [1, 1.04, 1],
+        y: [0, -3, 0],
         transition: {
-          scale: { duration: 1.8, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" },
-          y: { duration: 1.8, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" }
-        }
+          scale: { duration: 2.2, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" },
+          y: { duration: 2.2, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" },
+        },
       });
     };
     animateFAB();
 
     if (fabIntervalRef.current) clearInterval(fabIntervalRef.current);
     fabIntervalRef.current = setInterval(async () => {
-      if (!isOpen) {
-        await fabControls.start({
-          scale: [1, 1.15, 1],
-          transition: { duration: 0.6, ease: "easeInOut" }
-        });
-      }
-    }, 10000);
+      await fabControls.start({
+        scale: [1, 1.1, 1],
+        transition: { duration: 0.5, ease: "easeInOut" },
+      });
+    }, 12000);
 
     return () => {
       if (fabIntervalRef.current) clearInterval(fabIntervalRef.current);
       fabControls.stop();
     };
-  }, [fabControls, isOpen]);
+  }, [fabControls]);
 
-  useEffect(() => {
-    if (helpTextCycleTimers.current.visible) clearTimeout(helpTextCycleTimers.current.visible);
-    if (helpTextCycleTimers.current.hidden) clearTimeout(helpTextCycleTimers.current.hidden);
+  const handleOpenWhatsApp = () => {
+    const message = encodeURIComponent("Hello MenuSnap, I need assistance with my digital menu.");
+    window.open(`https://wa.me/8801805561171?text=${message}`, '_blank');
+  };
 
-    if (isOpen) {
-      setShowHelpTextVisual(false);
-    } else {
-      if (showHelpTextVisual) {
-        helpTextCycleTimers.current.visible = setTimeout(() => {
-          setShowHelpTextVisual(false);
-        }, 10000);
-      } else {
-        helpTextCycleTimers.current.hidden = setTimeout(() => {
-          setShowHelpTextVisual(true);
-        }, 15000);
-      }
-    }
-
-    return () => {
-      if (helpTextCycleTimers.current.visible) clearTimeout(helpTextCycleTimers.current.visible);
-      if (helpTextCycleTimers.current.hidden) clearTimeout(helpTextCycleTimers.current.hidden);
-    };
-  }, [isOpen, showHelpTextVisual]);
-
-  // Effect to cycle the main FAB icon
-  useEffect(() => {
-    if (iconCycleIntervalRef.current) {
-      clearInterval(iconCycleIntervalRef.current);
-    }
-
-    if (!isOpen) {
-      // Reset to default icon immediately when closed
-      setShowHelpImage(false);
-      // Start the timer to cycle icons
-      iconCycleIntervalRef.current = setInterval(() => {
-        setShowHelpImage(prev => !prev);
-      }, 3000); // Toggle every 3 seconds
-    }
-
-    return () => {
-      if (iconCycleIntervalRef.current) {
-        clearInterval(iconCycleIntervalRef.current);
-      }
-    };
-  }, [isOpen]);
-
+  // Greeting text based on language (Unicode escaped for safe Bengali rendering)
+  const greetingText =
+    language === 'bn'
+      ? '\u09b8\u09cd\u09af\u09be\u09b0, \u0995\u09bf\u09ad\u09be\u09ac\u09c7 \u09b8\u09b9\u09af\u09cb\u0997\u09bf\u09a4\u09be \u0995\u09b0\u09a4\u09c7 \u09aa\u09be\u09b0\u09bf?'
+      : 'Hello! How can I assist you today?';
 
   return (
-    <div className="fixed top-auto bottom-40 right-4 flex flex-col items-end z-50 md:bottom-4 print:hidden">
+    <div className="fixed top-auto bottom-40 right-4 flex items-center gap-2.5 z-50 md:bottom-4 print:hidden">
+      {/* Animated Speech Bubble */}
       <AnimatePresence>
-        {showHelpTextVisual && !isOpen && (
+        {showBubble && (
           <motion.div
-            className="mb-2 px-3 py-1 bg-card text-card-foreground text-xs font-medium rounded-full shadow-lg border border-border flex overflow-hidden"
-            variants={textContainerVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            aria-hidden={true}
+            initial={{ opacity: 0, scale: 0.85, x: 10 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            exit={{ opacity: 0, scale: 0.85, x: 10 }}
+            transition={{ duration: 0.25 }}
+            onClick={handleOpenWhatsApp}
+            className="relative bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3.5 py-2.5 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold max-w-[220px] cursor-pointer select-none group hover:shadow-2xl transition-all"
+            title="Chat with us on WhatsApp"
           >
-            {helpTextCharacters.map((char, index) => (
-              <motion.span
-                key={`${char}-${index}`}
-                variants={characterVariants}
-                className="inline-block"
-              >
-                {char === " " ? " " : char}
-              </motion.span>
-            ))}
+            {/* Close Button on Bubble */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowBubble(false);
+              }}
+              className="absolute -top-2 -left-2 w-5 h-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center border border-slate-300 dark:border-slate-700 shadow-xs transition-colors"
+              aria-label="Close message"
+            >
+              <X className="w-3 h-3" />
+            </button>
+
+            {/* Message Content */}
+            <div className="leading-snug pr-0.5 text-center">
+              <span>{greetingText}</span>
+            </div>
+
+            {/* Pointer Arrow pointing to the avatar */}
+            <div className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-0 h-0 border-y-[6px] border-y-transparent border-l-[6px] border-l-white dark:border-l-slate-900" />
           </motion.div>
         )}
       </AnimatePresence>
-      <motion.div
-        className={`flex flex-col-reverse items-end space-y-2 space-y-reverse overflow-hidden mb-2`}
-        initial={{ opacity: 0, height: 0 }}
-        animate={{ opacity: isOpen ? 1 : 0, height: isOpen ? 'auto' : 0 }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-        aria-hidden={!isOpen}
-      >
-        {contactOptionsList.map((option, index) => (
-          <motion.div
-            key={option.name}
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: isOpen ? 1 : 0, y: isOpen ? 0 : -20 }}
-            transition={{ duration: 0.2, delay: isOpen ? index * 0.05 : (contactOptionsList.length - index - 1) * 0.03, ease: "easeOut" }}
-          >
-            <Button
-              onClick={option.action}
-              variant="default"
-              className="flex items-center justify-between w-40 h-10 md:w-48 md:h-12 rounded-full shadow-lg bg-card text-card-foreground hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring pl-6 pr-2 py-2"
-              aria-label={option.ariaLabel}
-              tabIndex={isOpen ? 0 : -1}
-            >
-              <span className="text-sm md:text-base font-medium mr-auto">{option.name}</span>
-              <div className={`p-1.5 md:p-2 rounded-full ${option.bgColor} ml-2 shrink-0`}>
-                <option.IconComponent className={`h-4 w-4 md:h-5 md:w-5 ${option.iconColor}`} />
-              </div>
-            </Button>
-          </motion.div>
-        ))}
-      </motion.div>
 
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`rounded-full h-12 w-12 md:h-14 md:w-14 shadow-xl flex items-center justify-center overflow-hidden
-                    focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                    transition-colors duration-200
-                    ${isOpen ? 'bg-gray-700 hover:bg-gray-800 text-white' : 'bg-primary hover:bg-primary/90 text-primary-foreground'}`}
-        aria-expanded={isOpen}
-        aria-label={isOpen ? "Close contact options" : "Open contact options"}
-        animate={fabControls}
-      >
-        <AnimatePresence mode="wait">
-          {isOpen ? (
-            <motion.div key="close-icon" initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0, rotate: 45 }}>
-              <X className="h-6 w-6 md:h-7 md:w-7" />
-            </motion.div>
-          ) : showHelpImage ? (
-            <motion.div key="help-image" initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }} className="h-full w-full relative">
-              <Image
-                src="/assets/help.png"
-                alt="Help"
-                fill
-                sizes="(max-width: 768px) 48px, 56px"
-                className="object-contain"
-              />
-            </motion.div>
-          ) : (
-            <motion.div key="message-icon" initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.5 }}>
-              <MessagesSquare className="h-6 w-6 md:h-7 md:w-7" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.button>
+      {/* Circular AI Avatar Button with Direct WhatsApp Action */}
+      <div className="relative">
+        <motion.button
+          onClick={handleOpenWhatsApp}
+          className="relative rounded-full h-12 w-12 md:h-14 md:w-14 shadow-2xl flex items-center justify-center overflow-hidden border-2 border-white dark:border-slate-800 ring-2 ring-emerald-500/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-transform duration-200 bg-background cursor-pointer"
+          aria-label="Chat with Support on WhatsApp"
+          animate={fabControls}
+          whileHover={{ scale: 1.06 }}
+          whileTap={{ scale: 0.94 }}
+        >
+          <div className="w-full h-full relative">
+            <Image
+              src="/assets/ai-avatar.png"
+              alt="AI Support Assistant"
+              fill
+              sizes="(max-width: 768px) 48px, 56px"
+              className="object-cover"
+              priority
+            />
+          </div>
+        </motion.button>
+
+        {/* Active Online Status Badge (Top Right) */}
+        <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 pointer-events-none z-10" title="Online">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 shadow-xs"></span>
+        </span>
+
+        {/* WhatsApp Brand Badge (Bottom Right) */}
+        <div
+          onClick={handleOpenWhatsApp}
+          className="absolute -bottom-1 -right-1 w-5 h-5 md:w-5.5 md:h-5.5 rounded-full bg-[#25D366] text-white flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-sm cursor-pointer z-10 hover:scale-110 transition-transform"
+          title="Chat on WhatsApp"
+        >
+          <MessageCircle className="w-3 h-3 md:w-3.5 md:h-3.5 fill-white stroke-none" />
+        </div>
+      </div>
     </div>
   );
 }

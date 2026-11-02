@@ -22,8 +22,23 @@ export function WhatsAppFloat({
     window.open(url, "_blank");
   };
 
-  // Hide on login, admin, and free-design pages
-  const isHidden = pathname === '/login' || 
+  // Hide on dashboard/app pages (where AI Avatar chat button is active), login, admin, and free-design pages
+  const isDashboardOrApp = pathname === '/dashboard' || 
+                           pathname.startsWith('/dashboard/') || 
+                           pathname.startsWith('/magic-calculation') || 
+                           pathname.startsWith('/magictab') || 
+                           pathname.startsWith('/templates') || 
+                           pathname.startsWith('/draft') || 
+                           pathname.startsWith('/ebook') || 
+                           pathname.startsWith('/order-history') || 
+                           pathname.startsWith('/happy-clients') || 
+                           pathname.startsWith('/marketing-consultation') || 
+                           pathname.startsWith('/store') || 
+                           pathname.startsWith('/profile') || 
+                           pathname.startsWith('/success');
+
+  const isHidden = isDashboardOrApp ||
+                   pathname === '/login' || 
                    pathname === '/login/' || 
                    pathname.startsWith('/m-admin') || 
                    pathname.startsWith('/panel') ||
