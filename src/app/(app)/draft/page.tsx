@@ -531,7 +531,7 @@ export default function DraftPage(): ReactNode {
           onClick={() => setIsScannerOpen(true)}
           className="h-9 text-xs sm:text-sm font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-sm shrink-0"
         >
-          <Sparkles className="w-4 h-4" />
+          <Camera className="w-4 h-4" />
           Scan Menu Photo
         </Button>
       </div>
@@ -557,7 +557,7 @@ export default function DraftPage(): ReactNode {
               <p className="text-xs sm:text-sm text-muted-foreground">
                 {searchTerm
                   ? "Try searching for a different dish name or menu type."
-                  : "Upload a photo of your old printed menu or price list to instantly create a digital draft using AI."}
+                  : "Upload a photo of your printed menu or price list to instantly create a digital draft."}
               </p>
             </div>
             {!searchTerm && (
@@ -566,7 +566,7 @@ export default function DraftPage(): ReactNode {
                   onClick={() => setIsScannerOpen(true)}
                   className="h-9 text-xs font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-md"
                 >
-                  <Sparkles className="w-4 h-4" />
+                  <Camera className="w-4 h-4" />
                   Scan Menu Photo
                 </Button>
                 <Button

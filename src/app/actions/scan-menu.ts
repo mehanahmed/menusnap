@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { saveUserDraftAction, UserDraftItem } from '@/app/actions/user-drafts';
 import pool from '@/lib/mysql';
 import { checkClientSubscription } from '@/app/actions/clients';
+import { getEffectiveGeminiConfig } from '@/app/actions/gemini-settings';
 
 const ScannedItemSchema = z.object({
   name: z.string().describe("The clean, readable name of the menu item / food / service"),
@@ -27,7 +28,8 @@ export interface ScanMenuActionResult {
 
 export async function scanMenuImageAction(formData: FormData): Promise<ScanMenuActionResult> {
   try {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.EBOOK_AI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
+    const { apiKey: effectiveKey, model: configuredModel } = await getEffectiveGeminiConfig();
+    const apiKey = effectiveKey || process.env.GEMINI_API_KEY || process.env.EBOOK_AI_API_KEY || process.env.GOOGLE_GENAI_API_KEY;
     if (!apiKey) {
       return {
         success: false,
@@ -129,7 +131,7 @@ Rules:
       plugins: [googleAI({ apiKey })]
     });
 
-    const preferredModel = process.env.MENU_SCAN_AI_MODEL || 'googleai/gemini-flash-lite-latest';
+    const preferredModel = configuredModel || process.env.MENU_SCAN_AI_MODEL || 'googleai/gemini-flash-lite-latest';
     const fallbackModels = [
       preferredModel,
       'googleai/gemini-3.5-flash-lite',
