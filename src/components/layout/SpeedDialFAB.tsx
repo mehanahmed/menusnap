@@ -164,7 +164,7 @@ export function SpeedDialFAB(): ReactNode {
 
 
   return (
-    <div className="fixed top-auto bottom-40 right-4 flex flex-col items-end z-50 md:bottom-4">
+    <div className="fixed top-auto bottom-40 right-4 flex flex-col items-end z-50 md:bottom-4 print:hidden">
       <AnimatePresence>
         {showHelpTextVisual && !isOpen && (
           <motion.div

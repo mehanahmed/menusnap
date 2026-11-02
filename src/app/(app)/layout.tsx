@@ -158,10 +158,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     <ClientAuthGuard>
       <GlobalLoginSuccessTracker />
       <SidebarProvider defaultOpen>
-        <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r border-sidebar-border shadow-md bg-sidebar">
+        <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r border-sidebar-border shadow-md bg-sidebar print:hidden">
           <SidebarNav />
         </Sidebar>
-        <SidebarInset className="bg-background">
+        <SidebarInset className="bg-background print:bg-white print:p-0 print:m-0 print:w-full print:block">
           {isMobile ? (
             <div 
               className={cn(
@@ -179,7 +179,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </main>
             </div>
           ) : (
-            <ScrollArea className={cn("h-screen", (pathname === "/magictab" || pathname === "/magictab/" || pathname === "/ebook" || pathname === "/ebook/") ? "pb-0" : "pb-16 md:pb-0")}> 
+            <ScrollArea className={cn("h-screen print:h-auto print:overflow-visible print:block", (pathname === "/magictab" || pathname === "/magictab/" || pathname === "/ebook" || pathname === "/ebook/") ? "pb-0" : "pb-16 md:pb-0")}> 
               <main className={cn(
                 "flex-1 min-w-0 w-full max-w-full",
                 (pathname === "/dashboard" || pathname === "/dashboard/" || pathname === "/magictab" || pathname === "/magictab/" || pathname === "/templates" || pathname === "/templates/" || pathname === "/draft" || pathname === "/draft/" || pathname === "/ebook" || pathname === "/ebook/" || pathname === "/marketing-consultation" || pathname === "/marketing-consultation/" || pathname.startsWith("/magic-calculation") || pathname.startsWith("/magic-calc")) ? "p-0" : "p-4 sm:p-6 md:p-8 lg:p-10"
@@ -190,8 +190,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           )}
         </SidebarInset>
 
-        {pathname !== "/dashboard" && pathname !== "/dashboard/" && pathname !== "/magictab" && pathname !== "/magictab/" && pathname !== "/templates" && pathname !== "/templates/" && pathname !== "/draft" && pathname !== "/draft/" && pathname !== "/ebook" && pathname !== "/ebook/" && pathname !== "/order-history" && pathname !== "/order-history/" && !pathname.startsWith("/happy-clients") && !pathname.startsWith("/success") && <SpeedDialFAB />}
-        {pathname !== "/ebook" && pathname !== "/ebook/" && <BottomNavigation />}
+        {pathname !== "/dashboard" && pathname !== "/dashboard/" && pathname !== "/magictab" && pathname !== "/magictab/" && pathname !== "/templates" && pathname !== "/templates/" && pathname !== "/draft" && pathname !== "/draft/" && pathname !== "/ebook" && pathname !== "/ebook/" && pathname !== "/order-history" && pathname !== "/order-history/" && !pathname.startsWith("/happy-clients") && !pathname.startsWith("/success") && <div className="print:hidden"><SpeedDialFAB /></div>}
+        {pathname !== "/ebook" && pathname !== "/ebook/" && <div className="print:hidden"><BottomNavigation /></div>}
 
       </SidebarProvider>
     </ClientAuthGuard>

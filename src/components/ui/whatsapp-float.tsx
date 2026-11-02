@@ -39,7 +39,7 @@ export function WhatsAppFloat({
       whileTap={{ scale: 0.95 }}
       onClick={handleClick}
       className={cn(
-        "fixed top-1/3 z-[99999] flex flex-col items-center select-none cursor-pointer shadow-2xl transition-all duration-300 bg-[#55C767] text-white",
+        "fixed top-1/3 z-[99999] flex flex-col items-center select-none cursor-pointer shadow-2xl transition-all duration-300 bg-[#55C767] text-white print:hidden",
         "left-0 rounded-r-2xl border-y border-r border-white/30",
         "w-[30px] py-4 md:w-[44px] md:py-7 md:rounded-r-3xl",
         "md:left-auto md:right-0 md:rounded-r-none md:rounded-l-3xl md:border-r-0 md:border-l md:shadow-[-5px_0_25px_rgba(0,0,0,0.2)]",

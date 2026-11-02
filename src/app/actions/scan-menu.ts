@@ -46,7 +46,7 @@ export async function scanMenuImageAction(formData: FormData): Promise<ScanMenuA
     }
 
     const businessName = (formData.get('businessName') as string) || '';
-    const businessType = ((formData.get('businessType') as string) || 'restaurant') as 'restaurant' | 'parlour';
+    const businessType = 'restaurant'; // Always restaurant for menu photo scanning
     const customDraftName = (formData.get('draftName') as string) || '';
     const whatsappNumber = (formData.get('whatsappNumber') as string) || '';
     const email = (formData.get('email') as string) || '';
@@ -93,7 +93,7 @@ Rules:
 2. For each item:
    - "name": Clean name of the dish (e.g. "Chicken Biryani", "Beef Bacon Burger", "Thai Clear Soup").
    - "price": Clean numeric price (digits only, e.g. 250, 450). Ignore currency symbols like ৳, $, Tk, etc. If multiple sizes/portions exist (e.g. Regular 200, Large 350), create separate items like "Dish Name (Regular)" and "Dish Name (Large)".
-   - "category": The section heading the item belongs to (e.g. "Appetizers", "Soups", "Burgers", "Pasta", "Rice & Noodles", "Beverages", "Dessert").
+   - "category": Clean culinary food category the item belongs to (e.g. "Pizza", "Burgers", "Pasta", "Biryani", "Soup", "Salad", "Beverages", "Dessert", "Kabab", "Shawarma", "Chowmein", "Appetizers"). If all items in a section are pizzas, the category MUST be "Pizza", not "Set Menus" or "Specials".
    - "description": Any portion or ingredient details listed under the dish name, if visible.
 3. Ignore non-menu text such as restaurant address, phone numbers, opening hours, Wi-Fi password, or page numbers.
 4. Output strict JSON matching the schema provided.
@@ -178,7 +178,32 @@ Rules:
 
     // Convert to UserDraftItem structure
     const draftItems: UserDraftItem[] = scannedItems.map((item, idx) => {
-      const categoryName = item.category?.trim() || 'General';
+      let categoryName = item.category?.trim() || 'General';
+      const lowerName = item.name.trim().toLowerCase();
+
+      // Culinary auto-categorization fallback
+      if (/\bpizza\b/i.test(lowerName)) {
+        categoryName = 'Pizza';
+      } else if (/\bburger\b/i.test(lowerName)) {
+        categoryName = 'Burger';
+      } else if (/\b(pasta|spaghetti|fettuccine|penne|lasagna)\b/i.test(lowerName)) {
+        categoryName = 'Pasta';
+      } else if (/\b(biryani|biriyani|tehari|kacchi)\b/i.test(lowerName)) {
+        categoryName = 'Biryani';
+      } else if (/\b(shawarma|sharma)\b/i.test(lowerName)) {
+        categoryName = 'Shawarma';
+      } else if (/\bfalooda\b/i.test(lowerName)) {
+        categoryName = 'Falooda';
+      } else if (/\b(chowmein|chow mein|noodle|noodles)\b/i.test(lowerName)) {
+        categoryName = 'Chow Mein';
+      } else if (/\bsoup\b/i.test(lowerName)) {
+        categoryName = 'Soup';
+      } else if (/\bsalad\b/i.test(lowerName)) {
+        categoryName = 'Salad';
+      } else if (/\bcoffee\b/i.test(lowerName)) {
+        categoryName = 'Coffee';
+      }
+
       const categorySlug = categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'general';
 
       return {
@@ -188,6 +213,7 @@ Rules:
         category: categoryName,
         categoryId: categorySlug,
         description: item.description?.trim() || null,
+        type: 'restaurant',
       };
     });
 
@@ -206,7 +232,7 @@ Rules:
       name: draftName,
       createdAt: now.toISOString(),
       itemCount: draftItems.length,
-      primaryTag: businessType,
+      primaryTag: 'restaurant',
       price: totalPrice,
       previewAvatars: draftItems.slice(0, 3).map(i => i.name.charAt(0).toUpperCase()),
       items: draftItems,
@@ -217,12 +243,12 @@ Rules:
       await saveUserDraftAction({
         draftId,
         draftName,
-        businessName: businessName || (businessType === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
-        businessType,
+        businessName: businessName || 'Anonymous Restaurant',
+        businessType: 'restaurant',
         whatsappNumber: whatsappNumber || undefined,
         email: email || undefined,
         clientId: clientId || undefined,
-        primaryTag: businessType,
+        primaryTag: 'restaurant',
         items: draftItems,
         itemCount: draftItems.length,
       });

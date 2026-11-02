@@ -9,10 +9,6 @@ import {
   Plus,
   Trash2,
   Copy,
-  Download,
-  Upload,
-  RotateCcw,
-  Save,
   Info,
   Search,
   ChevronRight,
@@ -22,7 +18,9 @@ import {
   Store,
   Percent,
   AlertTriangle,
+  PieChart,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -90,7 +88,7 @@ export default function MagicCalculationPage() {
   const { clientUser } = useClientAuth();
 
   // Primary State
-  const [activeTab, setActiveTab] = useState<"menu" | "recipe" | "ing" | "set">("recipe");
+  const [activeTab, setActiveTab] = useState<"recipe" | "menu" | "ing">("recipe");
   const [ingredients, setIngredients] = useState<Record<string, IngredientItem>>(SAMPLE_INGREDIENTS);
   const [recipes, setRecipes] = useState<Record<string, RecipeItem>>(SAMPLE_RECIPES);
   const [settings, setSettings] = useState<CostingSettings>(DEFAULT_SETTINGS);
@@ -119,8 +117,6 @@ export default function MagicCalculationPage() {
     price: 0,
     yield: 100,
   });
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Initial Load: Cloud MySQL first, fallback to localStorage, fallback to sampleData
   useEffect(() => {
@@ -605,166 +601,453 @@ export default function MagicCalculationPage() {
     setItemToDelete(null);
   };
 
-  // ----------------------------------------------------
-  // Export & Import Backup JSON
-  // ----------------------------------------------------
-  const handleExportBackup = () => {
-    const payload = {
-      app: "restaurant-costing-v1",
-      savedAt: new Date().toISOString(),
-      businessName: clientUser?.businessName || "My Restaurant",
-      ingredients,
-      recipes,
-      settings,
-    };
-
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    const dateStr = new Date().toISOString().slice(0, 10);
-    link.download = `menu-costing-backup-${dateStr}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-    toast({
-      title: "Backup Exported",
-      description: "Downloaded JSON backup file to your device.",
-    });
-  };
-
-  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const content = event.target?.result as string;
-        const parsed = JSON.parse(content);
-
-        if (!parsed || typeof parsed.ingredients !== "object" || typeof parsed.recipes !== "object") {
-          throw new Error("Invalid backup file format");
-        }
-
-        setIngredients(parsed.ingredients);
-        setRecipes(parsed.recipes);
-        if (parsed.settings) setSettings({ ...DEFAULT_SETTINGS, ...parsed.settings });
-
-        const recipeKeys = Object.keys(parsed.recipes);
-        if (recipeKeys.length > 0) {
-          setSelectedRecipeId(recipeKeys[0]);
-        }
-
-        toast({
-          title: "Backup Restored Successfully!",
-          description: `Loaded ${Object.keys(parsed.ingredients).length} ingredients & ${recipeKeys.length} recipes.`,
-        });
-      } catch (err: any) {
-        toast({
-          title: "Import Failed",
-          description: "Could not parse JSON backup file.",
-          variant: "destructive",
-        });
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  };
-
-  // Print slip handler
+  // Print slip handler - generates isolated, professional A4 costing slip without web UI chrome
   const handlePrintSlip = () => {
-    window.print();
+    if (!selectedRecipe || !selectedRecipeCost) return;
+
+    const restaurantName = clientUser?.businessName || "Restaurant Kitchen";
+    const dateStr = new Date().toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    const timeStr = new Date().toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const refCode = `RCP-${selectedRecipe.id.toUpperCase()}`;
+
+    const rowsHtml = (!selectedRecipe.lines || selectedRecipe.lines.length === 0)
+      ? '<tr><td colspan="7" style="padding:16px;text-align:center;color:#64748b;">No ingredients listed in this recipe.</td></tr>'
+      : selectedRecipe.lines.map((line, idx) => {
+          const foundIng = ingredients[line.ing];
+          const currentName = line.customName || foundIng?.name || line.ing || "Unnamed Item";
+          const currentUnit = (line.unit || foundIng?.unit || "kg");
+          const unitInfo = UNITS[currentUnit] || UNITS.kg;
+          const currentPrice = line.price !== undefined && line.price > 0 ? line.price : (foundIng?.price || 0);
+          const currentYield = line.yield !== undefined && line.yield > 0 ? line.yield : (foundIng?.yield || 100);
+          const costLine = selectedRecipeCost.lines[idx]?.cost || 0;
+          const linePct = selectedRecipeCost.total > 0 ? ((costLine / selectedRecipeCost.total) * 100).toFixed(1) : "0.0";
+
+          return `
+            <tr style="border-bottom:1px solid #e2e8f0;${idx % 2 === 1 ? 'background-color:#f8fafc;' : ''}">
+              <td style="padding:8px 10px;text-align:center;color:#94a3b8;font-family:monospace;font-size:11px;">${idx + 1}</td>
+              <td style="padding:8px 10px;font-weight:600;color:#0f172a;font-size:12px;">${currentName}</td>
+              <td style="padding:8px 10px;text-align:center;font-family:monospace;font-size:11px;color:#334155;">${line.qty} ${unitInfo.base}</td>
+              <td style="padding:8px 10px;text-align:right;font-family:monospace;font-size:11px;color:#334155;">৳${currentPrice.toFixed(2)} / ${unitInfo.label}</td>
+              <td style="padding:8px 10px;text-align:center;font-family:monospace;font-size:11px;color:#64748b;">${currentYield}%</td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;font-family:monospace;font-size:12px;color:#0f172a;">৳${costLine.toFixed(2)}</td>
+              <td style="padding:8px 10px;text-align:right;font-family:monospace;font-size:11px;color:#64748b;">${linePct}%</td>
+            </tr>
+          `;
+        }).join("");
+
+    const menuPriceFormatted = selectedRecipe.menuPrice ? `৳${selectedRecipe.menuPrice.toFixed(2)}` : "Not Set";
+    const realCostFormatted = `৳${selectedRecipeCost.total.toFixed(2)}`;
+    const profitFormatted = selectedRecipeCost.profit !== null ? `${selectedRecipeCost.profit >= 0 ? "+" : ""}৳${selectedRecipeCost.profit.toFixed(2)}` : "—";
+    const marginFormatted = selectedRecipeCost.profitMarginPct !== null ? `${selectedRecipeCost.profitMarginPct.toFixed(1)}% margin` : "";
+    const fcFormatted = selectedRecipeCost.fc !== null ? `${selectedRecipeCost.fc.toFixed(1)}%` : "—";
+    const recommendedPriceFormatted = selectedRecipeCost.recommendedPrice ? `৳${selectedRecipeCost.recommendedPrice.toFixed(2)}` : "—";
+
+    const reportHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <title>Recipe Costing - ${selectedRecipe.name}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 12mm 14mm;
+          }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            margin: 0;
+            padding: 0;
+            font-size: 12px;
+            line-height: 1.4;
+          }
+          .header-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+          }
+          .brand-title {
+            font-size: 20px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+            color: #0f172a;
+            text-transform: uppercase;
+          }
+          .sub-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #475569;
+            margin-top: 2px;
+          }
+          .meta-text {
+            font-size: 11px;
+            color: #64748b;
+            text-align: right;
+            line-height: 1.5;
+          }
+          .meta-text strong {
+            color: #1e293b;
+          }
+          .meta-ref {
+            font-family: monospace;
+            font-size: 10px;
+            color: #94a3b8;
+            margin-top: 2px;
+          }
+          .dish-banner {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            background-color: #f8fafc;
+            margin-bottom: 16px;
+          }
+          .banner-label {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+          }
+          .banner-value {
+            font-size: 15px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-top: 2px;
+          }
+          .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 18px;
+          }
+          .kpi-card {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            text-align: center;
+          }
+          .kpi-card-highlight {
+            border: 2px solid #ea580c !important;
+            background: #fff7ed !important;
+          }
+          .kpi-card-profit {
+            border: 1px solid #10b981 !important;
+            background: #ecfdf5 !important;
+          }
+          .kpi-label {
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #64748b;
+            display: block;
+          }
+          .kpi-val {
+            font-size: 17px;
+            font-weight: 900;
+            font-family: monospace;
+            margin: 3px 0 2px;
+            color: #0f172a;
+          }
+          .kpi-sub {
+            font-size: 9px;
+            color: #64748b;
+            display: block;
+          }
+          .table-title-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+          }
+          .table-title {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #1e293b;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #cbd5e1;
+            font-size: 11px;
+            margin-bottom: 16px;
+          }
+          th {
+            background-color: #f1f5f9;
+            color: #334155;
+            font-weight: 700;
+            padding: 8px 10px;
+            border-bottom: 1px solid #cbd5e1;
+            border-right: 1px solid #e2e8f0;
+          }
+          th:last-child {
+            border-right: none;
+          }
+          tfoot tr {
+            background-color: #f8fafc;
+            border-top: 2px solid #0f172a;
+            font-weight: 800;
+          }
+          tfoot td {
+            padding: 8px 10px;
+          }
+          .guidelines-box {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 20px;
+            padding-top: 14px;
+            border-top: 1px solid #cbd5e1;
+            margin-bottom: 24px;
+            page-break-inside: avoid;
+          }
+          .notes-title {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #475569;
+            margin-bottom: 6px;
+          }
+          .notes-list {
+            margin: 0;
+            padding-left: 14px;
+            font-size: 10px;
+            color: #475569;
+            line-height: 1.5;
+          }
+          .signatures-row {
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+          }
+          .sig-box {
+            flex: 1;
+            border-top: 1px solid #64748b;
+            padding-top: 4px;
+            text-align: center;
+            font-size: 10px;
+            color: #334155;
+            font-weight: 600;
+          }
+          .doc-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: #94a3b8;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 6px;
+            page-break-inside: avoid;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-box">
+          <div>
+            <div class="brand-title">${restaurantName}</div>
+            <div class="sub-title">Recipe Costing & Menu Pricing Slip</div>
+            <div style="font-size:10px;color:#64748b;margin-top:2px;">Official Kitchen Production & Profitability Analysis</div>
+          </div>
+          <div class="meta-text">
+            <div><strong>Date:</strong> ${dateStr}</div>
+            <div><strong>Time:</strong> ${timeStr}</div>
+            <div class="meta-ref">REF: ${refCode}</div>
+          </div>
+        </div>
+
+        <div class="dish-banner">
+          <div>
+            <div class="banner-label">Dish / Recipe Name</div>
+            <div class="banner-value">${selectedRecipe.name}</div>
+          </div>
+          <div>
+            <div class="banner-label">Category</div>
+            <div class="banner-value" style="font-size:13px;">${selectedRecipe.category || "General"}</div>
+          </div>
+          <div>
+            <div class="banner-label">Batch Portion Yield</div>
+            <div class="banner-value" style="font-size:13px;">${selectedRecipe.portions} ${selectedRecipe.portions === 1 ? "Plate" : "Plates"} Batch</div>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Current Menu Price</span>
+            <div class="kpi-val">${menuPriceFormatted}</div>
+            <span class="kpi-sub">Customer Selling Rate</span>
+          </div>
+
+          <div class="kpi-card kpi-card-highlight">
+            <span class="kpi-label" style="color:#c2410c;">Total Real Cost / Plate</span>
+            <div class="kpi-val" style="color:#ea580c;">${realCostFormatted}</div>
+            <span class="kpi-sub">Pure Kitchen Ingredients</span>
+          </div>
+
+          <div class="kpi-card kpi-card-profit">
+            <span class="kpi-label" style="color:#047857;">Net Profit / Plate</span>
+            <div class="kpi-val" style="color:#059669;">${profitFormatted}</div>
+            <span class="kpi-sub" style="color:#047857;font-weight:700;">${marginFormatted}</span>
+          </div>
+
+          <div class="kpi-card">
+            <span class="kpi-label">Food Cost %</span>
+            <div class="kpi-val">${fcFormatted}</div>
+            <span class="kpi-sub">Target: ${selectedRecipe.targetFoodCost || 30}% (Rec: ${recommendedPriceFormatted})</span>
+          </div>
+        </div>
+
+        <div class="table-title-bar">
+          <div class="table-title">Kitchen Recipe Ingredients (${selectedRecipe.lines?.length || 0} Items)</div>
+          <div style="font-size:10px;color:#64748b;">Calculated for 1 plate portion yield</div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30px;text-align:center;">#</th>
+              <th style="text-align:left;">Ingredient / Item Name</th>
+              <th style="width:85px;text-align:center;">Qty / Plate</th>
+              <th style="width:110px;text-align:right;">Market Rate (৳)</th>
+              <th style="width:75px;text-align:center;">Yield %</th>
+              <th style="width:90px;text-align:right;">Line Cost (৳)</th>
+              <th style="width:65px;text-align:right;">% Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5" style="text-align:right;font-size:11px;color:#0f172a;border-right:1px solid #cbd5e1;">
+                Total Real Production Cost per Plate:
+              </td>
+              <td style="text-align:right;font-family:monospace;font-size:13px;color:#ea580c;border-right:1px solid #cbd5e1;">
+                ${realCostFormatted}
+              </td>
+              <td style="text-align:right;font-family:monospace;font-size:11px;color:#0f172a;">
+                100%
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <div class="guidelines-box">
+          <div>
+            <div class="notes-title">Costing Notes & Kitchen Principles</div>
+            <ul class="notes-list">
+              <li>Costing calculated on real usable weight after kitchen prep, trim, and shrink.</li>
+              <li>Pure kitchen production value without arbitrary hidden overhead markups.</li>
+              <li>Target food cost range is 28% – 35% for balanced restaurant profitability.</li>
+            </ul>
+          </div>
+          <div class="signatures-row">
+            <div class="sig-box">Head Chef Signature</div>
+            <div class="sig-box">Manager / Owner Approval</div>
+          </div>
+        </div>
+
+        <div class="doc-footer">
+          <span>Generated via MenuSnap Kitchen Costing Studio</span>
+          <span>Confidential Restaurant Operating Record</span>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("style", "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;");
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    doc.open();
+    doc.write(reportHtml);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (e) {
+        console.error("Print error:", e);
+        window.print();
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1500);
+      }
+    }, 300);
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50/50 dark:bg-slate-950/40 pb-16">
-      {/* Full-width spacious container: no cramped 1280px limit */}
-      <div className="w-full max-w-[1760px] mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-5">
+    <>
+      {/* Screen App UI - Hidden when printing */}
+      <div className="flex flex-col min-h-screen bg-background pb-20 print:hidden">
+      <div className="w-full max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6 space-y-5">
         {/* ======================================================== */}
-        {/* Top Header Card                                         */}
+        {/* Top Header Card - Clean, Modern & Elegant                */}
         {/* ======================================================== */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-amber-600 dark:text-amber-400">
-                <Calculator className="h-6 w-6 stroke-[2.2]" />
-              </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/80 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-border/80 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-gradient-to-br from-orange-500/15 to-amber-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/20 shadow-2xs">
+              <Calculator className="h-6 w-6 stroke-[2.2]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                   Magic Calculation
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-500/20 font-bold uppercase tracking-wider"
-                  >
-                    Restaurant Costing
-                  </Badge>
                 </h1>
-                <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm">
-                  Complete restaurant menu costing, raw ingredients yield, overheads, and profit analyzer.
-                </p>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-orange-500/10 text-orange-600 border-orange-500/20 font-bold uppercase tracking-wider rounded-full px-2.5 py-0.5"
+                >
+                  Restaurant Costing
+                </Badge>
               </div>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                Real restaurant menu costing, raw kitchen ingredients yield, and profit analyzer.
+              </p>
             </div>
           </div>
 
-          {/* Cloud Sync Status & Primary Actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+          {/* Discreet Auto-save Indicator */}
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 text-[11px] font-medium text-muted-foreground border border-border/50">
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={cn(
+                  "w-2 h-2 rounded-full",
                   isCloudSaving ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
-                }`}
+                )}
               />
-              {isCloudSaving
-                ? "Saving to cloud..."
-                : lastSavedTime
-                ? `Cloud Saved (${lastSavedTime})`
-                : "Local & Cloud Ready"}
+              <span>{isCloudSaving ? "Syncing..." : "Auto-saved"}</span>
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleSaveToCloud(true)}
-              disabled={isCloudSaving}
-              className="h-9 px-3 text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-700 hover:bg-slate-100"
-            >
-              <Save className="h-3.5 w-3.5" />
-              Save Now
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportBackup}
-              className="h-9 px-3 text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-700"
-              title="Download backup file"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-9 px-3 text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-700"
-              title="Import backup file"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Import
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={handleImportBackup}
-            />
           </div>
         </div>
 
@@ -785,52 +1068,33 @@ export default function MagicCalculationPage() {
         </datalist>
 
         {/* ======================================================== */}
-        {/* Primary Tabs Navigation (4 Complete Tabs)                */}
+        {/* Primary Tabs Navigation (3 Complete Tabs)                */}
         {/* ======================================================== */}
         <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)} className="w-full space-y-5">
-          <div className="flex items-center justify-between overflow-x-auto pb-1 border-b border-slate-200/80 dark:border-slate-800">
-            <TabsList className="bg-slate-100/80 dark:bg-slate-900 p-1 rounded-xl h-auto gap-1">
+          <div className="flex items-center overflow-x-auto pb-1">
+            <TabsList className="bg-muted/70 p-1.5 rounded-2xl border border-border/60 inline-flex h-auto gap-1 shadow-2xs">
               <TabsTrigger
                 value="recipe"
-                className="rounded-lg py-2 px-3 sm:px-4 text-xs font-bold gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs"
+                className="rounded-xl py-2 px-3 sm:px-4 text-xs font-semibold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-border/60 transition-all"
               >
-                <ChefHat className="w-3.5 h-3.5 text-orange-500" />
+                <ChefHat className="w-4 h-4 text-orange-500" />
                 Recipe Costing Studio
               </TabsTrigger>
               <TabsTrigger
                 value="menu"
-                className="rounded-lg py-2 px-3 sm:px-4 text-xs font-bold gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs"
+                className="rounded-xl py-2 px-3 sm:px-4 text-xs font-semibold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-border/60 transition-all"
               >
-                <UtensilsCrossed className="w-3.5 h-3.5 text-amber-500" />
+                <UtensilsCrossed className="w-4 h-4 text-amber-500" />
                 All Items Overview ({metrics.totalCount})
               </TabsTrigger>
               <TabsTrigger
                 value="ing"
-                className="rounded-lg py-2 px-3 sm:px-4 text-xs font-bold gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs"
+                className="rounded-xl py-2 px-3 sm:px-4 text-xs font-semibold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-border/60 transition-all"
               >
-                <ShoppingBasket className="w-3.5 h-3.5 text-emerald-500" />
+                <ShoppingBasket className="w-4 h-4 text-emerald-500" />
                 Ingredients & Market Rates ({Object.keys(ingredients).length})
               </TabsTrigger>
-              <TabsTrigger
-                value="set"
-                className="rounded-lg py-2 px-3 sm:px-4 text-xs font-bold gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-xs"
-              >
-                <Download className="w-3.5 h-3.5 text-purple-500" />
-                Backup & Data
-              </TabsTrigger>
             </TabsList>
-
-            <div className="hidden sm:flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setItemToDelete({ type: "reset", name: "Sample Benchmark Data" })}
-                className="h-8 text-xs text-slate-500 hover:text-slate-900 gap-1"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset Defaults
-              </Button>
-            </div>
           </div>
 
           {/* ======================================================== */}
@@ -840,34 +1104,34 @@ export default function MagicCalculationPage() {
             <div className="flex flex-col lg:flex-row gap-5 items-start w-full">
               {/* Left Column: Dishes List Panel */}
               <div className="w-full lg:w-72 xl:w-80 shrink-0 space-y-3">
-                <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
-                  <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 space-y-2.5">
+                <Card className="border border-border/80 bg-card rounded-2xl shadow-xs overflow-hidden">
+                  <div className="p-3.5 border-b border-border/60 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                         <ChefHat className="h-4 w-4 text-orange-500" />
                         Dishes ({Object.keys(recipes).length})
                       </span>
                       <Button
                         size="sm"
                         onClick={handleAddRecipe}
-                        className="h-7 px-2.5 text-xs font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-2xs"
+                        className="h-7 px-2.5 text-xs font-bold bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-lg shadow-2xs"
                       >
                         <Plus className="w-3.5 h-3.5 mr-0.5" /> New Dish
                       </Button>
                     </div>
 
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
                         placeholder="Search recipe..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-8 h-8 text-xs border-slate-200 dark:border-slate-800"
+                        className="pl-8 h-8 text-xs bg-background/50 border-border/70 rounded-xl focus:bg-background"
                       />
                     </div>
                   </div>
 
-                  {/* Recipes List: full height matching workspace */}
+                  {/* Recipes List */}
                   <div className="p-2 space-y-1.5 max-h-[calc(100vh-260px)] min-h-[520px] overflow-y-auto">
                     {Object.entries(recipes)
                       .filter(([_, r]) => !searchQuery || r.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -880,18 +1144,19 @@ export default function MagicCalculationPage() {
                             key={id}
                             type="button"
                             onClick={() => setSelectedRecipeId(id)}
-                            className={`w-full text-left p-3 rounded-xl transition-all flex items-center justify-between cursor-pointer border ${
+                            className={cn(
+                              "w-full text-left p-3 rounded-xl transition-all flex items-center justify-between cursor-pointer border",
                               isSelected
-                                ? "bg-orange-500/10 border-orange-500 text-orange-950 dark:text-orange-200 shadow-2xs font-semibold"
-                                : "border-slate-100 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300"
-                            }`}
+                                ? "bg-orange-500/10 border-orange-500/40 text-foreground ring-1 ring-orange-500/20 shadow-xs font-semibold"
+                                : "border-transparent hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+                            )}
                           >
                             <div className="min-w-0 pr-2">
-                              <p className="text-xs font-bold truncate leading-tight">{r.name || "Untitled Dish"}</p>
-                              <p className="text-[10px] text-slate-400 truncate mt-0.5">{r.category || "General"}</p>
+                              <p className="text-xs font-bold truncate leading-tight text-foreground">{r.name || "Untitled Dish"}</p>
+                              <p className="text-[10px] text-muted-foreground truncate mt-0.5">{r.category || "General"}</p>
                             </div>
                             <div className="text-right shrink-0">
-                              <span className="font-mono text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-md">
+                              <span className="font-mono text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-500/10 dark:bg-orange-500/20 px-2 py-0.5 rounded-lg">
                                 {formatTaka(c.total)}
                               </span>
                             </div>
@@ -902,17 +1167,24 @@ export default function MagicCalculationPage() {
                 </Card>
               </div>
 
-              {/* Middle Column: Recipe Editor (Wide, expansive, main workhorse!) */}
+              {/* Middle Column: Recipe Editor Studio */}
               <div className="flex-1 min-w-0 w-full space-y-4">
                 {selectedRecipe ? (
-                  <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs p-5 sm:p-6 space-y-6">
+                  <Card className="border border-border/80 bg-card rounded-2xl shadow-xs p-5 sm:p-6 space-y-6">
                     {/* Header with Title & Action buttons */}
-                    <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 gap-3">
+                    <div className="flex flex-wrap items-center justify-between pb-3 border-b border-border/60 gap-3">
                       <div>
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                          {selectedRecipe.name}
-                        </h2>
-                        <span className="text-xs text-slate-400">
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-lg sm:text-xl font-bold text-foreground">
+                            {selectedRecipe.name}
+                          </h2>
+                          {selectedRecipe.category && (
+                            <Badge variant="secondary" className="text-[10px] rounded-lg px-2 py-0.5">
+                              {selectedRecipe.category}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground mt-0.5 block">
                           Edit dish recipe, portion yield, and ingredient measurements
                         </span>
                       </div>
@@ -922,7 +1194,7 @@ export default function MagicCalculationPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleDuplicateRecipe(selectedRecipe.id)}
-                          className="h-8 px-3 text-xs border-slate-200 dark:border-slate-800"
+                          className="h-8 px-3 text-xs rounded-xl border-border/80 hover:bg-muted font-medium"
                         >
                           <Copy className="w-3.5 h-3.5 mr-1" /> Duplicate
                         </Button>
@@ -936,131 +1208,97 @@ export default function MagicCalculationPage() {
                               name: selectedRecipe.name,
                             })
                           }
-                          className="h-8 px-3 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                          className="h-8 px-3 text-xs rounded-xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium"
                         >
                           <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
                         </Button>
                       </div>
                     </div>
 
-                    {/* Dish Profile Inputs: Clean spacious grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <div className="space-y-1.5 sm:col-span-2">
-                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {/* Dish Profile Inputs: Clean single row with Name, Category, and Menu Price */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                      <div className="space-y-1.5 sm:col-span-5">
+                        <Label className="text-xs font-semibold text-foreground">
                           Dish Name
                         </Label>
                         <Input
                           value={selectedRecipe.name}
                           onChange={(e) => handleUpdateRecipeField("name", e.target.value)}
-                          className="h-10 text-xs sm:text-sm font-semibold"
-                          placeholder="e.g. Special Chicken Biryani"
+                          className="h-10 text-xs sm:text-sm font-semibold rounded-xl bg-background/50 border-border/70 focus:bg-background"
+                          placeholder="e.g. Beef Cheese Burger"
                         />
                       </div>
 
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <div className="space-y-1.5 sm:col-span-4">
+                        <Label className="text-xs font-semibold text-foreground">
                           Category
                         </Label>
                         <Input
                           list="recipe-categories"
                           value={selectedRecipe.category}
                           onChange={(e) => handleUpdateRecipeField("category", e.target.value)}
-                          className="h-10 text-xs"
+                          className="h-10 text-xs rounded-xl bg-background/50 border-border/70 focus:bg-background"
                           placeholder="e.g. Burgers, Pizza, Rice"
                         />
                       </div>
 
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 sm:col-span-3">
                         <div className="flex items-center justify-between">
-                          <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            Portions / Batch Yield
-                          </Label>
-                          <span className="text-[10px] text-slate-400">Total plates</span>
-                        </div>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={selectedRecipe.portions}
-                          onChange={(e) => handleUpdateRecipeField("portions", Math.max(1, Number(e.target.value) || 1))}
-                          className="h-10 text-xs font-mono font-bold"
-                          placeholder="1"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <Label className="text-xs font-semibold text-foreground">
                             Current Menu Price (৳)
                           </Label>
-                          <span className="text-[10px] text-slate-400">Optional</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Selling price</span>
                         </div>
                         <Input
                           type="number"
                           min={0}
                           value={selectedRecipe.menuPrice || ""}
                           onChange={(e) => handleUpdateRecipeField("menuPrice", Number(e.target.value) || 0)}
-                          className="h-10 text-xs font-mono font-bold"
-                          placeholder="Current selling price"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            Packaging / Plate (৳)
-                          </Label>
-                          <span className="text-[10px] text-slate-400">Box & bag</span>
-                        </div>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={selectedRecipe.packaging || 0}
-                          onChange={(e) => handleUpdateRecipeField("packaging", Number(e.target.value) || 0)}
-                          className="h-10 text-xs font-mono"
-                          placeholder="0"
+                          className="h-10 text-xs font-mono font-bold rounded-xl bg-background/50 border-emerald-500/40 focus:bg-background focus-visible:ring-emerald-500"
+                          placeholder="e.g. 320"
                         />
                       </div>
                     </div>
 
                     {/* Recipe Line Items Section */}
-                    <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <div className="space-y-3 pt-3 border-t border-border/60">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                            <ShoppingBasket className="w-4 h-4 text-emerald-500" />
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                            <ShoppingBasket className="w-4 h-4 text-orange-500" />
                             Recipe Ingredients ({selectedRecipe.lines?.length || 0})
                           </h3>
-                          <span className="text-[11px] text-slate-400">
-                            Type any ingredient text, choose measurement, and set quantity and rate directly.
+                          <span className="text-[11px] text-muted-foreground">
+                            Set ingredient quantities and unit rates directly.
                           </span>
                         </div>
                         <Button
                           onClick={handleAddRecipeLine}
                           size="sm"
-                          className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1 shadow-2xs"
+                          className="h-8 px-3 text-xs font-semibold bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-xs gap-1"
                         >
                           <Plus className="w-3.5 h-3.5" /> Add Ingredient
                         </Button>
                       </div>
 
-                      {/* Ingredients Line Table: Wide, spacious, with text inputs and unit selectors! */}
-                      <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden shadow-2xs">
+                      {/* Ingredients Line Table */}
+                      <div className="border border-border/70 rounded-2xl overflow-hidden shadow-2xs bg-card">
                         <Table className="w-full text-xs">
-                          <TableHeader className="bg-slate-50 dark:bg-slate-900">
-                            <TableRow className="border-slate-200 dark:border-slate-800">
-                              <TableHead className="font-semibold text-slate-700 min-w-[220px]">
+                          <TableHeader className="bg-muted/40">
+                            <TableRow className="border-border/60">
+                              <TableHead className="font-semibold text-muted-foreground text-[11px] min-w-[200px]">
                                 Ingredient / Item Name
                               </TableHead>
-                              <TableHead className="font-semibold text-slate-700 min-w-[130px]">
+                              <TableHead className="font-semibold text-muted-foreground text-[11px] min-w-[120px]">
                                 Measurement
                               </TableHead>
-                              <TableHead className="font-semibold text-slate-700 min-w-[110px]">
+                              <TableHead className="font-semibold text-muted-foreground text-[11px] min-w-[100px]">
                                 Quantity
                               </TableHead>
-                              <TableHead className="font-semibold text-slate-700 min-w-[130px]">
+                              <TableHead className="font-semibold text-muted-foreground text-[11px] min-w-[120px]">
                                 Rate / Unit (৳)
                               </TableHead>
-                              <TableHead className="font-semibold text-slate-700 text-right min-w-[100px]">
+                              <TableHead className="font-semibold text-muted-foreground text-[11px] text-right min-w-[90px]">
                                 Line Cost
                               </TableHead>
                               <TableHead className="w-[44px]"></TableHead>
@@ -1069,7 +1307,7 @@ export default function MagicCalculationPage() {
                           <TableBody>
                             {!selectedRecipe.lines || selectedRecipe.lines.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={6} className="py-8 text-center text-slate-400">
+                                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                                   No ingredients in this recipe yet. Click "+ Add Ingredient" above to begin.
                                 </TableCell>
                               </TableRow>
@@ -1086,8 +1324,8 @@ export default function MagicCalculationPage() {
                                 const costLine = selectedRecipeCost?.lines[idx]?.cost || 0;
 
                                 return (
-                                  <TableRow key={idx} className="border-slate-100 dark:border-slate-800 hover:bg-slate-50/50">
-                                    {/* 1. Item Name: Text Input with Autocomplete datalist */}
+                                  <TableRow key={idx} className="border-border/50 hover:bg-muted/30 transition-colors">
+                                    {/* 1. Item Name */}
                                     <TableCell className="p-2.5">
                                       <div className="relative">
                                         <Input
@@ -1100,12 +1338,12 @@ export default function MagicCalculationPage() {
                                               ing: e.target.value,
                                             })
                                           }
-                                          className="h-9 text-xs font-semibold border-slate-200 dark:border-slate-700"
+                                          className="h-9 text-xs font-semibold rounded-lg bg-background/50 border-border/60 focus:bg-background"
                                         />
                                       </div>
                                     </TableCell>
 
-                                    {/* 2. Measurement / Unit Select: pcs, kg, litre, dozen */}
+                                    {/* 2. Measurement */}
                                     <TableCell className="p-2.5">
                                       <Select
                                         value={currentUnit}
@@ -1113,7 +1351,7 @@ export default function MagicCalculationPage() {
                                           handleUpdateRecipeLine(idx, { unit: val })
                                         }
                                       >
-                                        <SelectTrigger className="h-9 text-xs border-slate-200 dark:border-slate-700">
+                                        <SelectTrigger className="h-9 text-xs rounded-lg bg-background/50 border-border/60">
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -1126,7 +1364,7 @@ export default function MagicCalculationPage() {
                                       </Select>
                                     </TableCell>
 
-                                    {/* 3. Quantity Input with Base Unit Suffix */}
+                                    {/* 3. Quantity */}
                                     <TableCell className="p-2.5">
                                       <div className="flex items-center gap-1.5">
                                         <Input
@@ -1138,15 +1376,15 @@ export default function MagicCalculationPage() {
                                               qty: Math.max(0, Number(e.target.value) || 0),
                                             })
                                           }
-                                          className="h-9 text-xs font-mono text-right border-slate-200 dark:border-slate-700"
+                                          className="h-9 text-xs font-mono text-right rounded-lg bg-background/50 border-border/60 focus:bg-background"
                                         />
-                                        <span className="text-[11px] text-slate-500 font-medium shrink-0 w-8">
+                                        <span className="text-[11px] text-muted-foreground font-medium shrink-0 w-8">
                                           {unitInfo.base}
                                         </span>
                                       </div>
                                     </TableCell>
 
-                                    {/* 4. Unit Price / Rate (৳) */}
+                                    {/* 4. Rate */}
                                     <TableCell className="p-2.5">
                                       <div className="flex items-center gap-1.5">
                                         <Input
@@ -1159,16 +1397,16 @@ export default function MagicCalculationPage() {
                                               price: Math.max(0, Number(e.target.value) || 0),
                                             })
                                           }
-                                          className="h-9 text-xs font-mono text-right border-slate-200 dark:border-slate-700"
+                                          className="h-9 text-xs font-mono text-right rounded-lg bg-background/50 border-border/60 focus:bg-background"
                                         />
-                                        <span className="text-[10px] text-slate-400 font-medium shrink-0">
+                                        <span className="text-[10px] text-muted-foreground font-medium shrink-0">
                                           /{unitInfo.label}
                                         </span>
                                       </div>
                                     </TableCell>
 
                                     {/* 5. Line Cost */}
-                                    <TableCell className="p-2.5 text-right font-mono font-bold text-slate-900 dark:text-white text-xs">
+                                    <TableCell className="p-2.5 text-right font-mono font-bold text-foreground text-xs">
                                       {formatTaka(costLine)}
                                     </TableCell>
 
@@ -1178,7 +1416,7 @@ export default function MagicCalculationPage() {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => handleRemoveRecipeLine(idx)}
-                                        className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                        className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </Button>
@@ -1192,108 +1430,199 @@ export default function MagicCalculationPage() {
                       </div>
 
                       {/* Total Batch Ingredient Cost summary row */}
-                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-xs border border-slate-100 dark:border-slate-800">
-                        <span className="font-semibold text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-muted/40 text-xs border border-border/60">
+                        <span className="font-semibold text-muted-foreground">
                           Total Batch Ingredient Cost ({selectedRecipe.portions}{" "}
                           {selectedRecipe.portions === 1 ? "plate" : "plates"}):
                         </span>
-                        <span className="font-mono font-bold text-base text-slate-900 dark:text-white">
+                        <span className="font-mono font-bold text-base text-foreground">
                           {formatTaka(selectedRecipeCost?.batch || 0)}
                         </span>
                       </div>
                     </div>
                   </Card>
                 ) : (
-                  <Card className="p-16 text-center border-dashed border-2">
-                    <ChefHat className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="font-bold text-slate-700">No Recipe Selected</p>
-                    <p className="text-xs text-slate-400 mt-1">Select a dish from the left or create a new recipe.</p>
+                  <Card className="p-16 text-center border-dashed border-2 rounded-2xl">
+                    <ChefHat className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+                    <p className="font-bold text-foreground">No Recipe Selected</p>
+                    <p className="text-xs text-muted-foreground mt-1">Select a dish from the left or create a new recipe.</p>
                   </Card>
                 )}
               </div>
 
-              {/* Right Column: Calculation Slip matching template */}
+              {/* Right Column: Calculation Slip */}
               <div className="w-full lg:w-80 xl:w-96 shrink-0 space-y-4">
                 {selectedRecipe && selectedRecipeCost && (
                   <div className="space-y-4 sticky top-4">
-                    <Card className="border-2 border-orange-500/20 bg-gradient-to-b from-white to-orange-50/20 dark:from-slate-900 dark:to-slate-900/80 shadow-md p-5 space-y-4">
+                    <Card className="border border-border/80 bg-card shadow-sm rounded-2xl p-5 space-y-4">
                       {/* Slip Header */}
-                      <div className="flex items-center justify-between pb-3 border-b border-dashed border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center justify-between pb-3 border-b border-border/60">
                         <div>
-                          <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <h3 className="font-bold text-sm text-foreground flex items-center gap-1.5">
                             <Sparkles className="w-4 h-4 text-orange-500" />
                             Cost & Pricing Slip
                           </h3>
-                          <span className="text-[11px] text-slate-400">
-                            1 Plate breakdown ({selectedRecipe.portions} plate batch)
+                          <span className="text-[11px] text-muted-foreground">
+                            1 Plate production analysis
                           </span>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={handlePrintSlip}
-                          className="h-8 px-2.5 text-xs text-slate-500"
+                          className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg"
                         >
                           <Printer className="w-3.5 h-3.5 mr-1" /> Print
                         </Button>
                       </div>
 
+                      {/* Hero Highlight Card: Total Real Production Cost */}
+                      <div className="bg-gradient-to-br from-orange-500/10 via-amber-500/5 to-transparent border border-orange-500/20 rounded-2xl p-4 text-center space-y-1 shadow-2xs">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400">
+                          Total Real Production Cost
+                        </span>
+                        <div className="text-3xl font-black font-mono tracking-tight text-orange-600 dark:text-orange-400">
+                          {formatTaka(selectedRecipeCost.total)}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground block">
+                          Pure raw kitchen ingredients per plate
+                        </span>
+                      </div>
+
                       {/* Line breakdown items: Pure Real Costs Only */}
-                      <div className="space-y-2 text-xs">
-                        <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
-                          <span>1. Raw Ingredients / Plate</span>
-                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                      <div className="space-y-2 text-xs p-3 rounded-xl bg-muted/30 border border-border/60">
+                        <div className="flex justify-between items-center text-muted-foreground">
+                          <span>Raw Ingredients / Plate</span>
+                          <span className="font-mono font-bold text-foreground">
                             {formatTaka(selectedRecipeCost.ing)}
                           </span>
                         </div>
 
-                        {selectedRecipeCost.extras > 0 && (
-                          <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
-                            <span>2. Packaging / Plate</span>
-                            <span className="font-mono font-bold text-slate-900 dark:text-white">
-                              +{formatTaka(selectedRecipeCost.extras)}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="pt-2 border-t border-slate-900 dark:border-slate-100 flex justify-between items-center text-sm font-bold text-slate-900 dark:text-white">
-                          <span>Total Real Cost per Plate</span>
-                          <span className="font-mono text-base text-orange-600 dark:text-orange-400">
+                        <div className="pt-2 border-t border-border/60 flex justify-between items-center text-xs font-bold text-foreground">
+                          <span>Real Kitchen Cost</span>
+                          <span className="font-mono text-orange-600 dark:text-orange-400">
                             {formatTaka(selectedRecipeCost.total)}
                           </span>
                         </div>
                       </div>
 
-                      {/* Big Highlighted Real Value for Product Box */}
-                      <div className="p-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 text-white space-y-1 shadow-sm">
-                        <span className="text-[11px] font-semibold tracking-wider uppercase opacity-95">
-                          Total Real Cost per Plate
-                        </span>
-                        <div className="text-3xl font-extrabold font-mono tracking-tight">
-                          {formatTaka(selectedRecipeCost.total)}
+                      {/* Cost Breakdown Summary Card */}
+                      <div className="p-4 rounded-xl bg-muted/30 border border-border/60 space-y-3.5 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                            <PieChart className="w-3.5 h-3.5 text-amber-500" />
+                            Cost & Profit Share
+                          </span>
+                          {selectedRecipeCost.fc !== null ? (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                selectedRecipeCost.fc <= 35
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-700"
+                                  : selectedRecipeCost.fc <= 45
+                                  ? "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-700"
+                                  : "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-700"
+                              }`}
+                            >
+                              {selectedRecipeCost.fc <= 35
+                                ? "Healthy Food Cost"
+                                : selectedRecipeCost.fc <= 45
+                                ? "Moderate Food Cost"
+                                : "High Food Cost"}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground rounded-full">
+                              Cost Shares
+                            </Badge>
+                          )}
                         </div>
-                        <p className="text-[10px] opacity-85">
-                          Real kitchen production value ({selectedRecipe.portions} {selectedRecipe.portions === 1 ? "plate" : "plates"} batch: {formatTaka(selectedRecipeCost.total * selectedRecipe.portions)})
-                        </p>
+
+                        {/* Multi-segment distribution visual bar */}
+                        {selectedRecipe.menuPrice && selectedRecipe.menuPrice > 0 ? (
+                          <div className="space-y-1.5">
+                            <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden flex shadow-inner">
+                              <div
+                                style={{ width: `${Math.min(100, Math.max(0, selectedRecipeCost.ingPct))}%` }}
+                                className="bg-amber-500 transition-all duration-300"
+                                title={`Raw Ingredients: ${selectedRecipeCost.ingPct.toFixed(1)}%`}
+                              />
+                              {selectedRecipeCost.profitMarginPct && selectedRecipeCost.profitMarginPct > 0 ? (
+                                <div
+                                  style={{ width: `${Math.min(100, Math.max(0, selectedRecipeCost.profitMarginPct))}%` }}
+                                  className="bg-emerald-500 transition-all duration-300"
+                                  title={`Net Profit: ${selectedRecipeCost.profitMarginPct.toFixed(1)}%`}
+                                />
+                              ) : null}
+                            </div>
+                            <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
+                              <span>Customer Price: 100%</span>
+                              <span>Food Cost: {selectedRecipeCost.fc?.toFixed(1) || 0}%</span>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Detailed Rows: Raw Ingredients % vs Net Profit % */}
+                        <div className="space-y-2 text-xs divide-y divide-border/40">
+                          <div className="flex justify-between items-center pt-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                              <span className="text-muted-foreground font-medium">Raw Ingredients</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-foreground font-semibold">
+                                {formatTaka(selectedRecipeCost.ing)}
+                              </span>
+                              <Badge variant="secondary" className="font-mono font-bold text-[10px] px-1.5 py-0 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                {selectedRecipeCost.ingPct.toFixed(1)}%
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {selectedRecipeCost.profit !== null && (
+                            <div className="flex justify-between items-center pt-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedRecipeCost.profit >= 0 ? "bg-emerald-500" : "bg-rose-500"}`} />
+                                <span className="text-muted-foreground font-medium">Net Real Profit</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-mono font-bold ${selectedRecipeCost.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                                  {selectedRecipeCost.profit >= 0 ? "+" : ""}{formatTaka(selectedRecipeCost.profit)}
+                                </span>
+                                <Badge
+                                  variant="secondary"
+                                  className={`font-mono font-bold text-[10px] px-1.5 py-0 rounded-md ${
+                                    selectedRecipeCost.profit >= 0
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                                  }`}
+                                >
+                                  {selectedRecipeCost.profitMarginPct !== null
+                                    ? `${selectedRecipeCost.profitMarginPct >= 0 ? "+" : ""}${selectedRecipeCost.profitMarginPct.toFixed(1)}%`
+                                    : "0%"}
+                                </Badge>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Real Selling Price & Profit Comparison (Only if menu price entered) */}
                       {selectedRecipe.menuPrice && selectedRecipe.menuPrice > 0 ? (
-                        <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+                        <div className="p-3.5 rounded-xl bg-muted/40 border border-border/60 space-y-2 text-xs">
                           <div className="flex justify-between items-center font-semibold">
-                            <span>Your Menu Price</span>
-                            <span className="font-mono font-bold text-slate-900 dark:text-white">
+                            <span className="text-muted-foreground">Your Menu Price</span>
+                            <span className="font-mono font-bold text-foreground">
                               {formatTaka(selectedRecipe.menuPrice, 0)}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center">
-                            <span>Real Profit / Plate</span>
+                            <span className="text-muted-foreground">Real Profit / Plate</span>
                             <span
                               className={`font-mono font-bold text-sm ${
                                 selectedRecipeCost.profit && selectedRecipeCost.profit > 0
-                                  ? "text-emerald-600"
-                                  : "text-rose-600"
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-rose-600 dark:text-rose-400"
                               }`}
                             >
                               {selectedRecipeCost.profit && selectedRecipeCost.profit > 0 ? "+" : ""}
@@ -1315,73 +1644,73 @@ export default function MagicCalculationPage() {
           <TabsContent value="menu" className="space-y-5 m-0">
             {/* Real Product KPI Cards Strip */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <Card className="border border-border/80 bg-card rounded-2xl shadow-xs">
                 <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Total Menu Dishes
                   </CardTitle>
-                  <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-950/40 text-orange-600">
+                  <div className="p-2 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400">
                     <UtensilsCrossed className="h-4 w-4" />
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
+                  <div className="text-2xl font-bold font-mono text-foreground">
                     {metrics.totalCount}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {metrics.pricedCount} dishes active on menu
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <Card className="border border-border/80 bg-card rounded-2xl shadow-xs">
                 <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Average Real Cost / Plate
                   </CardTitle>
-                  <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600">
+                  <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
                     <Calculator className="h-4 w-4" />
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
+                  <div className="text-2xl font-bold font-mono text-foreground">
                     {formatTaka(
                       metrics.totalCount > 0
                         ? evaluatedRecipes.reduce((sum, r) => sum + r.breakdown.total, 0) / metrics.totalCount
                         : 0
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Mean kitchen production cost
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <Card className="border border-border/80 bg-card rounded-2xl shadow-xs">
                 <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Market Ingredients
                   </CardTitle>
-                  <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600">
+                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                     <ShoppingBasket className="h-4 w-4" />
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
+                  <div className="text-2xl font-bold font-mono text-foreground">
                     {Object.keys(ingredients).length}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Raw materials in pantry list
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <Card className="border border-border/80 bg-card rounded-2xl shadow-xs">
                 <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Menu Priced Dishes
                   </CardTitle>
-                  <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
                     <Store className="h-4 w-4" />
                   </div>
                 </CardHeader>
@@ -1389,7 +1718,7 @@ export default function MagicCalculationPage() {
                   <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
                     {metrics.pricedCount}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Dishes with active selling price
                   </p>
                 </CardContent>
@@ -1397,21 +1726,21 @@ export default function MagicCalculationPage() {
             </div>
 
             {/* Menu Items Table Card */}
-            <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-              <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <Card className="border border-border/80 bg-card rounded-2xl shadow-xs overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       placeholder="Search dish or category..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 h-9 text-xs border-slate-200 dark:border-slate-700"
+                      className="pl-9 h-9 text-xs rounded-xl bg-background/50 border-border/70 focus:bg-background"
                     />
                   </div>
 
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-full sm:w-44 h-9 text-xs border-slate-200 dark:border-slate-700">
+                    <SelectTrigger className="w-full sm:w-44 h-9 text-xs rounded-xl bg-background/50 border-border/70">
                       <SelectValue placeholder="All Categories" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1428,7 +1757,7 @@ export default function MagicCalculationPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     onClick={handleAddRecipe}
-                    className="h-9 px-3.5 text-xs font-bold gap-1.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white shadow-xs"
+                    className="h-9 px-3.5 text-xs font-semibold gap-1.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-xs"
                   >
                     <Plus className="w-4 h-4" />
                     Add New Recipe
@@ -1439,24 +1768,23 @@ export default function MagicCalculationPage() {
               {/* Table Container */}
               <div className="overflow-x-auto w-full">
                 <Table className="w-full">
-                  <TableHeader className="bg-slate-50/70 dark:bg-slate-900/60">
-                    <TableRow className="border-slate-200 dark:border-slate-800">
-                      <TableHead className="text-xs font-semibold min-w-[200px]">Item & Category</TableHead>
-                      <TableHead className="text-xs font-semibold text-center min-w-[90px]">Portions</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[110px]">Raw Ingredients</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[110px]">Packaging</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[130px]">Total Real Cost</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[110px]">Menu Price</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[110px]">Profit / Plate</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[80px]">Action</TableHead>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="border-border/60">
+                      <TableHead className="text-xs font-semibold text-muted-foreground min-w-[200px]">Item & Category</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-center min-w-[90px]">Portions</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[110px]">Raw Ingredients</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[130px]">Total Real Cost</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[110px]">Menu Price</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[110px]">Profit / Plate</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[80px]">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredRecipes.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-12 text-center text-slate-400">
+                        <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
                           <ChefHat className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                          <p className="font-semibold text-slate-600 dark:text-slate-300">No dishes match criteria</p>
+                          <p className="font-semibold text-foreground">No dishes match criteria</p>
                           <p className="text-xs mt-1">Try another search term or click "Add New Recipe".</p>
                         </TableCell>
                       </TableRow>
@@ -1465,17 +1793,17 @@ export default function MagicCalculationPage() {
                         return (
                           <TableRow
                             key={id}
-                            className="border-slate-100 dark:border-slate-800 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer"
+                            className="border-border/50 hover:bg-muted/30 cursor-pointer transition-colors"
                             onClick={() => {
                               setSelectedRecipeId(id);
                               setActiveTab("recipe");
                             }}
                           >
                             <TableCell className="align-middle">
-                              <div className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                              <div className="font-bold text-foreground text-xs sm:text-sm">
                                 {recipe.name}
                               </div>
-                              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
                                 <span>{recipe.category || "General"}</span>
                                 {breakdown.missing > 0 && (
                                   <span className="text-rose-500 font-semibold">
@@ -1493,10 +1821,6 @@ export default function MagicCalculationPage() {
                               {formatTaka(breakdown.ing)}
                             </TableCell>
 
-                            <TableCell className="align-middle text-right font-mono text-xs">
-                              {formatTaka(breakdown.extras)}
-                            </TableCell>
-
                             <TableCell className="align-middle text-right font-mono font-bold text-orange-600 dark:text-orange-400 text-xs">
                               {formatTaka(breakdown.total)}
                             </TableCell>
@@ -1507,7 +1831,7 @@ export default function MagicCalculationPage() {
 
                             <TableCell className="align-middle text-right font-mono text-xs font-bold">
                               {breakdown.profit !== null ? (
-                                <span className={breakdown.profit < 0 ? "text-rose-600" : "text-emerald-600"}>
+                                <span className={breakdown.profit < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>
                                   {breakdown.profit > 0 ? "+" : ""}
                                   {formatTaka(breakdown.profit)}
                                 </span>
@@ -1524,7 +1848,7 @@ export default function MagicCalculationPage() {
                                   setSelectedRecipeId(id);
                                   setActiveTab("recipe");
                                 }}
-                                className="h-7 px-2 text-xs font-semibold text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                                className="h-7 px-2 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/30 rounded-lg"
                               >
                                 Edit <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                               </Button>
@@ -1543,32 +1867,32 @@ export default function MagicCalculationPage() {
           {/* TAB 3: INGREDIENTS & MARKET RATES                        */}
           {/* ======================================================== */}
           <TabsContent value="ing" className="space-y-5 m-0">
-            <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-              <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <Card className="border border-border/80 bg-card rounded-2xl shadow-xs overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <h2 className="text-base font-bold text-foreground flex items-center gap-2">
                     <ShoppingBasket className="w-5 h-5 text-emerald-500" />
-                    Ingredients & Market Rates (উপাদান ও বাজার দর)
+                    Ingredients & Market Rates
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Update market purchase rates here. All connected recipes dynamically update their costs.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2.5">
                   <div className="relative w-full sm:w-60">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       placeholder="Search ingredient..."
                       value={ingredientSearch}
                       onChange={(e) => setIngredientSearch(e.target.value)}
-                      className="pl-9 h-9 text-xs border-slate-200 dark:border-slate-700"
+                      className="pl-9 h-9 text-xs rounded-xl bg-background/50 border-border/70 focus:bg-background"
                     />
                   </div>
 
                   <Button
                     onClick={() => setIsAddIngredientOpen(true)}
-                    className="h-9 px-3.5 text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs shrink-0"
+                    className="h-9 px-3.5 text-xs font-semibold gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl shadow-xs shrink-0"
                   >
                     <Plus className="w-4 h-4" />
                     Add Ingredient
@@ -1577,9 +1901,9 @@ export default function MagicCalculationPage() {
               </div>
 
               {/* Informational Formula Strip */}
-              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border-b border-emerald-100 dark:border-emerald-900/30 text-xs text-emerald-900 dark:text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="p-3 bg-emerald-500/10 border-b border-emerald-500/20 text-xs text-emerald-950 dark:text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <Info className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <Info className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <span>
                     <strong>Real Cost Formula:</strong> Real Cost = Purchase Price ÷ (Usable Yield % ÷ 100).
                     e.g. 1kg Chicken @ ৳220 with 70% yield costs <strong>৳314 / kg (৳0.314/g)</strong> after trimming.
@@ -1590,16 +1914,16 @@ export default function MagicCalculationPage() {
               {/* Ingredients Table */}
               <div className="overflow-x-auto w-full">
                 <Table className="w-full">
-                  <TableHeader className="bg-slate-50/70 dark:bg-slate-900/60">
-                    <TableRow className="border-slate-200 dark:border-slate-800">
-                      <TableHead className="text-xs font-semibold min-w-[200px]">Ingredient Name</TableHead>
-                      <TableHead className="text-xs font-semibold min-w-[100px]">Unit Type</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[130px]">Purchase Price (৳)</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[120px]">Usable Yield %</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[140px]">Real Cost / Unit</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[130px]">Cost / Base (g/ml)</TableHead>
-                      <TableHead className="text-xs font-semibold text-center min-w-[100px]">In Recipes</TableHead>
-                      <TableHead className="text-xs font-semibold text-right min-w-[70px]">Action</TableHead>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="border-border/60">
+                      <TableHead className="text-xs font-semibold text-muted-foreground min-w-[200px]">Ingredient Name</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground min-w-[100px]">Unit Type</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[130px]">Purchase Price (৳)</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[120px]">Usable Yield %</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[140px]">Real Cost / Unit</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[130px]">Cost / Base (g/ml)</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-center min-w-[100px]">In Recipes</TableHead>
+                      <TableHead className="text-xs font-semibold text-muted-foreground text-right min-w-[70px]">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1611,17 +1935,23 @@ export default function MagicCalculationPage() {
                       )
                       .map(([id, ing]) => {
                         const unitInfo = UNITS[ing.unit] || UNITS.kg;
-                        const baseCost = calculateUnitCost(ing);
-                        const realCost = baseCost * unitInfo.factor;
-                        const usageCount = ingredientUsageCounts[id] || 0;
+                        const yieldRatio = Math.min(Math.max(ing.yield || 100, 1), 100) / 100;
+                        const realCost = (ing.price || 0) / yieldRatio;
+                        const baseCost = realCost / unitInfo.factor;
+
+                        const usageCount = Object.values(recipes).filter((r) =>
+                          r.lines?.some(
+                            (l) => l.ing === id || (l.customName && l.customName === ing.name)
+                          )
+                        ).length;
 
                         return (
-                          <TableRow key={id} className="border-slate-100 dark:border-slate-800">
+                          <TableRow key={id} className="border-border/50 hover:bg-muted/30 transition-colors">
                             <TableCell className="align-middle">
                               <Input
                                 value={ing.name}
                                 onChange={(e) => handleUpdateIngredient(id, { name: e.target.value })}
-                                className="h-8 text-xs font-semibold"
+                                className="h-8 text-xs font-semibold rounded-lg bg-background/50 border-border/60 focus:bg-background"
                               />
                             </TableCell>
 
@@ -1630,7 +1960,7 @@ export default function MagicCalculationPage() {
                                 value={ing.unit}
                                 onValueChange={(val: UnitKey) => handleUpdateIngredient(id, { unit: val })}
                               >
-                                <SelectTrigger className="h-8 text-xs">
+                                <SelectTrigger className="h-8 text-xs rounded-lg bg-background/50 border-border/60">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1648,8 +1978,10 @@ export default function MagicCalculationPage() {
                                 type="number"
                                 min={0}
                                 value={ing.price}
-                                onChange={(e) => handleUpdateIngredient(id, { price: Number(e.target.value) || 0 })}
-                                className="h-8 text-xs text-right font-mono"
+                                onChange={(e) =>
+                                  handleUpdateIngredient(id, { price: Number(e.target.value) || 0 })
+                                }
+                                className="h-8 w-24 text-xs text-right font-mono rounded-lg bg-background/50 border-border/60 focus:bg-background ml-auto"
                               />
                             </TableCell>
 
@@ -1663,24 +1995,24 @@ export default function MagicCalculationPage() {
                                   onChange={(e) =>
                                     handleUpdateIngredient(id, { yield: Number(e.target.value) || 100 })
                                   }
-                                  className="h-8 w-16 text-xs text-right font-mono"
+                                  className="h-8 w-16 text-xs text-right font-mono rounded-lg bg-background/50 border-border/60 focus:bg-background"
                                 />
-                                <span className="text-xs text-slate-400">%</span>
+                                <span className="text-xs text-muted-foreground">%</span>
                               </div>
                             </TableCell>
 
-                            <TableCell className="align-middle text-right font-mono text-xs font-bold text-slate-900 dark:text-white">
+                            <TableCell className="align-middle text-right font-mono text-xs font-bold text-foreground">
                               {formatTaka(realCost)}{" "}
-                              <span className="text-[10px] text-slate-400 font-normal">/{unitInfo.label}</span>
+                              <span className="text-[10px] text-muted-foreground font-normal">/{unitInfo.label}</span>
                             </TableCell>
 
                             <TableCell className="align-middle text-right font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
                               {formatTaka(baseCost, 3)}{" "}
-                              <span className="text-[10px] text-slate-400 font-normal">/{unitInfo.base}</span>
+                              <span className="text-[10px] text-muted-foreground font-normal">/{unitInfo.base}</span>
                             </TableCell>
 
                             <TableCell className="align-middle text-center">
-                              <Badge variant="outline" className="text-[10px] px-2 py-0.5">
+                              <Badge variant="outline" className="text-[10px] px-2 py-0.5 rounded-full">
                                 {usageCount} {usageCount === 1 ? "recipe" : "recipes"}
                               </Badge>
                             </TableCell>
@@ -1690,7 +2022,7 @@ export default function MagicCalculationPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setItemToDelete({ type: "ingredient", id, name: ing.name })}
-                                className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600"
+                                className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
@@ -1703,121 +2035,257 @@ export default function MagicCalculationPage() {
               </div>
             </Card>
           </TabsContent>
-
-          {/* ======================================================== */}
-          {/* TAB 4: BACKUP & DATA (ব্যাকআপ ও ডেটাবেস)                 */}
-          {/* ======================================================== */}
-          <TabsContent value="set" className="space-y-5 m-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Pure Real Food Costing Guide Card */}
-              <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs p-5 space-y-4">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <div className="p-2 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600">
-                    <Sparkles className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                      Pure Real Food Costing (বাস্তব খাদ্য খরচ)
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      100% real product value based only on ingredients and direct consumables
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
-                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60 space-y-2">
-                    <p className="font-semibold text-slate-800 dark:text-slate-200">
-                      How Real Cost per Plate is Calculated:
-                    </p>
-                    <ul className="list-disc list-inside space-y-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                      <li>
-                        <strong>Line Item Cost:</strong> Quantity × (Market Price ÷ Usable Yield %).
-                      </li>
-                      <li>
-                        <strong>Raw Ingredients / Plate:</strong> Total Batch Ingredient Cost ÷ Portions cooked.
-                      </li>
-                      <li>
-                        <strong>Packaging:</strong> Specific dish packaging box or container (only if entered for that recipe).
-                      </li>
-                      <li>
-                        <strong>Total Real Cost:</strong> Raw Ingredients + Direct Extras.
-                      </li>
-                    </ul>
-                  </div>
-
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    No artificial wastage percentages, no assumed overheads, no mandatory VAT, and no arbitrary profit markups.
-                  </p>
-                </div>
-              </Card>
-
-              {/* Backup & Persistence Card */}
-              <Card className="border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs p-5 space-y-4">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600">
-                    <Download className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">
-                      Backup & Data Storage (ব্যাকআপ ও ডেটাবেস)
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Export your restaurant costing configuration as a JSON file, or restore from backup anytime.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2.5">
-                    <Button
-                      onClick={handleExportBackup}
-                      className="h-9 text-xs font-bold gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Download Backup (JSON)
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="h-9 text-xs font-bold gap-1.5 border-slate-200 dark:border-slate-700"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      Restore from Backup
-                    </Button>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setItemToDelete({ type: "reset", name: "Sample Benchmark Recipes" })}
-                      className="h-8 text-xs text-slate-600 hover:text-slate-900 gap-1.5"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Reset Sample Dishes
-                    </Button>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setItemToDelete({ type: "clear", name: "All Recipes and Ingredients" })}
-                      className="h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 gap-1.5 border-rose-200"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Clear All Records
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
+    </div>
 
-      {/* ======================================================== */}
-      {/* Modal: Add New Ingredient                                */}
+    {/* ======================================================== */}
+    {/* Dedicated Print Report (Only visible when printing)     */}
+    {/* ======================================================== */}
+      <div className="hidden print:block print:w-full print:bg-white print:text-slate-900 print:p-6 print:m-0 font-sans text-xs">
+        {selectedRecipe && selectedRecipeCost ? (
+          <div className="space-y-6 max-w-4xl mx-auto">
+            {/* 1. Header Banner */}
+            <div className="border-b-2 border-slate-900 pb-4 flex justify-between items-start">
+              <div>
+                <div className="text-xl font-black uppercase tracking-tight text-slate-900">
+                  {clientUser?.businessName || "Restaurant Kitchen"}
+                </div>
+                <h1 className="text-lg font-bold text-slate-700 mt-0.5">
+                  Recipe Costing & Pricing Report
+                </h1>
+                <p className="text-[11px] text-slate-500">
+                  Official Kitchen Production & Profitability Analysis
+                </p>
+              </div>
+
+              <div className="text-right text-[11px] text-slate-600 space-y-0.5">
+                <p>
+                  <strong>Date:</strong>{" "}
+                  {new Date().toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </p>
+                <p>
+                  <strong>Time:</strong>{" "}
+                  {new Date().toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                </p>
+                <p className="font-mono text-[10px] text-slate-400">
+                  REF: RCP-{selectedRecipe.id.toUpperCase()}
+                </p>
+              </div>
+            </div>
+
+            {/* 2. Dish Profile Summary Box */}
+            <div className="grid grid-cols-3 gap-4 p-4 rounded-xl border border-slate-300 bg-slate-50/70">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  Dish / Recipe Name
+                </span>
+                <p className="text-base font-black text-slate-900">
+                  {selectedRecipe.name}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  Category
+                </span>
+                <p className="text-sm font-bold text-slate-800">
+                  {selectedRecipe.category || "General"}
+                </p>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  Portion / Batch Yield
+                </span>
+                <p className="text-sm font-bold text-slate-800">
+                  {selectedRecipe.portions} {selectedRecipe.portions === 1 ? "Plate" : "Plates"} Batch
+                </p>
+              </div>
+            </div>
+
+            {/* 3. Core Financial KPIs (4 Cards in a Row) */}
+            <div className="grid grid-cols-4 gap-3">
+              <div className="p-3 rounded-lg border border-slate-300 bg-white text-center">
+                <span className="text-[10px] font-bold uppercase text-slate-500">
+                  Current Menu Price
+                </span>
+                <p className="text-lg font-black text-slate-900 mt-1">
+                  {selectedRecipe.menuPrice ? formatTaka(selectedRecipe.menuPrice, 0) : "Not Set"}
+                </p>
+                <span className="text-[9px] text-slate-400">Customer Selling Rate</span>
+              </div>
+
+              <div className="p-3 rounded-lg border-2 border-orange-500/40 bg-orange-50/30 text-center">
+                <span className="text-[10px] font-bold uppercase text-orange-700">
+                  Total Real Cost / Plate
+                </span>
+                <p className="text-lg font-black text-orange-600 mt-1 font-mono">
+                  {formatTaka(selectedRecipeCost.total)}
+                </p>
+                <span className="text-[9px] text-slate-500">Pure Raw Ingredients</span>
+              </div>
+
+              <div className="p-3 rounded-lg border border-emerald-500/40 bg-emerald-50/30 text-center">
+                <span className="text-[10px] font-bold uppercase text-emerald-700">
+                  Net Profit / Plate
+                </span>
+                <p className="text-lg font-black text-emerald-600 mt-1 font-mono">
+                  {selectedRecipeCost.profit !== null
+                    ? `${selectedRecipeCost.profit >= 0 ? "+" : ""}${formatTaka(selectedRecipeCost.profit)}`
+                    : "—"}
+                </p>
+                <span className="text-[9px] text-emerald-700 font-semibold">
+                  {selectedRecipeCost.profitMarginPct !== null
+                    ? `${selectedRecipeCost.profitMarginPct.toFixed(1)}% margin`
+                    : ""}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-lg border border-slate-300 bg-white text-center">
+                <span className="text-[10px] font-bold uppercase text-slate-500">
+                  Food Cost %
+                </span>
+                <p className="text-lg font-black text-slate-900 mt-1 font-mono">
+                  {selectedRecipeCost.fc !== null
+                    ? `${selectedRecipeCost.fc.toFixed(1)}%`
+                    : "—"}
+                </p>
+              </div>
+            </div>
+
+            {/* 4. Recipe Ingredients Breakdown Table */}
+            <div>
+              <div className="mb-2 flex justify-between items-center">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Kitchen Recipe Ingredients ({selectedRecipe.lines?.length || 0} Items)
+                </h3>
+                <span className="text-[11px] text-slate-500">
+                  Calculated for 1 plate portion
+                </span>
+              </div>
+
+              <table className="w-full border-collapse border border-slate-300 text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                    <th className="p-2 text-center w-10 border-r border-slate-300">#</th>
+                    <th className="p-2 text-left border-r border-slate-300">Ingredient / Item Name</th>
+                    <th className="p-2 text-center w-28 border-r border-slate-300">Quantity / Plate</th>
+                    <th className="p-2 text-right w-28 border-r border-slate-300">Market Rate (৳)</th>
+                    <th className="p-2 text-right w-28 border-r border-slate-300">Line Cost (৳)</th>
+                    <th className="p-2 text-right w-20">% of Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!selectedRecipe.lines || selectedRecipe.lines.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-4 text-center text-slate-400">
+                        No ingredients listed in this recipe.
+                      </td>
+                    </tr>
+                  ) : (
+                    selectedRecipe.lines.map((line, idx) => {
+                      const foundIng = ingredients[line.ing];
+                      const currentName = line.customName || foundIng?.name || line.ing || "";
+                      const currentUnit = (line.unit || foundIng?.unit || "kg");
+                      const unitInfo = UNITS[currentUnit] || UNITS.kg;
+                      const currentPrice =
+                        line.price !== undefined && line.price > 0
+                          ? line.price
+                          : foundIng?.price || 0;
+                      const costLine = selectedRecipeCost.lines[idx]?.cost || 0;
+                      const linePct = selectedRecipeCost.total > 0
+                        ? (costLine / selectedRecipeCost.total) * 100
+                        : 0;
+
+                      return (
+                        <tr
+                          key={idx}
+                          className="border-b border-slate-200 even:bg-slate-50/50"
+                        >
+                          <td className="p-2 text-center text-slate-400 font-mono border-r border-slate-200">
+                            {idx + 1}
+                          </td>
+                          <td className="p-2 font-medium text-slate-900 border-r border-slate-200">
+                            {currentName}
+                          </td>
+                          <td className="p-2 text-center font-mono text-slate-700 border-r border-slate-200">
+                            {line.qty} {unitInfo.base}
+                          </td>
+                          <td className="p-2 text-right font-mono text-slate-700 border-r border-slate-200">
+                            {formatTaka(currentPrice)} / {unitInfo.label}
+                          </td>
+                          <td className="p-2 text-right font-mono font-bold text-slate-900 border-r border-slate-200">
+                            {formatTaka(costLine)}
+                          </td>
+                          <td className="p-2 text-right font-mono text-slate-500">
+                            {linePct.toFixed(1)}%
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-100 font-bold border-t-2 border-slate-900 text-slate-900">
+                    <td colSpan={4} className="p-2.5 text-right border-r border-slate-300">
+                      Total Real Cost per Plate:
+                    </td>
+                    <td className="p-2.5 text-right font-mono text-sm text-orange-600 border-r border-slate-300">
+                      {formatTaka(selectedRecipeCost.total)}
+                    </td>
+                    <td className="p-2.5 text-right font-mono">100%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* 5. Production Notes & Signatures */}
+            <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-300">
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">
+                  Costing Notes & Guidelines
+                </span>
+                <ul className="text-[11px] text-slate-600 space-y-1 list-disc list-inside">
+                  <li>Costing is calculated on real edible yield after kitchen trimming.</li>
+                  <li>No arbitrary overhead markups or artificial waste factors added.</li>
+                  <li>Review ingredient market prices periodically for margin accuracy.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-8 flex flex-col justify-end">
+                <div className="flex justify-between gap-6 text-[11px] text-slate-700">
+                  <div className="border-t border-slate-400 pt-1 flex-1 text-center">
+                    <span>Head Chef Signature</span>
+                  </div>
+                  <div className="border-t border-slate-400 pt-1 flex-1 text-center">
+                    <span>Manager / Owner Approval</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 flex justify-between">
+              <span>Generated via MenuSnap Kitchen Costing Studio</span>
+              <span>Confidential Restaurant Operating Record</span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-20 text-slate-500">
+            <p className="font-bold">No Dish Selected for Printing</p>
+            <p className="text-xs">Please select a dish from the Recipe Costing Studio before printing.</p>
+          </div>
+        )}
+      </div>
+      
+{/* Modal: Add New Ingredient                                */}
       {/* ======================================================== */}
       <Dialog open={isAddIngredientOpen} onOpenChange={setIsAddIngredientOpen}>
         <DialogContent className="sm:max-w-md">
@@ -1955,6 +2423,6 @@ export default function MagicCalculationPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }

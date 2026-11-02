@@ -40,6 +40,7 @@ export interface RecipeItem {
   packaging?: number; // packaging per plate
   other?: number; // gas & other per plate
   menuPrice?: number; // current menu price
+  targetFoodCost?: number; // target food cost % (e.g. 30%)
   lines: RecipeLine[];
 }
 
@@ -90,6 +91,11 @@ export interface CostBreakdown {
   menu: number; // Current menu price
   profit: number | null; // Net profit per plate
   fc: number | null; // Actual food cost %
+  targetFc: number; // Target food cost % (e.g. 30%)
+  recommendedPrice: number; // Recommended selling price based on target food cost %
+  ingPct: number; // Raw ingredients % of selling price (or of total cost)
+  extrasPct: number; // Packaging % of selling price (or of total cost)
+  profitMarginPct: number | null; // Net profit margin % of selling price
   st: 'good' | 'warn' | 'bad' | 'none';
   stLabel: string;
   missing: number;
@@ -123,9 +129,10 @@ export const SAMPLE_RECIPES: Record<string, RecipeItem> = {
     name: 'Beef Cheese Burger',
     category: 'Burgers',
     portions: 1,
-    packaging: 10,
+    packaging: 0,
     other: 4,
     menuPrice: 300,
+    targetFoodCost: 30,
     lines: [
       { ing: 'bun', qty: 1 },
       { ing: 'beefmince', qty: 120 },
@@ -140,9 +147,10 @@ export const SAMPLE_RECIPES: Record<string, RecipeItem> = {
     name: 'Chicken Pizza (10 inch)',
     category: 'Pizza',
     portions: 1,
-    packaging: 25,
+    packaging: 0,
     other: 15,
     menuPrice: 450,
+    targetFoodCost: 30,
     lines: [
       { ing: 'flour', qty: 250 },
       { ing: 'yeast', qty: 5 },
@@ -158,7 +166,7 @@ export const SAMPLE_RECIPES: Record<string, RecipeItem> = {
     name: 'Chicken Pizza (12 inch)',
     category: 'Pizza',
     portions: 1,
-    packaging: 35,
+    packaging: 0,
     other: 20,
     menuPrice: 650,
     lines: [
@@ -176,7 +184,7 @@ export const SAMPLE_RECIPES: Record<string, RecipeItem> = {
     name: 'Chicken Biryani Special',
     category: 'Rice & Biryani',
     portions: 10,
-    packaging: 15,
+    packaging: 0,
     other: 6,
     menuPrice: 220,
     lines: [
@@ -195,7 +203,7 @@ export const SAMPLE_RECIPES: Record<string, RecipeItem> = {
     name: 'Beef Tehari Traditional',
     category: 'Rice & Biryani',
     portions: 10,
-    packaging: 15,
+    packaging: 0,
     other: 6,
     menuPrice: 250,
     lines: [
@@ -300,12 +308,20 @@ export function calculateRecipeCost(
   });
 
   const ing = batch / portions;
-  const extras = Number(recipe.packaging) || 0;
-  const total = ing + extras;
+  const extras = 0;
+  const total = ing;
+
+  const targetFc = Number(recipe.targetFoodCost) > 0 ? Number(recipe.targetFoodCost) : 30;
+  const targetFcRatio = Math.max(targetFc, 1) / 100;
+  const recommendedPrice = total > 0 ? Math.round(total / targetFcRatio) : 0;
 
   const menu = Number(recipe.menuPrice) || 0;
   const profit = menu > 0 ? menu - total : null;
   const fc = menu > 0 && total > 0 ? (total / menu) * 100 : null;
+
+  const ingPct = menu > 0 ? (ing / menu) * 100 : (total > 0 ? (ing / total) * 100 : 0);
+  const extrasPct = 0;
+  const profitMarginPct = menu > 0 && profit !== null ? (profit / menu) * 100 : null;
 
   return {
     portions,
@@ -318,12 +334,17 @@ export function calculateRecipeCost(
     total,
     priceA: total,
     priceB: total,
-    suggested: total,
+    suggested: recommendedPrice,
     withVat: total,
     delivery: total,
     menu,
     profit,
     fc,
+    targetFc,
+    recommendedPrice,
+    ingPct,
+    extrasPct,
+    profitMarginPct,
     st: profit !== null && profit < 0 ? 'bad' : 'good',
     stLabel: profit !== null && profit < 0 ? 'Loss' : 'Profit',
     missing,

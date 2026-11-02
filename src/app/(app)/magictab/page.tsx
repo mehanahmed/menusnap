@@ -68,7 +68,7 @@ import * as z from "zod";
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { getCategoriesFromMySql, getMenuItemsFromMySql, getOrderItemsAndCategories } from '@/app/actions/orders';
 import { usePreferences } from '@/context/PreferencesContext';
-import { saveUserDraftAction } from '@/app/actions/user-drafts';
+import { saveUserDraftAction, getUserDraftByIdAction } from '@/app/actions/user-drafts';
 
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'colorHutCustomCategories';
@@ -857,9 +857,6 @@ export default function MagicTabPage() {
           .slice(0, packageLimits.categoryLimit);
       }
 
-      const allowedCatIdSet = new Set(allowedServerCategories.map(c => String(c.id).toLowerCase()));
-      const allowedCatNameSet = new Set(allowedServerCategories.map(c => decodeHtmlEntities(c.name).trim().toLowerCase()));
-
       // 2. Limit server items loaded from our system database according to packageLimits (per category)
       let allowedServerItems: MenuItem[] = [];
       const countPerCat = new Map<string, number>();
@@ -875,7 +872,6 @@ export default function MagicTabPage() {
           }
         }
 
-        // If server categories are limited, only keep items for the allowed server categories
         if (packageLimits && !packageLimits.isCategoryUnlimited && packageLimits.categoryLimit > 0 && !matchedCatId) {
           continue;
         }
@@ -919,6 +915,255 @@ export default function MagicTabPage() {
         }
       } catch {}
 
+      // Helpers for culinary matching
+      const cleanStr = (s: string) => decodeHtmlEntities(s || "")
+        .replace(/\s*\([^)]*\)/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+
+      const KEYWORD_MAP: Array<{ regex: RegExp; keywords: string[] }> = [
+        { regex: /\bpizza\b/i, keywords: ['pizza'] },
+        { regex: /\bburger\b/i, keywords: ['burger'] },
+        { regex: /\b(pasta|spaghetti|fettuccine|penne|lasagna)\b/i, keywords: ['pasta'] },
+        { regex: /\b(biryani|biriyani|tehari|kacchi|polao|khichuri)\b/i, keywords: ['biryani', 'biriyani', 'tehari'] },
+        { regex: /\b(chowmein|chow mein|noodle|noodles|ramen)\b/i, keywords: ['chowmein', 'ramen'] },
+        { regex: /\b(shawarma|sharma|doner|wrap|wraps)\b/i, keywords: ['shawarma', 'sharma'] },
+        { regex: /\b(kabab|kebab|tikka|sheek|boti)\b/i, keywords: ['kabab', 'kebab'] },
+        { regex: /\b(soup|soups)\b/i, keywords: ['soup'] },
+        { regex: /\b(salad|salads)\b/i, keywords: ['salad'] },
+        { regex: /\b(falooda|faluda)\b/i, keywords: ['falooda', 'faluda'] },
+        { regex: /\b(fuska|fuchka|chotpoti)\b/i, keywords: ['fuchka', 'fuska', 'chotpoti'] },
+        { regex: /\b(coffee|espresso|cappuccino|latte)\b/i, keywords: ['coffee'] },
+        { regex: /\b(momo|momos|dumpling|dumplings)\b/i, keywords: ['momo'] },
+        { regex: /\b(rice|fried rice)\b/i, keywords: ['rice'] },
+        { regex: /\b(wings|wing)\b/i, keywords: ['wings'] },
+        { regex: /\b(nachos|nacho)\b/i, keywords: ['nachos'] },
+        { regex: /\b(wonton|wanton)\b/i, keywords: ['wonton'] },
+        { regex: /\b(meat box|meatbox)\b/i, keywords: ['meatBox', 'meat box'] },
+        { regex: /\b(juice|shake|smoothie|lassi|mojito|beverage|drink|drinks)\b/i, keywords: ['drinks', 'juice', 'shake', 'lassi', 'milkShake', 'freshJuice'] },
+        { regex: /\b(waffle|waffles|pancake|dessert|ice cream|ice-cream|pastry|cake)\b/i, keywords: ['dessert', 'sweet'] },
+        { regex: /\b(appetizer|appetizers|starter|starters|finger food)\b/i, keywords: ['appetizers', 'starter', 'finger food'] },
+        { regex: /\b(combo|platter|set menu|setmenu|package)\b/i, keywords: ['setMenu', 'combo', 'platter', 'package'] },
+      ];
+
+      // Self-heal any previously miscategorized local items (e.g. pizzas mistakenly assigned to custom set menus)
+      let localItemsUpdated = false;
+      for (const it of localItems) {
+        if (it.category && (it.category.startsWith('custom-cat-') || it.category.toLowerCase().includes('set menu'))) {
+          for (const entry of KEYWORD_MAP) {
+            if (entry.regex.test(it.name)) {
+              const found = allowedServerCategories.find(c => {
+                const idClean = cleanStr(c.id);
+                const nameClean = cleanStr(c.name);
+                return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
+              });
+              if (found) {
+                it.category = String(found.id);
+                localItemsUpdated = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+      if (localItemsUpdated) {
+        try {
+          localStorage.setItem(`${CUSTOM_MENU_ITEMS_STORAGE_KEY}_${type}`, JSON.stringify(localItems));
+        } catch {}
+      }
+
+      // 5. RESTORE DRAFT: Synchronously process pending restore so all categories and items exist before rendering
+      let targetCategoryIdToActivate: string | null = null;
+      const draftIdToRestore = typeof window !== 'undefined' ? localStorage.getItem('draftToRestoreId') : null;
+
+      if (draftIdToRestore) {
+        localStorage.removeItem('draftToRestoreId');
+        try {
+          let draftToRestore: any = null;
+          const allDraftsRaw = localStorage.getItem(DRAFTS_STORAGE_KEY);
+          if (allDraftsRaw) {
+            const allDrafts = JSON.parse(allDraftsRaw);
+            draftToRestore = allDrafts.find((d: any) => String(d.id) === String(draftIdToRestore));
+          }
+
+          if (!draftToRestore) {
+            const dbDraftRes = await getUserDraftByIdAction(draftIdToRestore);
+            if (dbDraftRes?.success && dbDraftRes.draft) {
+              draftToRestore = {
+                id: dbDraftRes.draft.draftId,
+                name: dbDraftRes.draft.draftName,
+                items: dbDraftRes.draft.items,
+                primaryTag: dbDraftRes.draft.primaryTag,
+                businessType: dbDraftRes.draft.businessType,
+              };
+            }
+          }
+
+          if (draftToRestore && Array.isArray(draftToRestore.items) && draftToRestore.items.length > 0) {
+            const hasScannedItems = draftToRestore.items.some((i: any) => String(i.id).startsWith('scanned-'));
+            const isRestaurantDraft = hasScannedItems || draftToRestore.businessType === 'restaurant' || draftToRestore.primaryTag !== 'parlour';
+            const targetType: 'restaurant' | 'parlour' = isRestaurantDraft ? 'restaurant' : 'parlour';
+
+            // If restaurant draft restored while in parlour mode, switch to restaurant mode immediately
+            if (targetType !== type) {
+              setSelectedMenuType('restaurant');
+              loadData('restaurant');
+              return;
+            }
+
+            const newSelectedMap: Record<string, boolean> = {};
+
+            draftToRestore.items.forEach((item: any) => {
+              const itemName = String(item.name || "").trim();
+              const rawCat = String(item.category || item.categoryId || "General").trim();
+              const lowerName = itemName.toLowerCase();
+              const lowerCat = rawCat.toLowerCase();
+
+              let matchedCatId: string | null = null;
+
+              // A. Keyword match on item name (e.g. "Chicken Exotica Pizza" -> pizza)
+              for (const entry of KEYWORD_MAP) {
+                if (entry.regex.test(lowerName)) {
+                  const found = allowedServerCategories.find(c => {
+                    const idClean = cleanStr(c.id);
+                    const nameClean = cleanStr(c.name);
+                    return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
+                  }) || localCategories.find(c => {
+                    const idClean = cleanStr(c.id);
+                    const nameClean = cleanStr(c.name);
+                    return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
+                  });
+                  if (found) {
+                    matchedCatId = String(found.id);
+                    break;
+                  }
+                }
+              }
+
+              // B. Keyword match on category name
+              if (!matchedCatId && !rawCat.toLowerCase().startsWith('custom-cat-')) {
+                for (const entry of KEYWORD_MAP) {
+                  if (entry.regex.test(lowerCat)) {
+                    const found = allowedServerCategories.find(c => {
+                      const idClean = cleanStr(c.id);
+                      const nameClean = cleanStr(c.name);
+                      return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
+                    }) || localCategories.find(c => {
+                      const idClean = cleanStr(c.id);
+                      const nameClean = cleanStr(c.name);
+                      return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
+                    });
+                    if (found) {
+                      matchedCatId = String(found.id);
+                      break;
+                    }
+                  }
+                }
+              }
+
+              // C. Direct clean string match against server or existing local categories
+              if (!matchedCatId && rawCat && !rawCat.toLowerCase().startsWith('custom-cat-')) {
+                const targetClean = cleanStr(rawCat);
+                const found = allowedServerCategories.find(c => {
+                  const idClean = cleanStr(c.id);
+                  const nameClean = cleanStr(c.name);
+                  return idClean === targetClean || nameClean === targetClean ||
+                         nameClean.replace(/s$/, "") === targetClean.replace(/s$/, "") ||
+                         (targetClean.length >= 4 && (nameClean.includes(targetClean) || targetClean.includes(nameClean)));
+                }) || localCategories.find(c => {
+                  const idClean = cleanStr(c.id);
+                  const nameClean = cleanStr(c.name);
+                  return idClean === targetClean || nameClean === targetClean ||
+                         nameClean.replace(/s$/, "") === targetClean.replace(/s$/, "") ||
+                         (targetClean.length >= 4 && (nameClean.includes(targetClean) || targetClean.includes(nameClean)));
+                });
+                if (found) {
+                  matchedCatId = String(found.id);
+                }
+              }
+
+              // D. If item already had an existing custom category id in localCategories
+              if (!matchedCatId) {
+                const existing = localCategories.find(c => String(c.id) === rawCat);
+                if (existing) {
+                  matchedCatId = String(existing.id);
+                }
+              }
+
+              // E. Fallback: create brand new custom category
+              if (!matchedCatId) {
+                const formattedName = rawCat && !rawCat.toLowerCase().startsWith('custom-cat-') 
+                  ? (rawCat.charAt(0).toUpperCase() + rawCat.slice(1)) 
+                  : 'General';
+                const slug = customSlugify(formattedName) || 'general';
+                matchedCatId = `custom-cat-${slug}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                const newCat: Category = {
+                  id: matchedCatId,
+                  name: formattedName,
+                  icon: targetType === 'parlour' ? '✨' : '🍽️',
+                  visibleToUsers: true,
+                  itemCount: 0,
+                  createdAt: new Date().toISOString(),
+                  type: targetType,
+                } as any;
+                localCategories.push(newCat);
+              }
+
+              if (!targetCategoryIdToActivate) {
+                targetCategoryIdToActivate = matchedCatId;
+              }
+
+              // Also check if an exact match exists in server items
+              const matchingServerItem = allowedServerItems.find(mi =>
+                String(mi.category).toLowerCase() === matchedCatId?.toLowerCase() &&
+                cleanStr(mi.name) === cleanStr(itemName)
+              );
+              if (matchingServerItem) {
+                newSelectedMap[String(matchingServerItem.id)] = true;
+              }
+
+              // Register into local custom items
+              const itemToStore: MenuItem = {
+                id: String(item.id),
+                name: itemName,
+                price: Math.max(0, Number(item.price) || 0),
+                category: matchedCatId,
+                description: item.description || null,
+                subItems: Array.isArray(item.subItems) ? item.subItems : [],
+                visibleToUsers: true,
+                type: targetType,
+                createdAt: item.createdAt || new Date().toISOString(),
+              } as MenuItem & { type: string };
+
+              const existingIdx = localItems.findIndex(li => String(li.id) === String(item.id));
+              if (existingIdx > -1) {
+                localItems[existingIdx] = { ...localItems[existingIdx], ...itemToStore };
+              } else {
+                localItems.push(itemToStore);
+              }
+
+              newSelectedMap[String(item.id)] = true;
+            });
+
+            // Save updated local items and categories
+            localStorage.setItem(`${CUSTOM_CATEGORIES_STORAGE_KEY}_${targetType}`, JSON.stringify(localCategories));
+            localStorage.setItem(`${CUSTOM_MENU_ITEMS_STORAGE_KEY}_${targetType}`, JSON.stringify(localItems));
+
+            // Pre-select all restored items immediately
+            setSelectedItems(prev => ({ ...prev, ...newSelectedMap }));
+
+            toast({
+              title: "Draft Restored Successfully",
+              description: `Restored ${draftToRestore.items.length} items and categories into your ${targetType} menu.`,
+              variant: "success",
+            });
+          }
+        } catch (restoreErr) {
+          console.error("Error restoring draft inside loadData:", restoreErr);
+        }
+      }
+
       // Calculate item count per category
       const countByCatId = new Map<string, number>();
       for (const it of [...allowedServerItems, ...localItems]) {
@@ -946,6 +1191,10 @@ export default function MagicTabPage() {
       for (const cat of combinedCategories) {
         const idKey = String(cat.id).toLowerCase();
         const nameKey = decodeHtmlEntities(cat.name).trim().toLowerCase();
+        // Skip empty custom categories
+        if (idKey.startsWith('custom-cat-') && (!cat.itemCount || cat.itemCount <= 0)) {
+          continue;
+        }
         if (!seenCatIds.has(idKey) && !seenCatNames.has(nameKey)) {
           seenCatIds.add(idKey);
           seenCatNames.add(nameKey);
@@ -961,7 +1210,12 @@ export default function MagicTabPage() {
       });
 
       setApiCategories(uniqueCategories);
-      setActiveCategoryId(prev => (prev && uniqueCategories.some(c => c.id === prev) ? prev : uniqueCategories[0]?.id || null));
+      setActiveCategoryId(prev => {
+        if (targetCategoryIdToActivate && uniqueCategories.some(c => c.id === targetCategoryIdToActivate)) {
+          return targetCategoryIdToActivate;
+        }
+        return (prev && uniqueCategories.some(c => c.id === prev)) ? prev : (uniqueCategories[0]?.id || null);
+      });
       setAllMenuItems([...allowedServerItems, ...localItems]);
     } catch (err: any) {
       console.error("MagicTab Data Load Error:", err);
@@ -970,7 +1224,7 @@ export default function MagicTabPage() {
       setLoadingCategories(false);
       setLoadingItems(false);
     }
-  }, [packageLimits]);
+  }, [packageLimits, toast]);
 
   useEffect(() => {
     if (selectedMenuType && isSubscriber) {
@@ -978,52 +1232,13 @@ export default function MagicTabPage() {
     }
   }, [selectedMenuType, isSubscriber, loadData]);
 
-
-  // Effect to handle restoring a draft on page load
+  // Listener for draft restore requests across navigation
   useEffect(() => {
-    const draftIdToRestore = localStorage.getItem('draftToRestoreId');
-    if (draftIdToRestore) {
-      // Remove the key immediately to prevent re-triggering on refresh
-      localStorage.removeItem('draftToRestoreId');
-      try {
-        const allDraftsRaw = localStorage.getItem(DRAFTS_STORAGE_KEY);
-        if (allDraftsRaw) {
-          const allDrafts = JSON.parse(allDraftsRaw);
-          const draftToRestore = allDrafts.find((d: any) => d.id === draftIdToRestore);
-
-          if (draftToRestore) {
-            if (draftToRestore.primaryTag) {
-              setSelectedMenuType(draftToRestore.primaryTag);
-            }
-            if (Array.isArray(draftToRestore.items)) {
-              const itemIds = draftToRestore.items.map((item: { id: string }) => item.id);
-              setItemsToSelectFromDraft(itemIds);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Failed to restore draft:", e);
-      }
+    if (typeof window !== 'undefined' && localStorage.getItem('draftToRestoreId') && isSubscriber && selectedMenuType) {
+      loadData(selectedMenuType);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only on mount
+  }, [isSubscriber, selectedMenuType, loadData]);
 
-  // Effect to apply selections after data has finished loading
-  useEffect(() => {
-    const loading = loadingCategories || loadingItems;
-    if (!loading && itemsToSelectFromDraft) {
-      const newSelectedItems: Record<string, boolean> = {};
-      itemsToSelectFromDraft.forEach(itemId => {
-        // Only select items that exist in the currently loaded menu items
-        if (allMenuItems.some(menuItem => String(menuItem.id) === String(itemId))) {
-          newSelectedItems[String(itemId)] = true;
-        }
-      });
-      setSelectedItems(newSelectedItems);
-      // Reset the pending selection state
-      setItemsToSelectFromDraft(null);
-    }
-  }, [loadingCategories, loadingItems, itemsToSelectFromDraft, allMenuItems]);
 
 
   const handleOpenAddItem = () => {

@@ -186,7 +186,14 @@ function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, mas
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => onShare(draft)} aria-label="Share draft" title="Share Draft">
               <Share2 className="h-3.5 w-3.5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => console.log("Redo draft:", draft.id)} aria-label="Redo draft">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-primary"
+              onClick={() => onRestore(draft.id)}
+              aria-label="Restore draft"
+              title="Restore to MagicTab"
+            >
               <RotateCcw className="h-3.5 w-3.5" />
             </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => onDelete(draft.id)} aria-label="Delete draft">
@@ -475,6 +482,39 @@ export default function DraftPage(): ReactNode {
     }
   };
 
+  const handleShareDraft = (draft: DraftItem) => {
+    setSelectedDraftForShare(draft);
+    if (typeof window !== 'undefined') {
+      const shareUrl = `${window.location.origin}/draft/view/${draft.id}`;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(shareUrl).then(() => {
+            toast({
+              title: "Draft Link Copied!",
+              description: "Shareable link copied to clipboard. Opening menu sheet...",
+            });
+          }).catch(() => {});
+        } else {
+          const textArea = document.createElement('textarea');
+          textArea.value = shareUrl;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          textArea.setAttribute('readonly', '');
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          toast({
+            title: "Draft Link Copied!",
+            description: "Shareable link copied to clipboard. Opening menu sheet...",
+          });
+        }
+      } catch {}
+    }
+  };
+
   const handleDeleteDraft = (id: string) => {
     const draftName = drafts.find(d => d.id === id)?.name || "Draft";
 
@@ -589,7 +629,7 @@ export default function DraftPage(): ReactNode {
               onDelete={handleDeleteDraft}
               onToggleExpand={handleToggleExpand}
               masterCategoryList={masterCategoryList}
-              onShare={setSelectedDraftForShare}
+              onShare={handleShareDraft}
             />
           ))
         )}

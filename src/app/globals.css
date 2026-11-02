@@ -145,6 +145,34 @@
       print-color-adjust: exact;
       -webkit-print-color-adjust: exact;
     }
+
+    /* Global cleanup of all website chrome, floating widgets, and navigation */
+    .rd-navbar_wrapper,
+    [data-sidebar="sidebar"],
+    [class*="SpeedDialFAB"],
+    [class*="whatsapp"],
+    [class*="WhatsAppFloat"],
+    .fixed,
+    .print-hidden,
+    .print\:hidden {
+      display: none !important;
+    }
+
+    /* Full-bleed clean white page without clipping */
+    html, body {
+      background: #ffffff !important;
+      color: #000000 !important;
+      height: auto !important;
+      min-height: 100% !important;
+      overflow: visible !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    @page {
+      size: auto;
+      margin: 10mm 12mm;
+    }
   }
 
   .marquee {

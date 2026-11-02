@@ -152,7 +152,7 @@ export function MenuScannerDialog({
       });
 
       formData.append('draftName', draftName.trim());
-      formData.append('businessType', businessType);
+      formData.append('businessType', 'restaurant');
       formData.append('businessName', clientUser?.businessName || '');
       formData.append('whatsappNumber', clientUser?.whatsappNumber || '');
       formData.append('email', clientUser?.email || '');
@@ -176,6 +176,91 @@ export function MenuScannerDialog({
         localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(drafts));
       } catch (storageErr) {
         console.error("Failed to write new draft to local storage:", storageErr);
+      }
+
+      // Register scanned items and categories into local restaurant custom catalog
+      try {
+        const catStorageKey = 'colorHutCustomCategories_restaurant';
+        const itemStorageKey = 'colorHutCustomMenuItems_restaurant';
+
+        const localCatsRaw = localStorage.getItem(catStorageKey) || '[]';
+        let localCats: any[] = [];
+        try { localCats = JSON.parse(localCatsRaw); if (!Array.isArray(localCats)) localCats = []; } catch { localCats = []; }
+
+        const localItemsRaw = localStorage.getItem(itemStorageKey) || '[]';
+        let localItems: any[] = [];
+        try { localItems = JSON.parse(localItemsRaw); if (!Array.isArray(localItems)) localItems = []; } catch { localItems = []; }
+
+        const catMap = new Map<string, string>();
+
+        (createdDraft.items || []).forEach((item: any) => {
+          const rawCat = (item.category || item.categoryId || 'General').trim();
+          const lowerCat = rawCat.toLowerCase();
+          const lowerName = String(item.name || '').toLowerCase();
+
+          // Check culinary keyword from item name first
+          let culinaryCategory = '';
+          if (/\bpizza\b/i.test(lowerName)) culinaryCategory = 'pizza';
+          else if (/\bburger\b/i.test(lowerName)) culinaryCategory = 'burger';
+          else if (/\b(pasta|spaghetti|fettuccine)\b/i.test(lowerName)) culinaryCategory = 'pasta';
+          else if (/\b(biryani|biriyani|tehari)\b/i.test(lowerName)) culinaryCategory = 'biryani';
+          else if (/\b(shawarma|sharma)\b/i.test(lowerName)) culinaryCategory = 'shawarma';
+          else if (/\bfalooda\b/i.test(lowerName)) culinaryCategory = 'falooda';
+          else if (/\b(chowmein|noodle)\b/i.test(lowerName)) culinaryCategory = 'chowmein';
+          else if (/\bsoup\b/i.test(lowerName)) culinaryCategory = 'soup';
+          else if (/\bsalad\b/i.test(lowerName)) culinaryCategory = 'salad';
+          else if (/\bcoffee\b/i.test(lowerName)) culinaryCategory = 'coffee';
+
+          let catId = culinaryCategory || catMap.get(lowerCat);
+          if (!catId) {
+            const existingCat = localCats.find(c => 
+              c.id?.toLowerCase() === lowerCat || 
+              (c.name && c.name.trim().toLowerCase() === lowerCat)
+            );
+
+            if (existingCat) {
+              catId = String(existingCat.id);
+            } else {
+              const formattedName = rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+              const slug = formattedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'general';
+              catId = `custom-cat-${slug}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+              localCats.push({
+                id: catId,
+                name: formattedName,
+                icon: '🍽️',
+                visibleToUsers: true,
+                itemCount: 0,
+                createdAt: new Date().toISOString(),
+                type: 'restaurant',
+              });
+            }
+            catMap.set(lowerCat, catId);
+          }
+
+          const existingItemIdx = localItems.findIndex(li => String(li.id) === String(item.id));
+          const itemPayload = {
+            id: String(item.id),
+            name: item.name,
+            price: Math.max(0, Number(item.price) || 0),
+            category: catId,
+            description: item.description || null,
+            subItems: Array.isArray(item.subItems) ? item.subItems : [],
+            visibleToUsers: true,
+            type: 'restaurant',
+            createdAt: new Date().toISOString(),
+          };
+
+          if (existingItemIdx > -1) {
+            localItems[existingItemIdx] = itemPayload;
+          } else {
+            localItems.push(itemPayload);
+          }
+        });
+
+        localStorage.setItem(catStorageKey, JSON.stringify(localCats));
+        localStorage.setItem(itemStorageKey, JSON.stringify(localItems));
+      } catch (catErr) {
+        console.warn("Failed to pre-register custom categories and items:", catErr);
       }
 
       toast({

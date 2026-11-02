@@ -154,7 +154,7 @@ export function DraftShareDialog({
     Object.entries(groupedItems).forEach(([categoryName, items]) => {
       lines.push(`--- ${categoryName} ---`);
       items.forEach((item) => {
-        lines.push(`• ${decodeHtmlEntities(item.name)}: ${currencySymbol}${item.price.toLocaleString()}`);
+        lines.push(`• ${decodeHtmlEntities(item.name)}: ${currencySymbol}${(Number(item.price) || 0).toLocaleString()}`);
         if (item.description) {
           lines.push(`  ${decodeHtmlEntities(item.description)}`);
         }
@@ -179,22 +179,46 @@ export function DraftShareDialog({
       }
     }
 
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    let copiedSuccessfully = false;
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(fullText);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
-        toast({
-          title: 'Menu Copied to Clipboard!',
-          description: 'Shareable menu text and link copied, ready to send via WhatsApp or chat.',
-        });
+        copiedSuccessfully = true;
       } catch {
-        toast({
-          title: 'Copy Failed',
-          description: 'Could not copy menu to clipboard.',
-          variant: 'destructive',
-        });
+        copiedSuccessfully = false;
       }
+    }
+
+    if (!copiedSuccessfully && typeof document !== 'undefined') {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = fullText;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        textArea.setAttribute('readonly', '');
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        copiedSuccessfully = document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch {}
+    }
+
+    if (copiedSuccessfully) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+      toast({
+        title: 'Menu Copied to Clipboard!',
+        description: 'Shareable menu text and link copied, ready to send via WhatsApp or chat.',
+      });
+    } else {
+      toast({
+        title: 'Copy Failed',
+        description: 'Could not copy menu to clipboard.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -227,7 +251,19 @@ export function DraftShareDialog({
               className="bg-card hover:bg-muted font-medium gap-2 shadow-sm text-xs sm:text-sm"
             >
               {copied ? <Check className="h-4 w-4 text-green-500" /> : <Share2 className="h-4 w-4 text-primary" />}
-              {copied ? 'Copied!' : 'Share'}
+              {copied ? 'Copied!' : 'Share Text'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/draft/view/${draft.id}` : '';
+                const waText = encodeURIComponent(`Menu Selection for: ${businessName}\nView menu sheet: ${shareUrl}`);
+                window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
+              }}
+              className="bg-card hover:bg-muted font-medium gap-1.5 shadow-sm text-xs sm:text-sm text-green-600 hover:text-green-700"
+            >
+              <span className="text-sm">💬</span> WhatsApp
             </Button>
             <Link href={`/draft/view/${draft.id}`} target="_blank" className="hidden sm:inline-flex">
               <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground">
