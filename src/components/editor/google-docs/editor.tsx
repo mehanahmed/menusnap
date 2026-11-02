@@ -376,6 +376,7 @@ interface EditorProps {
     readOnly?: boolean;
     showWatermark?: boolean;
     customPaperHeader?: React.ReactNode;
+    customPaperFooter?: React.ReactNode;
     tabStops?: { position: number, type: 'left' | 'center' | 'right' }[];
     docId?: string;
     socket?: Socket | null;
@@ -395,6 +396,7 @@ function GoogleDocsEditorInner({
     readOnly = false, 
     showWatermark = false, 
     customPaperHeader, 
+    customPaperFooter, 
     tabStops = [], 
     docId,
     socket,
@@ -629,9 +631,10 @@ function GoogleDocsEditorInner({
         <div className="flex justify-center w-full bg-[#f8f9fa] min-h-full relative">
 
             <div className="mt-2 sm:mt-4 mb-10 w-full max-w-[816px] mx-auto px-0 sm:px-4">
-                <div className={`bg-white shadow-xl border border-gray-200 w-full ${showWatermark ? 'bg-watermark' : ''}`}>
+                <div className={`bg-white shadow-xl border border-gray-200 w-full relative ${showWatermark ? 'bg-watermark' : ''}`}>
                     {customPaperHeader}
                     <EditorContent editor={editor} />
+                    {customPaperFooter}
                 </div>
             </div>
         </div>

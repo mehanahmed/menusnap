@@ -1,12 +1,15 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 interface RulerProps {
     onMarginsChange?: (margins: { left: number, right: number, indent: number, tabStops: any[] }) => void
+    onToggleOutline?: () => void
+    isOutlineOpen?: boolean
 }
 
-export default function Ruler({ onMarginsChange }: RulerProps) {
+export default function Ruler({ onMarginsChange, onToggleOutline, isOutlineOpen = true }: RulerProps) {
     // Current positions in px relative to the 816px page
     const [leftMargin, setLeftMargin] = useState(56) // ~1.5 units * PX_PER_UNIT
     const [rightMargin, setRightMargin] = useState(760) // ~16.5 units * PX_PER_UNIT
@@ -119,7 +122,21 @@ export default function Ruler({ onMarginsChange }: RulerProps) {
     }
 
     return (
-        <div className="w-full bg-[#f8f9fa] border-b border-gray-300 relative select-none overflow-visible" style={{ height: '32px' }}>
+        <div className="w-full bg-[#f8f9fa] border-b border-gray-300 relative select-none overflow-visible flex items-center" style={{ height: '32px' }}>
+            {onToggleOutline && (
+                <button
+                    type="button"
+                    onClick={onToggleOutline}
+                    className="absolute left-2 top-1.5 p-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-800 transition-colors z-20 flex items-center justify-center cursor-pointer"
+                    title={isOutlineOpen ? 'Hide tabs & outline' : 'Show tabs & outline'}
+                >
+                    {isOutlineOpen ? (
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                    ) : (
+                        <ArrowRight className="w-3.5 h-3.5" />
+                    )}
+                </button>
+            )}
             <div
                 ref={rulerRef}
                 className="mx-auto relative h-full flex items-end cursor-crosshair"
