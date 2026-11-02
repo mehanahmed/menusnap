@@ -1,13 +1,13 @@
 "use client"
 
 import dynamic from 'next/dynamic'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Header from './header'
 import Toolbar from './toolbar'
 import Ruler from './ruler'
 import FindReplace from './find-replace'
 import FindReplaceDialog from './find-replace-dialog'
-import OutlineSidebar from './outline-sidebar'
+import OutlineSidebar, { DocumentTab } from './outline-sidebar'
 import {
   WordCountDialog,
   PageSetupDialog,
@@ -16,6 +16,8 @@ import {
   CommandSearchDialog,
   PageNumbersDialog,
   PageNumberConfig,
+  HeaderFooterDialog,
+  HeaderFooterConfig,
 } from './editor-dialogs'
 import { Editor } from '@tiptap/react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -75,6 +77,41 @@ function getSocketUrl(): string {
   return window.location.origin
 }
 
+
+function parseInitialTabs(initialContent?: string, initialTitle?: string): { tabs: DocumentTab[]; activeTabId: string } {
+  if (initialContent) {
+    const match = initialContent.match(/<!--MENUSNAP_DOC_TABS:([\s\S]*?)-->/)
+    if (match && match[1]) {
+      try {
+        const parsed = JSON.parse(match[1])
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return { tabs: parsed, activeTabId: parsed[0].id }
+        }
+      } catch (e) {
+        console.error('Failed to parse doc tabs:', e)
+      }
+    }
+  }
+  return {
+    tabs: [{ id: 'tab-1', title: initialTitle || 'Tab 1', content: initialContent || '' }],
+    activeTabId: 'tab-1',
+  }
+}
+
+function serializeContentWithTabs(tabs: DocumentTab[], activeTabId: string): string {
+  if (tabs.length <= 1) {
+    return (tabs[0]?.content || '').replace(/<!--MENUSNAP_DOC_TABS:[\s\S]*?-->/g, '')
+  }
+  const cleanTabs = tabs.map((t) => ({
+    id: t.id,
+    title: t.title,
+    content: t.content.replace(/<!--MENUSNAP_DOC_TABS:[\s\S]*?-->/g, ''),
+  }))
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0]
+  const cleanActiveContent = (activeTab?.content || '').replace(/<!--MENUSNAP_DOC_TABS:[\s\S]*?-->/g, '')
+  return `<!--MENUSNAP_DOC_TABS:${JSON.stringify(cleanTabs)}-->\n${cleanActiveContent}`
+}
+
 export default function GoogleDocsApp({
   initialTitle = 'Untitled Document',
   initialContent = '',
@@ -108,10 +145,49 @@ export default function GoogleDocsApp({
 }) {
   const [editorMode, setEditorMode] = useState<'google-docs' | 'summernote'>('google-docs')
   const [title, setTitle] = useState(initialTitle)
-  const [content, setContent] = useState(initialContent)
+
+  // Track active tab with refs to guarantee ZERO data loss across tab switches
+  const activeTabIdRef = useRef<string>('tab-1')
+  const tabsRef = useRef<DocumentTab[]>([])
+  const isSwitchingTabRef = useRef<boolean>(false)
+  const isInitializedRef = useRef<boolean>(false)
+
+  const [tabs, setTabs] = useState<DocumentTab[]>(() => {
+    const parsed = parseInitialTabs(initialContent, initialTitle)
+    activeTabIdRef.current = parsed.activeTabId
+    tabsRef.current = parsed.tabs
+    return parsed.tabs
+  })
+  const [activeTabId, setActiveTabId] = useState<string>(activeTabIdRef.current)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [currentReadOnly, setCurrentReadOnly] = useState(readOnly)
+  const [content, setContent] = useState<string>(() => {
+    const active = tabsRef.current.find((t) => t.id === activeTabIdRef.current)
+    return active?.content || initialContent || ''
+  })
+
+  // Keep tabsRef in sync with state
+  useEffect(() => {
+    tabsRef.current = tabs
+  }, [tabs])
+
+  // Handle initial async content from DB without overwriting tabs
+  useEffect(() => {
+    if (!isInitializedRef.current && initialContent) {
+      isInitializedRef.current = true
+      const parsed = parseInitialTabs(initialContent, initialTitle)
+      tabsRef.current = parsed.tabs
+      activeTabIdRef.current = parsed.activeTabId
+      setTabs(parsed.tabs)
+      setActiveTabId(parsed.activeTabId)
+      const activeContent = parsed.tabs.find((t) => t.id === parsed.activeTabId)?.content || initialContent
+      setContent(activeContent)
+      if (editor) {
+        editor.commands.setContent(activeContent, { emitUpdate: false })
+      }
+    }
+  }, [initialContent, initialTitle, editor])
 
   // Layout & Visibility States
   const [isRulerVisible, setIsRulerVisible] = useState(!hideRuler)
@@ -128,6 +204,16 @@ export default function GoogleDocsApp({
   const [isImageUploadOpen, setIsImageUploadOpen] = useState(false)
   const [isCommandSearchOpen, setIsCommandSearchOpen] = useState(false)
   const [isPageNumbersOpen, setIsPageNumbersOpen] = useState(false)
+  const [isHeaderFooterDialogOpen, setIsHeaderFooterDialogOpen] = useState(false)
+  const [headerFooterConfig, setHeaderFooterConfig] = useState<HeaderFooterConfig>({
+    headerText: '',
+    footerText: '',
+    showPageNumber: true,
+    pageNumberPosition: 'header',
+    showOnFirstPage: true,
+  })
+  const headerInputRef = useRef<HTMLInputElement>(null)
+  const footerInputRef = useRef<HTMLInputElement>(null)
   const [pageNumberConfig, setPageNumberConfig] = useState<PageNumberConfig>({
     enabled: true,
     position: 'header',
@@ -145,6 +231,15 @@ export default function GoogleDocsApp({
     pageColor: '#ffffff',
     margins: { top: 1, bottom: 1, left: 1, right: 1 },
   })
+
+
+  const handleFocusHeaderFooter = useCallback((type: 'header' | 'footer') => {
+    if (type === 'header') {
+      setTimeout(() => headerInputRef.current?.focus(), 60)
+    } else {
+      setTimeout(() => footerInputRef.current?.focus(), 60)
+    }
+  }, [])
 
   // Collaboration Socket State
   const [socket, setSocket] = useState<Socket | null>(null)
@@ -265,20 +360,169 @@ export default function GoogleDocsApp({
   // Handle autosave
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (title && content) {
+      if (title) {
         setIsSaving(true)
-        if (onSave) onSave({ title, content })
+        const serialized = serializeContentWithTabs(tabs, activeTabId)
+        if (onSave) onSave({ title, content: serialized })
         setTimeout(() => setIsSaving(false), 500)
       }
     }, 2000)
 
     return () => clearTimeout(timer)
-  }, [title, content, onSave])
+  }, [title, tabs, activeTabId, onSave])
 
   // Title sync
   useEffect(() => {
     document.title = `${title} | MenuSnap`
   }, [title])
+
+
+  const handleContentChange = useCallback((newHtml: string) => {
+    if (isSwitchingTabRef.current) return
+    setContent(newHtml)
+    const currentTabId = activeTabIdRef.current
+    setTabs((prev) => {
+      const updated = prev.map((t) => (t.id === currentTabId ? { ...t, content: newHtml } : t))
+      tabsRef.current = updated
+      return updated
+    })
+    if (onUpdateContent) onUpdateContent(newHtml)
+  }, [onUpdateContent])
+
+  const handleAddTab = useCallback(() => {
+    const currentHtml = editor ? editor.getHTML() : content
+    const currentTabId = activeTabIdRef.current
+    const currentTabs = tabsRef.current
+
+    const newId = `tab-${Date.now()}`
+    const newTitle = `Tab ${currentTabs.length + 1}`
+    const newTab: DocumentTab = {
+      id: newId,
+      title: newTitle,
+      content: '<p></p>',
+    }
+
+    const updatedTabs = currentTabs.map((t) => (t.id === currentTabId ? { ...t, content: currentHtml } : t))
+    const allTabs = [...updatedTabs, newTab]
+
+    isSwitchingTabRef.current = true
+    activeTabIdRef.current = newId
+    tabsRef.current = allTabs
+    setTabs(allTabs)
+    setActiveTabId(newId)
+    setContent('<p></p>')
+
+    if (editor) {
+      editor.commands.setContent('<p></p>', { emitUpdate: false })
+      editor.commands.focus()
+    }
+
+    setTimeout(() => {
+      isSwitchingTabRef.current = false
+    }, 100)
+  }, [editor, content])
+
+  const handleSelectTab = useCallback((targetTabId: string) => {
+    if (targetTabId === activeTabIdRef.current) return
+
+    const currentHtml = editor ? editor.getHTML() : content
+    const currentTabId = activeTabIdRef.current
+    const currentTabs = tabsRef.current
+
+    const updatedTabs = currentTabs.map((t) => (t.id === currentTabId ? { ...t, content: currentHtml } : t))
+    const targetTab = updatedTabs.find((t) => t.id === targetTabId)
+    if (!targetTab) return
+
+    isSwitchingTabRef.current = true
+    activeTabIdRef.current = targetTabId
+    tabsRef.current = updatedTabs
+    setTabs(updatedTabs)
+    setActiveTabId(targetTabId)
+    setContent(targetTab.content)
+
+    if (editor) {
+      editor.commands.setContent(targetTab.content, { emitUpdate: false })
+      editor.commands.focus()
+    }
+
+    setTimeout(() => {
+      isSwitchingTabRef.current = false
+    }, 100)
+  }, [editor, content])
+
+  const handleRenameTab = useCallback((tabId: string, newTitle: string) => {
+    const cleanTitle = newTitle.trim()
+    if (!cleanTitle) return
+    setTabs((prev) => {
+      const updated = prev.map((t) => (t.id === tabId ? { ...t, title: cleanTitle } : t))
+      tabsRef.current = updated
+      return updated
+    })
+  }, [])
+
+  const handleDuplicateTab = useCallback((tabId: string) => {
+    const currentHtml = editor ? editor.getHTML() : content
+    const currentTabId = activeTabIdRef.current
+    const currentTabs = tabsRef.current
+    const targetTab = currentTabs.find((t) => t.id === tabId)
+    if (!targetTab) return
+
+    const tabContent = tabId === currentTabId ? currentHtml : targetTab.content
+    const newId = `tab-${Date.now()}`
+    const newTab: DocumentTab = {
+      id: newId,
+      title: `${targetTab.title} (Copy)`,
+      content: tabContent,
+    }
+
+    const index = currentTabs.findIndex((t) => t.id === tabId)
+    const updatedCurrent = currentTabs.map((t) => (t.id === currentTabId ? { ...t, content: currentHtml } : t))
+    const newTabs = [...updatedCurrent]
+    newTabs.splice(index + 1, 0, newTab)
+
+    isSwitchingTabRef.current = true
+    activeTabIdRef.current = newId
+    tabsRef.current = newTabs
+    setTabs(newTabs)
+    setActiveTabId(newId)
+    setContent(newTab.content)
+
+    if (editor) {
+      editor.commands.setContent(newTab.content, { emitUpdate: false })
+      editor.commands.focus()
+    }
+
+    setTimeout(() => {
+      isSwitchingTabRef.current = false
+    }, 100)
+  }, [editor, content])
+
+  const handleDeleteTab = useCallback((tabId: string) => {
+    const currentTabs = tabsRef.current
+    if (currentTabs.length <= 1) return
+    const remaining = currentTabs.filter((t) => t.id !== tabId)
+    if (activeTabIdRef.current === tabId) {
+      const nextActive = remaining[0]
+      isSwitchingTabRef.current = true
+      activeTabIdRef.current = nextActive.id
+      tabsRef.current = remaining
+      setTabs(remaining)
+      setActiveTabId(nextActive.id)
+      setContent(nextActive.content)
+
+      if (editor) {
+        editor.commands.setContent(nextActive.content, { emitUpdate: false })
+        editor.commands.focus()
+      }
+
+      setTimeout(() => {
+        isSwitchingTabRef.current = false
+      }, 100)
+    } else {
+      tabsRef.current = remaining
+      setTabs(remaining)
+    }
+  }, [editor])
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -320,7 +564,7 @@ export default function GoogleDocsApp({
   }
 
   // Open Dialog router
-  const handleOpenDialog = (dialog: 'wordcount' | 'pagesetup' | 'shortcuts' | 'image' | 'findreplace' | 'pagenumbers') => {
+  const handleOpenDialog = (dialog: 'wordcount' | 'pagesetup' | 'shortcuts' | 'image' | 'findreplace' | 'pagenumbers' | 'headerfooter') => {
     if (dialog === 'wordcount') setIsWordCountOpen(true)
     else if (dialog === 'pagesetup') setIsPageSetupOpen(true)
     else if (dialog === 'shortcuts') setIsShortcutsOpen(true)
@@ -377,6 +621,7 @@ export default function GoogleDocsApp({
             isOutlineVisible={isOutlineOpen}
             isPageless={isPageless}
             onTogglePageless={() => setIsPageless((prev) => !prev)}
+            onFocusHeaderFooter={handleFocusHeaderFooter}
             orientation={pageSettings.orientation}
             onToggleOrientation={() => setPageSettings(prev => ({ ...prev, orientation: prev.orientation === 'portrait' ? 'landscape' : 'portrait' }))}
             columnCount={columnCount}
@@ -419,6 +664,13 @@ export default function GoogleDocsApp({
             isOpen={isOutlineOpen}
             onToggle={() => setIsOutlineOpen((prev) => !prev)}
             documentTitle={title}
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelectTab={handleSelectTab}
+            onAddTab={handleAddTab}
+            onRenameTab={handleRenameTab}
+            onDuplicateTab={handleDuplicateTab}
+            onDeleteTab={handleDeleteTab}
           />
         )}
 
@@ -433,8 +685,7 @@ export default function GoogleDocsApp({
                   hideRuler={!isRulerVisible}
                   minHeight={500}
                   onChange={(html) => {
-                    setContent(html)
-                    if (onUpdateContent) onUpdateContent(html)
+                    handleContentChange(html)
                   }}
                 />
               </div>
@@ -446,24 +697,49 @@ export default function GoogleDocsApp({
                   transformOrigin: 'top center',
                 }}
               >
-                <div
-                  style={{
-                    maxWidth: isPageless ? '100%' : maxPaperWidth,
-                    backgroundColor: pageSettings.pageColor,
-                    columnCount: columnCount > 1 ? columnCount : undefined,
-                    columnGap: '2.5rem',
-                  }}
-                  className={`w-full transition-all duration-200 print:shadow-none print:border-none ${isPageless ? 'shadow-none border-none max-w-5xl px-8 py-6' : 'shadow-lg rounded-xs border border-gray-200'}`}
-                >
-                  <EditorComponent
-                    content={content}
-                    onChange={setContent}
-                    onReady={setEditor}
-                    readOnly={currentReadOnly}
-                    showWatermark={showWatermark}
-                    customPaperHeader={
-                      customPaperHeader || (pageNumberConfig.enabled && pageNumberConfig.position === 'header' && pageNumberConfig.showOnFirstPage ? (
-                        <div className="w-full flex justify-end px-12 sm:px-16 pt-5 pb-1 text-xs text-gray-500 font-sans select-none print:px-8 print:pt-4">
+                <EditorComponent
+                  content={content}
+                  onChange={handleContentChange}
+                  onReady={setEditor}
+                  readOnly={currentReadOnly}
+                  showWatermark={showWatermark}
+                  customPaperHeader={
+                    customPaperHeader || (
+                      <div className="w-full px-12 sm:px-16 pt-5 pb-2 text-xs text-gray-500 font-sans border-b border-transparent hover:border-blue-200/60 focus-within:border-blue-400 transition-colors flex items-center justify-between group print:px-8 print:pt-4">
+                        <input
+                          ref={headerInputRef}
+                          type="text"
+                          value={headerFooterConfig.headerText}
+                          onChange={(e) => setHeaderFooterConfig((prev) => ({ ...prev, headerText: e.target.value }))}
+                          placeholder="Header (click to edit)..."
+                          className="bg-transparent border-none outline-none text-xs text-gray-700 placeholder:text-gray-300 focus:placeholder:text-gray-400 flex-1 mr-4 focus:text-gray-900 font-sans"
+                        />
+                        <div className="flex items-center gap-2 shrink-0">
+                          {headerFooterConfig.showPageNumber && headerFooterConfig.pageNumberPosition === 'header' && (
+                            <span
+                              onClick={() => setIsPageNumbersOpen(true)}
+                              className="cursor-pointer hover:bg-gray-100 hover:text-blue-600 px-1.5 py-0.5 rounded transition-colors text-xs font-normal"
+                              title="Page numbers (click to configure)"
+                            >
+                              {pageNumberConfig.startAt}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+                  customPaperFooter={
+                    <div className="w-full px-12 sm:px-16 pb-6 pt-3 text-xs text-gray-500 font-sans border-t border-transparent hover:border-blue-200/60 focus-within:border-blue-400 transition-colors flex items-center justify-between group print:px-8 print:pb-4">
+                      <input
+                        ref={footerInputRef}
+                        type="text"
+                        value={headerFooterConfig.footerText}
+                        onChange={(e) => setHeaderFooterConfig((prev) => ({ ...prev, footerText: e.target.value }))}
+                        placeholder="Footer (click to edit)..."
+                        className="bg-transparent border-none outline-none text-xs text-gray-700 placeholder:text-gray-300 focus:placeholder:text-gray-400 flex-1 mr-4 focus:text-gray-900 font-sans"
+                      />
+                      <div className="flex items-center gap-2 shrink-0">
+                        {headerFooterConfig.showPageNumber && headerFooterConfig.pageNumberPosition === 'footer' && (
                           <span
                             onClick={() => setIsPageNumbersOpen(true)}
                             className="cursor-pointer hover:bg-gray-100 hover:text-blue-600 px-1.5 py-0.5 rounded transition-colors text-xs font-normal"
@@ -471,29 +747,21 @@ export default function GoogleDocsApp({
                           >
                             {pageNumberConfig.startAt}
                           </span>
-                        </div>
-                      ) : null)
-                    }
-                    customPaperFooter={
-                      pageNumberConfig.enabled && pageNumberConfig.position === 'footer' && pageNumberConfig.showOnFirstPage ? (
-                        <div className="w-full flex justify-end px-12 sm:px-16 pb-6 pt-3 text-xs text-gray-500 font-sans select-none print:px-8 print:pb-4">
-                          <span
-                            onClick={() => setIsPageNumbersOpen(true)}
-                            className="cursor-pointer hover:bg-gray-100 hover:text-blue-600 px-1.5 py-0.5 rounded transition-colors text-xs font-normal"
-                            title="Page numbers (click to configure)"
-                          >
-                            {pageNumberConfig.startAt}
-                          </span>
-                        </div>
-                      ) : null
-                    }
-                    tabStops={margins.tabStops}
-                    docId={docId}
-                    socket={socket}
-                    onlineUsers={onlineUsers}
-                    onUpdateContent={onUpdateContent}
-                  />
-                </div>
+                        )}
+                      </div>
+                    </div>
+                  }
+                  tabStops={margins.tabStops}
+                  docId={docId}
+                  socket={socket}
+                  onlineUsers={onlineUsers}
+                  onUpdateContent={onUpdateContent}
+                  columnCount={columnCount}
+                  maxPaperWidth={maxPaperWidth}
+                  pageColor={pageSettings.pageColor}
+                  isPageless={isPageless}
+                  activeTabId={activeTabId}
+                />
               </div>
             )}
           </div>
@@ -589,7 +857,58 @@ export default function GoogleDocsApp({
           height: 0;
         }
 
+
+        /* Page break in web view: visually divides the page like Google Docs */
+        .doc-page-break {
+          position: relative;
+          display: block;
+          width: calc(100% + var(--editor-left-margin, 56px) + var(--editor-right-margin, 56px));
+          margin-left: calc(-1 * var(--editor-left-margin, 56px));
+          margin-right: calc(-1 * var(--editor-right-margin, 56px));
+          margin-top: 2rem;
+          margin-bottom: 2rem;
+          user-select: none;
+          cursor: pointer;
+        }
+
+        .doc-page-break-inner {
+          height: 24px;
+          background-color: #f1f3f4;
+          border-top: 1px solid #dadce0;
+          border-bottom: 1px solid #dadce0;
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.03), 0 2px 4px rgba(0,0,0,0.03);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .doc-page-break-label {
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #70757a;
+          background-color: #f1f3f4;
+          padding: 0 12px;
+        }
+
+        @media print {
+          .doc-page-break {
+            display: none !important;
+            page-break-before: always !important;
+            break-before: page !important;
+          }
+        }
+
+        .multi-selection-highlight {
+          background-color: #c2e7ff !important;
+          color: inherit !important;
+          border-radius: 2px;
+        }
+
         .ProseMirror {
+          user-select: text !important;
+          -webkit-user-select: text !important;
           padding-left: var(--editor-left-margin, 56px);
           padding-right: var(--editor-right-margin, 56px);
           font-family: 'Arial', 'Roboto', 'Inter', system-ui, sans-serif;
@@ -652,6 +971,14 @@ export default function GoogleDocsApp({
           width: 4px;
           background-color: #4285f4;
           pointer-events: none;
+        }
+
+        .ProseMirror * {
+          user-select: text;
+        }
+
+        .ProseMirror ::selection {
+          background-color: #c2e7ff;
         }
 
         .ProseMirror p {

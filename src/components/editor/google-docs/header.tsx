@@ -28,6 +28,7 @@ import {
     ListOrdered,
     CheckSquare,
     PanelTop,
+    PanelBottom,
     Hash,
     RotateCw,
     Scan,
@@ -64,7 +65,8 @@ interface HeaderProps {
     editorMode?: 'google-docs' | 'summernote'
     onModeChange?: (mode: 'google-docs' | 'summernote') => void
     editor?: Editor | null
-    onOpenDialog?: (dialogName: 'wordcount' | 'pagesetup' | 'shortcuts' | 'image' | 'findreplace' | 'pagenumbers') => void
+    onOpenDialog?: (dialogName: 'wordcount' | 'pagesetup' | 'shortcuts' | 'image' | 'findreplace' | 'pagenumbers' | 'headerfooter') => void
+    onFocusHeaderFooter?: (type: 'header' | 'footer') => void
     isPageless?: boolean
     onTogglePageless?: () => void
     orientation?: 'portrait' | 'landscape'
@@ -95,6 +97,7 @@ export default function Header({
     onModeChange,
     editor,
     onOpenDialog,
+    onFocusHeaderFooter,
     onDownloadDocx,
     onDownloadPdf,
     onDownloadTxt,
@@ -180,15 +183,23 @@ export default function Header({
         if (!editor) return
         const current = parseInt(editor.getAttributes('textStyle').fontSize || '11') || 11
         const next = Math.max(6, Math.min(96, current + delta))
-        ;(editor.commands as any).setFontSize?.(`${next}pt`)
+        if ((editor.commands as any)?.runCommandOnAllSelections) {
+            (editor.commands as any).runCommandOnAllSelections('setFontSize', `${next}pt`)
+        } else {
+            ;(editor.commands as any).setFontSize?.(`${next}pt`)
+        }
     }
 
     const transformSelectedText = (transform: (text: string) => string) => {
         if (!editor) return
-        const { from, to } = editor.state.selection
-        if (from === to) return
-        const text = editor.state.doc.textBetween(from, to)
-        editor.chain().focus().insertContentAt({ from, to }, transform(text)).run()
+        if ((editor.commands as any)?.runCommandOnAllSelections) {
+            (editor.commands as any).runCommandOnAllSelections('transformText', transform)
+        } else {
+            const { from, to } = editor.state.selection
+            if (from === to) return
+            const text = editor.state.doc.textBetween(from, to)
+            editor.chain().focus().insertContentAt({ from, to }, transform(text)).run()
+        }
     }
 
     const toggleFullScreen = () => {
@@ -391,7 +402,7 @@ export default function Header({
                                     <DropdownMenuItem onClick={() => editor?.chain().focus().setHorizontalRule().run()} className="cursor-pointer">
                                         Horizontal line
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setHardBreak().run()} className="cursor-pointer flex justify-between">
+                                    <DropdownMenuItem onClick={() => (editor?.chain().focus() as any)?.setPageBreak?.().run() || editor?.chain().focus().setHardBreak().run()} className="cursor-pointer flex justify-between">
                                         <span>Page break</span>
                                         <span className="text-gray-400 font-mono">Ctrl+Enter</span>
                                     </DropdownMenuItem>
@@ -399,6 +410,24 @@ export default function Header({
                                         <Hash className="w-3.5 h-3.5 text-gray-500" />
                                         <span>Page numbers...</span>
                                     </DropdownMenuItem>
+                                    {/* Headers & footers */}
+                                    <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger className="cursor-pointer flex items-center gap-2">
+                                            <PanelTop className="w-3.5 h-3.5 text-gray-500" />
+                                            <span>Headers and footers</span>
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent className="min-w-[160px] p-1 text-xs bg-white shadow-xl rounded-lg border border-gray-200">
+                                            <DropdownMenuItem onClick={() => onFocusHeaderFooter?.('header')} className="cursor-pointer flex items-center gap-2">
+                                                <PanelTop className="w-3.5 h-3.5 text-gray-600" />
+                                                <span>Header</span>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => onFocusHeaderFooter?.('footer')} className="cursor-pointer flex items-center gap-2">
+                                                <PanelBottom className="w-3.5 h-3.5 text-gray-600" />
+                                                <span>Footer</span>
+                                            </DropdownMenuItem>
+                                        </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         onClick={() => {
@@ -440,15 +469,15 @@ export default function Header({
                                                 <span className="underline">Underline</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+U</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => editor?.chain().focus().toggleStrike().run()} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('toggleStrike') : editor?.chain().focus().toggleStrike().run()} className="cursor-pointer flex justify-between items-center">
                                                 <span className="line-through">Strikethrough</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Alt+Shift+5</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.toggleSubscript?.()} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('toggleSubscript') : (editor?.commands as any)?.toggleSubscript?.()} className="cursor-pointer flex justify-between items-center">
                                                 <span>Subscript</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+,</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.toggleSuperscript?.()} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('toggleSuperscript') : (editor?.commands as any)?.toggleSuperscript?.()} className="cursor-pointer flex justify-between items-center">
                                                 <span>Superscript</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+.</span>
                                             </DropdownMenuItem>
@@ -469,13 +498,13 @@ export default function Header({
                                             <DropdownMenuSub>
                                                 <DropdownMenuSubTrigger className="cursor-pointer">Capitalization</DropdownMenuSubTrigger>
                                                 <DropdownMenuSubContent className="min-w-[140px] p-1 text-xs bg-white shadow-xl rounded-lg border border-gray-200">
-                                                    <DropdownMenuItem onClick={() => transformSelectedText(t => t.toLowerCase())} className="cursor-pointer">
+                                                    <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setTextCase', 'lowercase') : transformSelectedText(t => t.toLowerCase())} className="cursor-pointer">
                                                         lowercase
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => transformSelectedText(t => t.toUpperCase())} className="cursor-pointer uppercase">
+                                                    <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setTextCase', 'uppercase') : transformSelectedText(t => t.toUpperCase())} className="cursor-pointer uppercase">
                                                         UPPERCASE
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => transformSelectedText(t => t.replace(/\b\w/g, c => c.toUpperCase()))} className="cursor-pointer">
+                                                    <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setTextCase', 'title') : transformSelectedText(t => t.toLowerCase().replace(/(^|[^\p{L}\p{N}'])\p{L}/gu, m => m.toUpperCase()))} className="cursor-pointer">
                                                         Title Case
                                                     </DropdownMenuItem>
                                                 </DropdownMenuSubContent>
@@ -523,28 +552,28 @@ export default function Header({
                                             <span>Align and indent</span>
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent className="min-w-[180px] p-1 text-xs bg-white shadow-xl rounded-lg border border-gray-200">
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setTextAlign('left')} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setTextAlign', 'left') : (editor?.commands as any)?.setTextAlign('left')} className="cursor-pointer flex justify-between items-center">
                                                 <span>Left</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+Shift+L</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setTextAlign('center')} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setTextAlign', 'center') : (editor?.commands as any)?.setTextAlign('center')} className="cursor-pointer flex justify-between items-center">
                                                 <span>Center</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+Shift+E</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setTextAlign('right')} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setTextAlign', 'right') : (editor?.commands as any)?.setTextAlign('right')} className="cursor-pointer flex justify-between items-center">
                                                 <span>Right</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+Shift+R</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setTextAlign('justify')} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setTextAlign', 'justify') : (editor?.commands as any)?.setTextAlign('justify')} className="cursor-pointer flex justify-between items-center">
                                                 <span>Justified</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+Shift+J</span>
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.sinkListItem?.('listItem')} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('indent') : (editor?.commands as any)?.indent ? (editor?.commands as any).indent() : (editor?.commands as any)?.sinkListItem?.('listItem')} className="cursor-pointer flex justify-between items-center">
                                                 <span>Increase indent</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+]</span>
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.liftListItem?.('listItem')} className="cursor-pointer flex justify-between items-center">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('outdent') : (editor?.commands as any)?.outdent ? (editor?.commands as any).outdent() : (editor?.commands as any)?.liftListItem?.('listItem')} className="cursor-pointer flex justify-between items-center">
                                                 <span>Decrease indent</span>
                                                 <span className="text-gray-400 font-mono text-[11px]">Ctrl+[</span>
                                             </DropdownMenuItem>
@@ -562,16 +591,16 @@ export default function Header({
                                             <span>Line & paragraph spacing</span>
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent className="min-w-[180px] p-1 text-xs bg-white shadow-xl rounded-lg border border-gray-200">
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setLineHeight('1.0')} className="cursor-pointer">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setLineHeight', '1.0') : (editor?.commands as any)?.setLineHeight('1.0')} className="cursor-pointer">
                                                 Single
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setLineHeight('1.15')} className="cursor-pointer">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setLineHeight', '1.15') : (editor?.commands as any)?.setLineHeight('1.15')} className="cursor-pointer">
                                                 1.15
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setLineHeight('1.5')} className="cursor-pointer">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setLineHeight', '1.5') : (editor?.commands as any)?.setLineHeight('1.5')} className="cursor-pointer">
                                                 1.5
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.setLineHeight('2.0')} className="cursor-pointer">
+                                            <DropdownMenuItem onClick={() => (editor?.commands as any)?.runCommandOnAllSelections ? (editor?.commands as any).runCommandOnAllSelections('setLineHeight', '2.0') : (editor?.commands as any)?.setLineHeight('2.0')} className="cursor-pointer">
                                                 Double
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
@@ -635,9 +664,9 @@ export default function Header({
                                     <DropdownMenuSeparator />
 
                                     {/* 7. Headers and footers */}
-                                    <DropdownMenuItem onClick={() => onOpenDialog?.('pagenumbers')} className="cursor-pointer flex items-center gap-2">
+                                    <DropdownMenuItem onClick={() => onOpenDialog?.('headerfooter')} className="cursor-pointer flex items-center gap-2">
                                         <PanelTop className="w-3.5 h-3.5 text-gray-700" />
-                                        <span>Headers and footers</span>
+                                        <span>Headers and footers...</span>
                                     </DropdownMenuItem>
 
                                     {/* 8. Page numbers */}

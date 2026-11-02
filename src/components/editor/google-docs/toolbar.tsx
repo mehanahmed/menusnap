@@ -478,14 +478,14 @@ export default function Toolbar({
                                     {HIGHLIGHT_COLORS.map((c) => (
                                         <DropdownMenuItem
                                             key={c.value}
-                                            onClick={() => (editor.chain().focus() as any).toggleHighlight({ color: c.value }).run()}
+                                            onClick={() => executeCommand('toggleHighlight', { color: c.value })}
                                             className="w-6 h-6 p-0 rounded-full cursor-pointer hover:scale-110 transition-transform flex items-center justify-center border border-gray-200"
                                             style={{ backgroundColor: c.value }}
                                             title={c.label}
                                         />
                                     ))}
                                     <DropdownMenuItem
-                                        onClick={() => (editor.chain().focus() as any).unsetHighlight().run()}
+                                        onClick={() => executeCommand('unsetHighlight')}
                                         className="col-span-4 mt-1 p-1 text-[11px] text-center justify-center hover:bg-gray-100 rounded text-gray-600 font-medium"
                                     >
                                         No color
@@ -605,12 +605,12 @@ export default function Toolbar({
                         {/* 14. Indents & Clear Formatting */}
                         <div className="flex items-center gap-0.5 shrink-0">
                             <ToolbarButton
-                                onClick={() => (editor.commands as any).liftListItem ? (editor.commands as any).liftListItem('listItem') : null}
+                                onClick={() => executeCommand('outdent')}
                                 icon={<Outdent className="w-4 h-4" />}
                                 tooltip="Decrease indent"
                             />
                             <ToolbarButton
-                                onClick={() => (editor.commands as any).sinkListItem ? (editor.commands as any).sinkListItem('listItem') : null}
+                                onClick={() => executeCommand('indent')}
                                 icon={<Indent className="w-4 h-4" />}
                                 tooltip="Increase indent"
                             />

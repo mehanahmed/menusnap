@@ -1,5 +1,7 @@
 "use client"
 
+import { FileText } from 'lucide-react'
+
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Underline } from '@tiptap/extension-underline'
@@ -25,6 +27,139 @@ import { io, Socket } from 'socket.io-client'
 import { getRandomColor, getGuestName } from './editor-utils'
 
 
+
+
+
+export const IndentExtension = Extension.create({
+    name: 'indent',
+    addOptions() {
+        return {
+            types: ['paragraph', 'heading', 'blockquote'],
+            minIndent: 0,
+            maxIndent: 216,
+            indentStep: 36,
+        }
+    },
+    addGlobalAttributes() {
+        return [
+            {
+                types: this.options.types,
+                attributes: {
+                    indent: {
+                        default: 0,
+                        parseHTML: element => {
+                            const ml = element.style.marginLeft || element.getAttribute('data-indent') || '0'
+                            return parseInt(ml, 10) || 0
+                        },
+                        renderHTML: attributes => {
+                            if (!attributes.indent || attributes.indent <= 0) {
+                                return {}
+                            }
+                            return {
+                                style: `margin-left: ${attributes.indent}px`,
+                                'data-indent': attributes.indent,
+                            }
+                        },
+                    },
+                },
+            },
+        ]
+    },
+    addCommands() {
+        return {
+            indent: () => ({ tr, state, dispatch }: any) => {
+                const { selection } = state
+                if (this.editor.isActive('listItem')) {
+                    return (this.editor.commands as any).sinkListItem?.('listItem')
+                }
+
+                const { from, to } = selection
+                let changed = false
+                state.doc.nodesBetween(from, to, (node: any, pos: number) => {
+                    if (this.options.types.includes(node.type.name)) {
+                        const currentIndent = node.attrs.indent || 0
+                        const nextIndent = Math.min(this.options.maxIndent, currentIndent + this.options.indentStep)
+                        if (nextIndent !== currentIndent) {
+                            tr.setNodeMarkup(pos, undefined, {
+                                ...node.attrs,
+                                indent: nextIndent,
+                            })
+                            changed = true
+                        }
+                        return false
+                    }
+                })
+                if (changed && dispatch) dispatch(tr)
+                return changed
+            },
+            outdent: () => ({ tr, state, dispatch }: any) => {
+                const { selection } = state
+                if (this.editor.isActive('listItem')) {
+                    return (this.editor.commands as any).liftListItem?.('listItem')
+                }
+
+                const { from, to } = selection
+                let changed = false
+                state.doc.nodesBetween(from, to, (node: any, pos: number) => {
+                    if (this.options.types.includes(node.type.name)) {
+                        const currentIndent = node.attrs.indent || 0
+                        const prevIndent = Math.max(this.options.minIndent, currentIndent - this.options.indentStep)
+                        if (prevIndent !== currentIndent) {
+                            tr.setNodeMarkup(pos, undefined, {
+                                ...node.attrs,
+                                indent: prevIndent,
+                            })
+                            changed = true
+                        }
+                        return false
+                    }
+                })
+                if (changed && dispatch) dispatch(tr)
+                return changed
+            },
+        }
+    },
+    addKeyboardShortcuts() {
+        return {
+            'Mod-]': () => (this.editor.commands as any).indent(),
+            'Mod-[': () => (this.editor.commands as any).outdent(),
+        }
+    }
+})
+
+export const PageBreak = Node.create({
+    name: 'pageBreak',
+    group: 'block',
+    selectable: true,
+    draggable: false,
+    defining: true,
+    isolating: true,
+    parseHTML() {
+        return [
+            { tag: 'div[data-type="page-break"]' },
+            { tag: 'div.doc-page-break' },
+            { tag: 'hr.page-break' },
+        ]
+    },
+    renderHTML({ HTMLAttributes }) {
+        return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'page-break', class: 'doc-page-break' }), [
+            'div', { class: 'doc-page-break-inner' },
+            ['span', { class: 'doc-page-break-label' }, 'Page Break'],
+        ]]
+    },
+    addCommands() {
+        return {
+            setPageBreak: () => ({ chain }: any) => {
+                return chain().insertContent({ type: this.name }).run()
+            }
+        }
+    },
+    addKeyboardShortcuts() {
+        return {
+            'Mod-Enter': () => (this.editor.commands as any).setPageBreak(),
+        }
+    }
+})
 
 export const TabNode = Node.create({
     name: 'tabNode',
@@ -142,6 +277,13 @@ export const LineHeight = Extension.create({
 })
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
+        pageBreak: {
+            setPageBreak: () => ReturnType
+        },
+        indent: {
+            indent: () => ReturnType
+            outdent: () => ReturnType
+        },
         fontSize: {
             setFontSize: (size: string) => ReturnType
             unsetFontSize: () => ReturnType
@@ -164,63 +306,96 @@ declare module '@tiptap/core' {
     }
 }
 
+export function toTitleCase(str: string): string {
+    return str.toLowerCase().replace(/(^|[^\p{L}\p{N}'])\p{L}/gu, match => match.toUpperCase())
+}
+
 export const TextCase = Extension.create({
     name: 'textCase',
-                addCommands() {
-                    return {
-                        setTextCase: (type: 'uppercase' | 'lowercase' | 'title' | 'sentence' | 'camel' | 'pascal' | 'snake' | 'kebab' | 'constant' | 'dot') => ({ state, tr }) => {
-                            const { from, to } = state.selection
-                            if (from === to) return false
-            
-                            const getWords = (str: string) => {
-                                return str
-                                    .replace(/([a-z])([A-Z])/g, '$1 $2') // split camelCase
-                                    .replace(/[_-]/g, ' ') // split snake/kebab
-                                    .replace(/\./g, ' ') // split dot.case
-                                    .trim()
-                                    .split(/\s+/)
-                            }
+    addCommands() {
+        return {
+            setTextCase: (type: 'uppercase' | 'lowercase' | 'title' | 'sentence' | 'camel' | 'pascal' | 'snake' | 'kebab' | 'constant' | 'dot') => ({ state, tr, dispatch, editor }: any) => {
+                const getWords = (str: string) => {
+                    return str
+                        .replace(/([a-z])([A-Z])/g, '$1 $2') // split camelCase
+                        .replace(/[_-]/g, ' ') // split snake/kebab
+                        .replace(/\./g, ' ') // split dot.case
+                        .trim()
+                        .split(/\s+/)
+                }
 
-                            const transformText = (text: string) => {
-                                switch (type) {
-                                    case 'uppercase': return text.toUpperCase()
-                                    case 'lowercase': return text.toLowerCase()
-                                    case 'title': return getWords(text).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')
-                                    case 'sentence': return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase()
-                                    case 'camel': { 
-                                        const words = getWords(text); 
-                                        return words[0].toLowerCase() + words.slice(1).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(''); 
-                                    }
-                                    case 'pascal': return getWords(text).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join('');
-                                    case 'snake': return getWords(text).map(word => word.toLowerCase()).join('_');
-                                    case 'kebab': return getWords(text).map(word => word.toLowerCase()).join('-');
-                                    case 'constant': return getWords(text).map(word => word.toUpperCase()).join('_');
-                                    case 'dot': return getWords(text).map(word => word.toLowerCase()).join('.');
-                                    default: return text
-                                }
-                            }
-            
-                            const changes: { start: number, end: number, transformed: string }[] = []
-                            state.doc.nodesBetween(from, to, (node, pos) => {
-                                if (node.isText) {
-                                    const nodeStart = Math.max(from, pos)
-                                    const nodeEnd = Math.min(to, pos + node.nodeSize)
-                                    const text = node.text?.slice(nodeStart - pos, nodeEnd - pos) || ''
-                                    const transformed = transformText(text)
-                                    changes.push({ start: nodeStart, end: nodeEnd, transformed })
-                                }
-                            })
-                            
-                            // Apply transformations in REVERSE order to preserve position integrity
-                            for (let i = changes.length - 1; i >= 0; i--) {
-                                const { start, end, transformed } = changes[i]
-                                tr.insertText(transformed, start, end)
-                            }
-
-                            return true
-                        },
+                const transformText = (text: string) => {
+                    switch (type) {
+                        case 'uppercase': return text.toUpperCase()
+                        case 'lowercase': return text.toLowerCase()
+                        case 'title': return toTitleCase(text)
+                        case 'sentence': return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase()
+                        case 'camel': { 
+                            const words = getWords(text)
+                            return words.length > 0 ? words[0].toLowerCase() + words.slice(1).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join('') : text
+                        }
+                        case 'pascal': return getWords(text).map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join('')
+                        case 'snake': return getWords(text).map(word => word.toLowerCase()).join('_')
+                        case 'kebab': return getWords(text).map(word => word.toLowerCase()).join('-')
+                        case 'constant': return getWords(text).map(word => word.toUpperCase()).join('_')
+                        case 'dot': return getWords(text).map(word => word.toLowerCase()).join('.')
+                        default: return text
                     }
                 }
+
+                // Gather all multi-selection ranges + active selection
+                const multiRanges = (editor?.storage as any)?.multiSelection?.ranges as { from: number; to: number }[] || []
+                const curSel = tr.selection || state.selection
+                const allRanges: { from: number; to: number }[] = [...multiRanges]
+
+                if (curSel && curSel.from !== curSel.to) {
+                    if (!allRanges.some(r => r.from === curSel.from && r.to === curSel.to)) {
+                        allRanges.push({ from: curSel.from, to: curSel.to })
+                    }
+                }
+
+                const docSize = tr.doc.content.size
+                const validRanges = allRanges.filter(r => r.from < r.to && r.from >= 0 && r.to <= docSize)
+                if (validRanges.length === 0) return false
+
+                // Collect changes across all ranges
+                const changes: { start: number; end: number; transformed: string }[] = []
+
+                validRanges.forEach(range => {
+                    state.doc.nodesBetween(range.from, range.to, (node: any, pos: number) => {
+                        if (node.isText && node.text) {
+                            const nodeStart = Math.max(range.from, pos)
+                            const nodeEnd = Math.min(range.to, pos + node.nodeSize)
+                            const text = node.text.slice(nodeStart - pos, nodeEnd - pos) || ''
+                            const transformed = transformText(text)
+                            if (transformed !== text) {
+                                changes.push({ start: nodeStart, end: nodeEnd, transformed })
+                            }
+                        }
+                    })
+                })
+
+                if (changes.length === 0) return false
+
+                // Apply transformations in REVERSE order to preserve position integrity
+                changes.sort((a, b) => b.start - a.start)
+                for (let i = 0; i < changes.length; i++) {
+                    const { start, end, transformed } = changes[i]
+                    tr.insertText(transformed, start, end)
+                }
+
+                if ((editor?.storage as any)?.multiSelection) {
+                    (editor.storage as any).multiSelection.ranges = validRanges.map(r => ({
+                        from: tr.mapping.map(r.from),
+                        to: tr.mapping.map(r.to)
+                    }))
+                }
+
+                if (dispatch) dispatch(tr)
+                return true
+            },
+        }
+    }
 })
 
 export const MultiSelection = Extension.create({
@@ -232,25 +407,230 @@ export const MultiSelection = Extension.create({
     },
     addCommands() {
         return {
-            runCommandOnAllSelections: (commandName: string, ...args: any[]) => ({ editor }) => {
-                const ranges = [...this.storage.ranges]
+            runCommandOnAllSelections: (commandName: string, ...args: any[]) => ({ editor }: any) => {
+                const ranges = [...(this.storage.ranges || [])]
                 const { from, to } = editor.state.selection
                 if (from !== to && !ranges.some(r => r.from === from && r.to === to)) {
                     ranges.push({ from, to })
                 }
 
-                if (ranges.length === 0) {
-                    return (editor.chain().focus() as any)[commandName](...args).run()
+                const docSize = editor.state.doc.content.size
+                const validRanges = ranges.filter(r => r.from < r.to && r.from >= 0 && r.to <= docSize)
+
+                if (validRanges.length === 0) {
+                    if (typeof (editor.chain().focus() as any)[commandName] === 'function') {
+                        return (editor.chain().focus() as any)[commandName](...args).run()
+                    }
+                    return false
                 }
 
-                // Sort descending so operations at higher positions don't affect lower positions
-                const sortedRanges = [...ranges].sort((a, b) => b.from - a.from)
+                // 1. Text Case
+                if (commandName === 'setTextCase') {
+                    return (editor.commands as any).setTextCase(...args)
+                }
 
+                // 2. Custom text transformation
+                if (commandName === 'transformText') {
+                    const transform = args[0]
+                    if (typeof transform !== 'function') return false
+                    const tr = editor.state.tr
+                    const sortedRanges = [...validRanges].sort((a, b) => b.from - a.from)
+                    const newRanges: { from: number; to: number }[] = []
+
+                    sortedRanges.forEach(range => {
+                        const text = tr.doc.textBetween(range.from, range.to)
+                        const transformed = transform(text)
+                        tr.insertText(transformed, range.from, range.to)
+                        newRanges.unshift({ from: range.from, to: range.from + transformed.length })
+                    })
+                    this.storage.ranges = newRanges
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // 3. Mark Toggles (Bold, Italic, Underline, Strike, Subscript, Superscript)
+                const markToggleMap: Record<string, string> = {
+                    toggleBold: 'bold',
+                    toggleItalic: 'italic',
+                    toggleUnderline: 'underline',
+                    toggleStrike: 'strike',
+                    toggleSubscript: 'subscript',
+                    toggleSuperscript: 'superscript',
+                }
+
+                if (markToggleMap[commandName]) {
+                    const markName = markToggleMap[commandName]
+                    const markType = editor.schema.marks[markName]
+                    if (!markType) return false
+
+                    let allHaveMark = true
+                    for (const range of validRanges) {
+                        if (!editor.state.doc.rangeHasMark(range.from, range.to, markType)) {
+                            allHaveMark = false
+                            break
+                        }
+                    }
+                    const shouldAdd = !allHaveMark
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        if (shouldAdd) {
+                            tr.addMark(range.from, range.to, markType.create())
+                        } else {
+                            tr.removeMark(range.from, range.to, markType)
+                        }
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // 4. TextStyle attributes (color, fontSize, fontFamily)
+                if (commandName === 'setColor') {
+                    const color = args[0]
+                    const markType = editor.schema.marks.textStyle
+                    if (!markType) return false
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        tr.addMark(range.from, range.to, markType.create({ color }))
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                if (commandName === 'unsetColor') {
+                    const markType = editor.schema.marks.textStyle
+                    if (!markType) return false
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        tr.addMark(range.from, range.to, markType.create({ color: null }))
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                if (commandName === 'setFontSize') {
+                    const fontSize = args[0]
+                    const markType = editor.schema.marks.textStyle
+                    if (!markType) return false
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        tr.addMark(range.from, range.to, markType.create({ fontSize }))
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                if (commandName === 'setFontFamily') {
+                    const fontFamily = args[0]
+                    const markType = editor.schema.marks.textStyle
+                    if (!markType) return false
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        tr.addMark(range.from, range.to, markType.create({ fontFamily }))
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // 5. Highlight
+                if (commandName === 'toggleHighlight' || commandName === 'setHighlight') {
+                    const color = args[0]?.color || args[0] || '#fff475'
+                    const markType = editor.schema.marks.highlight
+                    if (!markType) return false
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        tr.addMark(range.from, range.to, markType.create({ color }))
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                if (commandName === 'unsetHighlight') {
+                    const markType = editor.schema.marks.highlight
+                    if (!markType) return false
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        tr.removeMark(range.from, range.to, markType)
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // 6. Clear formatting
+                if (commandName === 'unsetAllMarks') {
+                    const tr = editor.state.tr
+                    validRanges.forEach(range => {
+                        tr.removeMark(range.from, range.to, null)
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // 7. Text alignment
+                if (commandName === 'setTextAlign') {
+                    const alignment = args[0]
+                    const tr = editor.state.tr
+                    const seen = new Set<number>()
+                    validRanges.forEach(range => {
+                        tr.doc.nodesBetween(range.from, range.to, (node: any, pos: number) => {
+                            if (['paragraph', 'heading'].includes(node.type.name) && !seen.has(pos)) {
+                                seen.add(pos)
+                                tr.setNodeMarkup(pos, undefined, { ...node.attrs, textAlign: alignment })
+                            }
+                        })
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // 8. Indent / Outdent
+                if (commandName === 'indent' || commandName === 'outdent') {
+                    const isIndent = commandName === 'indent'
+                    const tr = editor.state.tr
+                    const seen = new Set<number>()
+                    validRanges.forEach(range => {
+                        tr.doc.nodesBetween(range.from, range.to, (node: any, pos: number) => {
+                            if (['paragraph', 'heading', 'blockquote'].includes(node.type.name) && !seen.has(pos)) {
+                                seen.add(pos)
+                                const currentIndent = node.attrs.indent || 0
+                                const nextIndent = isIndent
+                                    ? Math.min(216, currentIndent + 36)
+                                    : Math.max(0, currentIndent - 36)
+                                tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: nextIndent })
+                            }
+                        })
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // 9. Line height
+                if (commandName === 'setLineHeight') {
+                    const lineHeight = args[0]
+                    const tr = editor.state.tr
+                    const seen = new Set<number>()
+                    validRanges.forEach(range => {
+                        tr.doc.nodesBetween(range.from, range.to, (node: any, pos: number) => {
+                            if (['paragraph', 'heading', 'listItem'].includes(node.type.name) && !seen.has(pos)) {
+                                seen.add(pos)
+                                tr.setNodeMarkup(pos, undefined, { ...node.attrs, lineHeight })
+                            }
+                        })
+                    })
+                    editor.view.dispatch(tr)
+                    return true
+                }
+
+                // Fallback for other commands
+                const sortedRanges = [...validRanges].sort((a, b) => b.from - a.from)
                 sortedRanges.forEach((range) => {
                     try {
-                        (editor.chain().setTextSelection(range) as any)[commandName](...args).run()
+                        const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to))
+                        editor.view.dispatch(tr)
+                        if (typeof (editor.commands as any)[commandName] === 'function') {
+                            (editor.commands as any)[commandName](...args)
+                        }
                     } catch (e) {
-                        console.error('MultiSelection command error:', e)
+                        console.error('MultiSelection fallback error:', e)
                     }
                 })
 
@@ -261,9 +641,43 @@ export const MultiSelection = Extension.create({
     },
     addKeyboardShortcuts() {
         return {
+            'Mod-b': () => {
+                if (this.storage.ranges && this.storage.ranges.length > 0) {
+                    return (this.editor.commands as any).runCommandOnAllSelections('toggleBold')
+                }
+                return false
+            },
+            'Mod-i': () => {
+                if (this.storage.ranges && this.storage.ranges.length > 0) {
+                    return (this.editor.commands as any).runCommandOnAllSelections('toggleItalic')
+                }
+                return false
+            },
+            'Mod-u': () => {
+                if (this.storage.ranges && this.storage.ranges.length > 0) {
+                    return (this.editor.commands as any).runCommandOnAllSelections('toggleUnderline')
+                }
+                return false
+            },
+            'Mod-]': () => {
+                if (this.storage.ranges && this.storage.ranges.length > 0) {
+                    return (this.editor.commands as any).runCommandOnAllSelections('indent')
+                }
+                return false
+            },
+            'Mod-[': () => {
+                if (this.storage.ranges && this.storage.ranges.length > 0) {
+                    return (this.editor.commands as any).runCommandOnAllSelections('outdent')
+                }
+                return false
+            },
             Backspace: () => {
-                const ranges = this.storage.ranges as { from: number; to: number }[]
-                if (ranges && ranges.length > 0) {
+                const ranges = [...(this.storage.ranges || [])]
+                const { from, to } = this.editor.state.selection
+                if (from !== to && !ranges.some(r => r.from === from && r.to === to)) {
+                    ranges.push({ from, to })
+                }
+                if (ranges.length > 1 || (ranges.length === 1 && this.storage.ranges.length > 0)) {
                     const sorted = [...ranges].sort((a, b) => b.from - a.from)
                     const tr = this.editor.state.tr
                     sorted.forEach((r: { from: number; to: number }) => {
@@ -276,8 +690,12 @@ export const MultiSelection = Extension.create({
                 return false
             },
             Delete: () => {
-                const ranges = this.storage.ranges as { from: number; to: number }[]
-                if (ranges && ranges.length > 0) {
+                const ranges = [...(this.storage.ranges || [])]
+                const { from, to } = this.editor.state.selection
+                if (from !== to && !ranges.some(r => r.from === from && r.to === to)) {
+                    ranges.push({ from, to })
+                }
+                if (ranges.length > 1 || (ranges.length === 1 && this.storage.ranges.length > 0)) {
                     const sorted = [...ranges].sort((a, b) => b.from - a.from)
                     const tr = this.editor.state.tr
                     sorted.forEach((r: { from: number; to: number }) => {
@@ -316,6 +734,26 @@ export const MultiSelection = Extension.create({
                         )
                         return DecorationSet.create(state.doc, decorations)
                     },
+                    handleTextInput: (view, from, to, text) => {
+                        const ranges = [...(this.storage.ranges || [])]
+                        const curSel = view.state.selection
+                        if (curSel.from !== curSel.to && !ranges.some(r => r.from === curSel.from && r.to === curSel.to)) {
+                            ranges.push({ from: curSel.from, to: curSel.to })
+                        }
+                        const docSize = view.state.doc.content.size
+                        const validRanges = ranges.filter(r => r.from < r.to && r.from >= 0 && r.to <= docSize)
+                        if (validRanges.length > 1) {
+                            const sorted = [...validRanges].sort((a, b) => b.from - a.from)
+                            const tr = view.state.tr
+                            sorted.forEach(r => {
+                                tr.insertText(text, r.from, r.to)
+                            })
+                            this.storage.ranges = []
+                            view.dispatch(tr)
+                            return true
+                        }
+                        return false
+                    },
                     handleDOMEvents: {
                         mousedown: (view, event) => {
                             const isCtrl = event.ctrlKey || event.metaKey
@@ -325,11 +763,10 @@ export const MultiSelection = Extension.create({
                                 if (from !== to) {
                                     if (!this.storage.ranges.some((r: any) => r.from === from && r.to === to)) {
                                         this.storage.ranges.push({ from, to })
-                                        view.dispatch(view.state.tr)
                                     }
                                 }
                             } else {
-                                // Normal click without Ctrl clears previous multi-selection
+                                // Normal click without Ctrl clears previous multi-selection without canceling mouse drag
                                 if (this.storage.ranges.length > 0) {
                                     this.storage.ranges = []
                                     view.dispatch(view.state.tr)
@@ -382,6 +819,11 @@ interface EditorProps {
     socket?: Socket | null;
     onlineUsers?: any[];
     onUpdateContent?: (html: string) => void;
+    columnCount?: number;
+    maxPaperWidth?: string;
+    pageColor?: string;
+    isPageless?: boolean;
+    activeTabId?: string;
 }
 
 export default function GoogleDocsEditor(props: EditorProps) {
@@ -401,8 +843,31 @@ function GoogleDocsEditorInner({
     docId,
     socket,
     onlineUsers,
-    onUpdateContent
+    onUpdateContent,
+    columnCount = 1,
+    maxPaperWidth = '816px',
+    pageColor = '#ffffff',
+    isPageless = false,
+    activeTabId,
 }: EditorProps & { socket: Socket | null, onlineUsers: any[] }) {
+
+    const pageHeightNum = useMemo(() => {
+        if (maxPaperWidth === '1122px' || maxPaperWidth === '794px') return 1122
+        if (maxPaperWidth === '1344px') return 1344
+        return 1056
+    }, [maxPaperWidth])
+
+    const paperContainerRef = useRef<HTMLDivElement>(null)
+    const [pageCount, setPageCount] = useState<number>(1)
+    const [currentPage, setCurrentPage] = useState<number>(1)
+
+    // Reset pagination state immediately when switching to another tab
+    useEffect(() => {
+        setPageCount(1)
+        setCurrentPage(1)
+    }, [activeTabId])
+
+
     const isRemoteUpdate = useRef(false)
     const socketRef = useRef(socket)
     socketRef.current = socket
@@ -435,6 +900,8 @@ function GoogleDocsEditorInner({
             TaskItem.configure({ nested: true }),
             Placeholder.configure({ placeholder: 'Write something or type "/" for commands...' }),
             TabNode,
+            PageBreak,
+            IndentExtension,
             TextCase,
             MultiSelection,
             Extension.create({
@@ -586,6 +1053,67 @@ function GoogleDocsEditorInner({
     }, [docId]) // Stable editor instance, does not reset when socket connects
 
     useEffect(() => {
+        if (isPageless) {
+            setPageCount(1)
+            return
+        }
+
+        const updatePagination = () => {
+            if (!editor || !editor.view || editor.isDestroyed) return
+            const editorDom = editor.view.dom as HTMLElement | null
+            if (!editorDom) return
+
+            // 1. Count any manual page breaks in the document
+            const pageBreakCount = editorDom.querySelectorAll('.doc-page-break').length
+
+            // 2. Measure actual content height from ProseMirror child elements
+            // (DO NOT measure paperContainerRef which has paperMinHeight applied!)
+            const children = editorDom.children
+            let maxBottom = 0
+            if (children && children.length > 0) {
+                for (let i = 0; i < children.length; i++) {
+                    const el = children[i] as HTMLElement
+                    const b = el.offsetTop + el.offsetHeight
+                    if (b > maxBottom) maxBottom = b
+                }
+            }
+
+            const totalContentHeight = maxBottom > 0 ? maxBottom + 56 : 0
+            const naturalPages = Math.max(1, Math.ceil(totalContentHeight / pageHeightNum))
+            const calculatedTotal = Math.max(1, Math.max(pageBreakCount + 1, naturalPages))
+
+            setPageCount(calculatedTotal)
+        }
+
+        updatePagination()
+        const timer1 = setTimeout(updatePagination, 50)
+        const timer2 = setTimeout(updatePagination, 200)
+        return () => {
+            clearTimeout(timer1)
+            clearTimeout(timer2)
+        }
+    }, [content, activeTabId, isPageless, pageHeightNum, editor])
+
+    useEffect(() => {
+        if (isPageless || pageCount <= 1) return
+
+        const handleScroll = () => {
+            const mainCanvas = document.querySelector('main')
+            if (!mainCanvas) return
+            const scrollTop = mainCanvas.scrollTop
+            const cur = Math.min(pageCount, Math.max(1, Math.floor(scrollTop / (pageHeightNum * 0.8)) + 1))
+            setCurrentPage(cur)
+        }
+
+        const mainCanvas = document.querySelector('main')
+        if (mainCanvas) {
+            mainCanvas.addEventListener('scroll', handleScroll, { passive: true })
+            return () => mainCanvas.removeEventListener('scroll', handleScroll)
+        }
+    }, [isPageless, pageCount, pageHeightNum])
+
+
+    useEffect(() => {
         if (editor) onReady(editor)
     }, [editor, onReady])
 
@@ -627,16 +1155,67 @@ function GoogleDocsEditorInner({
         if (editor && tabStops) (editor.storage as any).tabKey.tabStops = tabStops
     }, [editor, tabStops])
 
-    return (
-        <div className="flex justify-center w-full bg-[#f8f9fa] min-h-full relative">
+    const paperMinHeight = isPageless ? undefined : `${Math.max(1, pageCount) * pageHeightNum}px`
 
-            <div className="mt-2 sm:mt-4 mb-10 w-full max-w-[816px] mx-auto px-0 sm:px-4">
-                <div className={`bg-white shadow-xl border border-gray-200 w-full relative ${showWatermark ? 'bg-watermark' : ''}`}>
+    return (
+        <div className="flex justify-center w-full min-h-full relative print:p-0">
+            <div 
+                className={`mt-2 sm:mt-4 mb-10 w-full mx-auto px-0 sm:px-4 transition-all duration-200 print:m-0 print:p-0 ${isPageless ? 'max-w-5xl px-8 py-6' : ''}`}
+                style={{ maxWidth: isPageless ? '100%' : (maxPaperWidth || '816px') }}
+            >
+                <div 
+                    ref={paperContainerRef}
+                    className={`shadow-xl border border-gray-200 w-full relative print:shadow-none print:border-none ${showWatermark ? 'bg-watermark' : ''} ${isPageless ? 'shadow-none border-none' : 'rounded-xs'}`}
+                    style={{
+                        backgroundColor: pageColor || '#ffffff',
+                        minHeight: paperMinHeight,
+                    }}
+                >
                     {customPaperHeader}
-                    <EditorContent editor={editor} />
+                    <div 
+                        className="w-full"
+                        style={{
+                            columnCount: columnCount && columnCount > 1 ? columnCount : undefined,
+                            columnGap: columnCount && columnCount > 1 ? '2.5rem' : undefined,
+                            columnRule: columnCount && columnCount > 1 ? '1px solid #e5e7eb' : undefined,
+                        }}
+                    >
+                        <EditorContent editor={editor} />
+                    </div>
+
+                    {/* Automatic Visual Page Dividers for Paginated Mode */}
+                    {!isPageless && pageCount > 1 && Array.from({ length: pageCount - 1 }).map((_, idx) => {
+                        const pageNum = idx + 2
+                        const topPos = (idx + 1) * pageHeightNum
+                        return (
+                            <div
+                                key={pageNum}
+                                className="absolute left-0 right-0 pointer-events-none z-20 flex items-center print:hidden select-none"
+                                style={{ top: `${topPos}px`, transform: 'translateY(-50%)' }}
+                            >
+                                <div className="w-full flex items-center justify-between px-6">
+                                    <div className="flex-1 border-t-2 border-dashed border-gray-300" />
+                                    <div className="mx-4 flex items-center gap-1.5 bg-[#f1f3f4] text-gray-600 border border-gray-300 px-3 py-1 rounded-full text-[11px] font-semibold shadow-xs">
+                                        <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                        <span>Page {pageNum}</span>
+                                    </div>
+                                    <div className="flex-1 border-t-2 border-dashed border-gray-300" />
+                                </div>
+                            </div>
+                        )
+                    })}
+
                     {customPaperFooter}
                 </div>
             </div>
+
+            {/* Floating Page Indicator */}
+            {!isPageless && pageCount > 1 && (
+                <div className="fixed bottom-6 right-6 z-40 bg-white/95 backdrop-blur-xs border border-gray-300 text-gray-700 shadow-md rounded-full px-3.5 py-1.5 text-xs font-medium flex items-center gap-2 select-none print:hidden transition-all duration-200">
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Page {currentPage} of {pageCount}</span>
+                </div>
+            )}
         </div>
     )
 }

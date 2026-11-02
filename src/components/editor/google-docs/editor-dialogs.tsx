@@ -615,3 +615,147 @@ export function PageNumbersDialog({
         </Dialog>
     )
 }
+
+// ==========================================
+// 8. Headers and Footers Dialog
+// ==========================================
+export interface HeaderFooterConfig {
+    headerText: string
+    footerText: string
+    showPageNumber: boolean
+    pageNumberPosition: 'header' | 'footer'
+    showOnFirstPage: boolean
+}
+
+export function HeaderFooterDialog({
+    isOpen,
+    onClose,
+    config,
+    onApply,
+}: {
+    isOpen: boolean
+    onClose: () => void
+    config: HeaderFooterConfig
+    onApply: (newConfig: HeaderFooterConfig) => void
+}) {
+    const [headerText, setHeaderText] = useState(config.headerText || '')
+    const [footerText, setFooterText] = useState(config.footerText || '')
+    const [showPageNumber, setShowPageNumber] = useState(config.showPageNumber ?? true)
+    const [pageNumberPosition, setPageNumberPosition] = useState<'header' | 'footer'>(config.pageNumberPosition || 'header')
+    const [showOnFirstPage, setShowOnFirstPage] = useState(config.showOnFirstPage ?? true)
+
+    React.useEffect(() => {
+        if (isOpen) {
+            setHeaderText(config.headerText || '')
+            setFooterText(config.footerText || '')
+            setShowPageNumber(config.showPageNumber ?? true)
+            setPageNumberPosition(config.pageNumberPosition || 'header')
+            setShowOnFirstPage(config.showOnFirstPage ?? true)
+        }
+    }, [isOpen, config])
+
+    const handleApply = () => {
+        onApply({
+            headerText,
+            footerText,
+            showPageNumber,
+            pageNumberPosition,
+            showOnFirstPage,
+        })
+        onClose()
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-[420px] bg-white p-6 rounded-2xl shadow-2xl border border-gray-100 z-[140]">
+                <DialogHeader className="pb-2">
+                    <DialogTitle className="text-base font-semibold text-gray-900">
+                        Headers and footers
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div className="py-2 space-y-4 text-xs text-gray-800 font-sans">
+                    <div className="space-y-1.5">
+                        <label className="font-semibold text-gray-700 block">Header text</label>
+                        <input
+                            type="text"
+                            value={headerText}
+                            onChange={(e) => setHeaderText(e.target.value)}
+                            placeholder="e.g. MenuSnap - Restaurant Operations"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
+                        />
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="font-semibold text-gray-700 block">Footer text</label>
+                        <input
+                            type="text"
+                            value={footerText}
+                            onChange={(e) => setFooterText(e.target.value)}
+                            placeholder="e.g. Confidential & Proprietary"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-sans"
+                        />
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100 space-y-2.5">
+                        <label className="flex items-center gap-2.5 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={showPageNumber}
+                                onChange={(e) => setShowPageNumber(e.target.checked)}
+                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span className="font-semibold text-gray-700">Include page numbers</span>
+                        </label>
+
+                        {showPageNumber && (
+                            <div className="pl-6 space-y-2">
+                                <span className="text-gray-500 block">Page number position:</span>
+                                <div className="flex gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="hfPageNumPos"
+                                            checked={pageNumberPosition === 'header'}
+                                            onChange={() => setPageNumberPosition('header')}
+                                            className="w-4 h-4 text-blue-600 cursor-pointer"
+                                        />
+                                        <span>Header</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="hfPageNumPos"
+                                            checked={pageNumberPosition === 'footer'}
+                                            onChange={() => setPageNumberPosition('footer')}
+                                            className="w-4 h-4 text-blue-600 cursor-pointer"
+                                        />
+                                        <span>Footer</span>
+                                    </label>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <DialogFooter className="pt-3 border-t border-gray-100 flex justify-end gap-2 items-center">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onClose}
+                        className="rounded-full text-xs text-gray-600 hover:text-gray-900 px-4"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        size="sm"
+                        onClick={handleApply}
+                        className="bg-[#0b57d0] hover:bg-[#0842a0] text-white rounded-full text-xs font-semibold px-5 shadow-xs"
+                    >
+                        Apply
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
