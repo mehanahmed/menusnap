@@ -62,6 +62,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { useMagicCalcTranslation } from "@/lib/magic-calc-translations";
 import {
   IngredientItem,
   RecipeItem,
@@ -86,6 +87,7 @@ const LOCAL_STORAGE_KEY = "menusnap_restaurant_costing_v2";
 export default function MagicCalculationPage() {
   const { toast } = useToast();
   const { clientUser } = useClientAuth();
+  const { dict, language, isRTL, currencySymbol, formatPrice, translateText } = useMagicCalcTranslation();
 
   // Primary State
   const [activeTab, setActiveTab] = useState<"recipe" | "menu" | "ing">("recipe");
@@ -247,14 +249,8 @@ export default function MagicCalculationPage() {
   };
 
   // Helper to format currency
-  const formatTaka = (amount: number, digits = 2) => {
-    return (
-      "৳" +
-      (Number.isFinite(amount) ? amount : 0).toLocaleString("en-IN", {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: digits,
-      })
-    );
+  const formatTaka = (amount: number | string | null | undefined, digits = 2) => {
+    return formatPrice(amount, digits);
   };
 
   const formatPct = (val: number | null) => {
@@ -940,7 +936,7 @@ export default function MagicCalculationPage() {
           <tfoot>
             <tr>
               <td colspan="5" style="text-align:right;font-size:11px;color:#0f172a;border-right:1px solid #cbd5e1;">
-                Total Real Production Cost per Plate:
+                {dict.totalRealCost} per Plate:
               </td>
               <td style="text-align:right;font-family:monospace;font-size:13px;color:#ea580c;border-right:1px solid #cbd5e1;">
                 ${realCostFormatted}
@@ -1009,7 +1005,7 @@ export default function MagicCalculationPage() {
   return (
     <>
       {/* Screen App UI - Hidden when printing */}
-      <div className="flex flex-col min-h-screen bg-background pb-20 print:hidden">
+      <div className={cn("flex flex-col min-h-screen bg-background pb-20 print:hidden", isRTL && "rtl text-right")} dir={isRTL ? "rtl" : "ltr"}>
       <div className="w-full max-w-[1600px] mx-auto p-3 sm:p-4 lg:p-6 space-y-5">
         {/* ======================================================== */}
         {/* Top Header Card - Clean, Modern & Elegant                */}
@@ -1022,7 +1018,7 @@ export default function MagicCalculationPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                  Magic Calculation
+                  {dict.pageTitle}
                 </h1>
                 <Badge
                   variant="outline"
@@ -1032,7 +1028,7 @@ export default function MagicCalculationPage() {
                 </Badge>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                Real restaurant menu costing, raw kitchen ingredients yield, and profit analyzer.
+                {dict.pageSubtitle}
               </p>
             </div>
           </div>
@@ -1046,7 +1042,7 @@ export default function MagicCalculationPage() {
                   isCloudSaving ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
                 )}
               />
-              <span>{isCloudSaving ? "Syncing..." : "Auto-saved"}</span>
+              <span>{isCloudSaving ? "Syncing..." : "{dict.autoSaved}"}</span>
             </div>
           </div>
         </div>
@@ -1078,7 +1074,7 @@ export default function MagicCalculationPage() {
                 className="rounded-xl py-2 px-3 sm:px-4 text-xs font-semibold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-border/60 transition-all"
               >
                 <ChefHat className="w-4 h-4 text-orange-500" />
-                Recipe Costing Studio
+                {dict.tabRecipeStudio}
               </TabsTrigger>
               <TabsTrigger
                 value="menu"
@@ -1092,7 +1088,7 @@ export default function MagicCalculationPage() {
                 className="rounded-xl py-2 px-3 sm:px-4 text-xs font-semibold gap-2 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs data-[state=active]:border data-[state=active]:border-border/60 transition-all"
               >
                 <ShoppingBasket className="w-4 h-4 text-emerald-500" />
-                Ingredients & Market Rates ({Object.keys(ingredients).length})
+                {dict.tabIngredients} ({Object.keys(ingredients).length})
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1123,7 +1119,7 @@ export default function MagicCalculationPage() {
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
-                        placeholder="Search recipe..."
+                        placeholder={dict.searchRecipe}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-8 h-8 text-xs bg-background/50 border-border/70 rounded-xl focus:bg-background"
@@ -1185,7 +1181,7 @@ export default function MagicCalculationPage() {
                           )}
                         </div>
                         <span className="text-xs text-muted-foreground mt-0.5 block">
-                          Edit dish recipe, portion yield, and ingredient measurements
+                          {dict.editDishSubtitle}
                         </span>
                       </div>
 
@@ -1196,7 +1192,7 @@ export default function MagicCalculationPage() {
                           onClick={() => handleDuplicateRecipe(selectedRecipe.id)}
                           className="h-8 px-3 text-xs rounded-xl border-border/80 hover:bg-muted font-medium"
                         >
-                          <Copy className="w-3.5 h-3.5 mr-1" /> Duplicate
+                          <Copy className="w-3.5 h-3.5 mr-1" /> {dict.duplicate}
                         </Button>
                         <Button
                           variant="ghost"
@@ -1210,7 +1206,7 @@ export default function MagicCalculationPage() {
                           }
                           className="h-8 px-3 text-xs rounded-xl text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium"
                         >
-                          <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+                          <Trash2 className="w-3.5 h-3.5 mr-1" /> {dict.delete}
                         </Button>
                       </div>
                     </div>
@@ -1460,10 +1456,10 @@ export default function MagicCalculationPage() {
                         <div>
                           <h3 className="font-bold text-sm text-foreground flex items-center gap-1.5">
                             <Sparkles className="w-4 h-4 text-orange-500" />
-                            Cost & Pricing Slip
+                            {dict.slipTitle}
                           </h3>
                           <span className="text-[11px] text-muted-foreground">
-                            1 Plate production analysis
+                            {dict.slipSubtitle}
                           </span>
                         </div>
                         <Button
@@ -1472,7 +1468,7 @@ export default function MagicCalculationPage() {
                           onClick={handlePrintSlip}
                           className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg"
                         >
-                          <Printer className="w-3.5 h-3.5 mr-1" /> Print
+                          <Printer className="w-3.5 h-3.5 mr-1" /> {dict.print}
                         </Button>
                       </div>
 
@@ -1485,21 +1481,21 @@ export default function MagicCalculationPage() {
                           {formatTaka(selectedRecipeCost.total)}
                         </div>
                         <span className="text-[10px] text-muted-foreground block">
-                          Pure raw kitchen ingredients per plate
+                          {dict.pureRawCostNote}
                         </span>
                       </div>
 
                       {/* Line breakdown items: Pure Real Costs Only */}
                       <div className="space-y-2 text-xs p-3 rounded-xl bg-muted/30 border border-border/60">
                         <div className="flex justify-between items-center text-muted-foreground">
-                          <span>Raw Ingredients / Plate</span>
+                          <span>{dict.rawIngredientsPerPlate}</span>
                           <span className="font-mono font-bold text-foreground">
                             {formatTaka(selectedRecipeCost.ing)}
                           </span>
                         </div>
 
                         <div className="pt-2 border-t border-border/60 flex justify-between items-center text-xs font-bold text-foreground">
-                          <span>Real Kitchen Cost</span>
+                          <span>{dict.realKitchenCost}</span>
                           <span className="font-mono text-orange-600 dark:text-orange-400">
                             {formatTaka(selectedRecipeCost.total)}
                           </span>
@@ -1511,7 +1507,7 @@ export default function MagicCalculationPage() {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                             <PieChart className="w-3.5 h-3.5 text-amber-500" />
-                            Cost & Profit Share
+                            {dict.costProfitShare}
                           </span>
                           {selectedRecipeCost.fc !== null ? (
                             <Badge
@@ -1528,7 +1524,7 @@ export default function MagicCalculationPage() {
                                 ? "Healthy Food Cost"
                                 : selectedRecipeCost.fc <= 45
                                 ? "Moderate Food Cost"
-                                : "High Food Cost"}
+                                : "{dict.highFoodCost}"}
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="text-[10px] text-muted-foreground rounded-full">
@@ -1555,7 +1551,7 @@ export default function MagicCalculationPage() {
                               ) : null}
                             </div>
                             <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
-                              <span>Customer Price: 100%</span>
+                              <span>{dict.customerPrice}: 100%</span>
                               <span>Food Cost: {selectedRecipeCost.fc?.toFixed(1) || 0}%</span>
                             </div>
                           </div>
@@ -1566,7 +1562,7 @@ export default function MagicCalculationPage() {
                           <div className="flex justify-between items-center pt-1.5">
                             <div className="flex items-center gap-1.5">
                               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
-                              <span className="text-muted-foreground font-medium">Raw Ingredients</span>
+                              <span className="text-muted-foreground font-medium">{dict.colIngredientName}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-foreground font-semibold">
@@ -1582,7 +1578,7 @@ export default function MagicCalculationPage() {
                             <div className="flex justify-between items-center pt-1.5">
                               <div className="flex items-center gap-1.5">
                                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${selectedRecipeCost.profit >= 0 ? "bg-emerald-500" : "bg-rose-500"}`} />
-                                <span className="text-muted-foreground font-medium">Net Real Profit</span>
+                                <span className="text-muted-foreground font-medium">{dict.netRealProfit}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className={`font-mono font-bold ${selectedRecipeCost.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
@@ -1610,14 +1606,14 @@ export default function MagicCalculationPage() {
                       {selectedRecipe.menuPrice && selectedRecipe.menuPrice > 0 ? (
                         <div className="p-3.5 rounded-xl bg-muted/40 border border-border/60 space-y-2 text-xs">
                           <div className="flex justify-between items-center font-semibold">
-                            <span className="text-muted-foreground">Your Menu Price</span>
+                            <span className="text-muted-foreground">{dict.yourMenuPrice}</span>
                             <span className="font-mono font-bold text-foreground">
                               {formatTaka(selectedRecipe.menuPrice, 0)}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Real Profit / Plate</span>
+                            <span>{dict.realProfitPerPlate}</span>
                             <span
                               className={`font-mono font-bold text-sm ${
                                 selectedRecipeCost.profit && selectedRecipeCost.profit > 0
