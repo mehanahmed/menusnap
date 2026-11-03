@@ -208,16 +208,16 @@ export default function GoogleDocsApp({
   const [headerFooterConfig, setHeaderFooterConfig] = useState<HeaderFooterConfig>({
     headerText: '',
     footerText: '',
-    showPageNumber: true,
+    showPageNumber: false,
     pageNumberPosition: 'header',
-    showOnFirstPage: true,
+    showOnFirstPage: false,
   })
   const headerInputRef = useRef<HTMLInputElement>(null)
   const footerInputRef = useRef<HTMLInputElement>(null)
   const [pageNumberConfig, setPageNumberConfig] = useState<PageNumberConfig>({
-    enabled: true,
+    enabled: false,
     position: 'header',
-    showOnFirstPage: true,
+    showOnFirstPage: false,
     startAt: 1,
     numberingType: 'startAt',
   })

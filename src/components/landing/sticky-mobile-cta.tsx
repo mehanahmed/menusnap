@@ -5,7 +5,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
-export function StickyMobileCTA() {
+interface StickyMobileCTAProps {
+  minPrice?: number;
+}
+
+export function StickyMobileCTA({ minPrice }: StickyMobileCTAProps = {}) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -16,6 +20,8 @@ export function StickyMobileCTA() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const displayPrice = minPrice && minPrice > 0 ? minPrice : 499;
 
   return (
     <AnimatePresence>
@@ -36,7 +42,7 @@ export function StickyMobileCTA() {
                 </p>
               </div>
               <p className="text-[11px] text-gray-400 font-medium">
-                Plans from only <strong className="text-white">৳199</strong>
+                Plans from only <strong className="text-white">৳{displayPrice.toLocaleString()}</strong>
               </p>
             </div>
 

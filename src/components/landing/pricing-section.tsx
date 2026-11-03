@@ -32,8 +32,8 @@ const FALLBACK_PACKAGES: PricingPackage[] = [
     name: "Starter",
     tagline: "For solo entrepreneurs exploring initial restaurant ideas.",
     badge_text: "Lifetime Access",
-    price: 199,
-    original_price: 499,
+    price: 499,
+    original_price: 999,
     billing_period_text: "Lifetime Access • Pay once, use forever",
     discount_tag: "",
     coupon_code: "",
@@ -50,10 +50,9 @@ const FALLBACK_PACKAGES: PricingPackage[] = [
       "Standard Price Reference",
       "Basic Menu Builder (1 Project)",
       "Cloud Menu Save",
-      "Lifetime Blueprints & Future Updates",
     ],
     feature_highlight_title: "Features Included:",
-    button_text: "Get Lifetime Starter",
+    button_text: "Start with Starter",
     is_popular: false,
     is_active: true,
     sort_order: 1,
@@ -63,30 +62,30 @@ const FALLBACK_PACKAGES: PricingPackage[] = [
     package_id: "pro",
     name: "Pro",
     tagline: "Complete menu research, market pricing & unlimited menu exports.",
-    badge_text: "Most Popular • Lifetime Deal",
-    price: 499,
-    original_price: 1499,
+    badge_text: "Most Popular Choice",
+    price: 1499,
+    original_price: 2999,
     billing_period_text: "Lifetime Access • One-time payment",
     discount_tag: "",
     coupon_code: "",
     coupon_discount: 0,
-    is_category_unlimited: false,
-    category_limit: 10,
-    is_item_unlimited: false,
-    item_limit: 20,
+    is_category_unlimited: true,
+    category_limit: 0,
+    is_item_unlimited: true,
+    item_limit: 0,
     features: [
       "Everything in Starter",
       "Advanced Item & Competitor Research",
       "Market Price Spread Comparison",
       "Unlimited Menu Building Projects",
       "Item Shortlist & Favorites",
+      "Custom Category Organization",
       "Custom Pricing & Portion Weights",
       "Rich Description Editing",
       "Print-Ready PDF & Clean Excel Export",
-      "Lifetime Priority Updates",
     ],
     feature_highlight_title: "Everything in Starter, Plus:",
-    button_text: "Get Lifetime Pro",
+    button_text: "Get MenuSnap Pro",
     is_popular: true,
     is_active: true,
     sort_order: 2,
@@ -96,9 +95,9 @@ const FALLBACK_PACKAGES: PricingPackage[] = [
     package_id: "agency",
     name: "Agency",
     tagline: "For consultants and agencies managing multiple restaurant brands.",
-    badge_text: "Full Team • Lifetime",
-    price: 1499,
-    original_price: 4999,
+    badge_text: "Full Team Access",
+    price: 4999,
+    original_price: 9999,
     billing_period_text: "Lifetime Team Access • One-time payment",
     discount_tag: "",
     coupon_code: "",
@@ -216,10 +215,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
       <div className="max-w-[1180px] mx-auto relative z-10">
         {/* Section Heading */}
         <div className="text-center max-w-2xl mx-auto mb-14 sm:mb-16">
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white text-neutral-800 text-[11px] font-semibold tracking-wide uppercase mb-3 border border-neutral-300/80 shadow-[0_2px_6px_rgba(0,0,0,0.04)]">
-            <InfinityIcon className="w-3.5 h-3.5 text-neutral-600" />
-            <span>Lifetime License • No Monthly Fees</span>
-          </div>
+
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-neutral-950 tracking-tight leading-tight mb-3">
             Pick your perfect plan
           </h2>

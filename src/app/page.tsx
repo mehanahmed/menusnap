@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { Navbar } from "@/components/landingv2/navbar";
 import { HeroSection } from "@/components/landingv2/hero-section";
@@ -11,8 +9,13 @@ import { FinalCTASection } from "@/components/landingv2/final-cta-section";
 import { Footer } from "@/components/landingv2/footer";
 import { StickyMobileCTA } from "@/components/landingv2/sticky-mobile-cta";
 import { FAQS } from "@/lib/data";
+import { getPublicPricingPackagesAction } from "@/app/actions/packages";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const packagesRes = await getPublicPricingPackagesAction();
+  const packages = packagesRes.success && packagesRes.data ? packagesRes.data : [];
+  const minPrice = packages.length > 0 ? Math.min(...packages.map((p) => p.price)) : 499;
+
   const softwareJsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -21,11 +24,18 @@ export default function HomePage() {
     operatingSystem: "Web",
     description:
       "Restaurant menu research and menu builder for Bangladesh. Explore 500+ restaurant and parlor menu references, research food items and price references, and build your own restaurant menu.",
-    offers: [
-      { "@type": "Offer", name: "Starter", price: "199", priceCurrency: "BDT" },
-      { "@type": "Offer", name: "Pro", price: "499", priceCurrency: "BDT" },
-      { "@type": "Offer", name: "Agency", price: "1499", priceCurrency: "BDT" },
-    ],
+    offers: packages.length > 0
+      ? packages.map((pkg) => ({
+          "@type": "Offer",
+          name: pkg.name,
+          price: String(pkg.price),
+          priceCurrency: pkg.currency_code || "BDT",
+        }))
+      : [
+          { "@type": "Offer", name: "Starter", price: "499", priceCurrency: "BDT" },
+          { "@type": "Offer", name: "Pro", price: "1499", priceCurrency: "BDT" },
+          { "@type": "Offer", name: "Agency", price: "4999", priceCurrency: "BDT" },
+        ],
     inLanguage: ["bn", "en"],
     publisher: { "@type": "Organization", name: "MenuSnap" },
   };
@@ -56,7 +66,7 @@ export default function HomePage() {
         <HowItWorksSection />
 
         {/* 4. Interactive Pricing Table */}
-        <Pricing />
+        <Pricing initialPackages={packages} />
 
         {/* 5. Accessible FAQ Accordion */}
         <FAQSection />
@@ -69,7 +79,7 @@ export default function HomePage() {
       <Footer />
 
       {/* Sticky Bottom Bar for Mobile Visitors */}
-      <StickyMobileCTA />
+      <StickyMobileCTA minPrice={minPrice} />
 
       <script
         type="application/ld+json"

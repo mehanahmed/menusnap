@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { ParlorNavbar } from "@/components/parlor/navbar";
 import { ParlorHeroSection } from "@/components/parlor/hero-section";
@@ -10,8 +8,12 @@ import { ParlorFAQSection } from "@/components/parlor/faq-section";
 import { ParlorFinalCTASection } from "@/components/parlor/final-cta-section";
 import { ParlorFooter } from "@/components/parlor/footer";
 import { ParlorStickyMobileCTA } from "@/components/parlor/sticky-mobile-cta";
+import { getPublicPricingPackagesAction } from "@/app/actions/packages";
 
-export default function ParlorLandingPage() {
+export default async function ParlorLandingPage() {
+  const packagesRes = await getPublicPricingPackagesAction();
+  const packages = packagesRes.success && packagesRes.data ? packagesRes.data : [];
+
   return (
     <div className="min-h-screen bg-white text-gray-900 selection:bg-[#FF5A36]/15 selection:text-[#FF5A36] overflow-x-clip">
       {/* Dedicated Sticky Navigation */}
@@ -28,7 +30,7 @@ export default function ParlorLandingPage() {
         <ParlorHowItWorksSection />
 
         {/* 4. Interactive Pricing Table (Same system, same price, same options) */}
-        <Pricing />
+        <Pricing initialPackages={packages} />
 
         {/* 5. Parlour FAQ Accordion */}
         <ParlorFAQSection />

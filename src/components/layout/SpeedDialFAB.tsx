@@ -7,7 +7,11 @@ import Image from 'next/image';
 import { X, MessageCircle } from 'lucide-react';
 import { usePreferences } from '@/context/PreferencesContext';
 
-export function SpeedDialFAB(): ReactNode {
+interface SpeedDialFABProps {
+  phoneNumber?: string;
+}
+
+export function SpeedDialFAB({ phoneNumber = "8801805561176" }: SpeedDialFABProps = {}): ReactNode {
   const [showBubble, setShowBubble] = useState(true);
   const { language } = usePreferences();
   const fabControls = useAnimation();
@@ -42,7 +46,7 @@ export function SpeedDialFAB(): ReactNode {
 
   const handleOpenWhatsApp = () => {
     const message = encodeURIComponent("Hello MenuSnap, I need assistance with my digital menu.");
-    window.open(`https://wa.me/8801805561171?text=${message}`, '_blank');
+    window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
   };
 
   // Greeting text based on language (Unicode escaped for safe Bengali rendering)

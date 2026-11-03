@@ -2,6 +2,17 @@
 
 import pool from '@/lib/mysql';
 import { PricingPackage } from '@/lib/menusnap-types';
+import { revalidatePath } from 'next/cache';
+
+function revalidatePublicPricing() {
+  try {
+    revalidatePath('/');
+    revalidatePath('/v2');
+    revalidatePath('/parlor');
+  } catch {
+    // Ignore in non-rendering contexts
+  }
+}
 
 /**
  * Default lifetime packages seeded if the table is freshly created or empty.
@@ -12,8 +23,8 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     name: 'Starter',
     tagline: 'For solo entrepreneurs exploring initial restaurant ideas.',
     badge_text: 'Lifetime Access',
-    price: 199,
-    original_price: 499,
+    price: 499,
+    original_price: 999,
     billing_period_text: 'Lifetime Access • Pay once, use forever',
     billing_cycle_text: '/ lifetime',
     discount_tag: '',
@@ -27,10 +38,9 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
       'Standard Price Reference',
       'Basic Menu Builder (1 Project)',
       'Cloud Menu Save',
-      'Lifetime Blueprints & Future Updates',
     ],
     feature_highlight_title: 'Features Included:',
-    button_text: 'Get Lifetime Starter',
+    button_text: 'Start with Starter',
     is_popular: false,
     is_active: true,
     sort_order: 1,
@@ -39,15 +49,15 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     is_item_unlimited: false,
     item_limit: 10,
     is_ai_scan_unlimited: false,
-    ai_scan_limit: 5,
+    ai_scan_limit: 10,
   },
   {
     package_id: 'pro',
     name: 'Pro',
     tagline: 'Complete menu research, market pricing & unlimited menu exports.',
-    badge_text: 'Most Popular • Lifetime Deal',
-    price: 499,
-    original_price: 1499,
+    badge_text: 'Most Popular Choice',
+    price: 1499,
+    original_price: 2999,
     billing_period_text: 'Lifetime Access • One-time payment',
     billing_cycle_text: '/ lifetime',
     discount_tag: '',
@@ -63,27 +73,26 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
       'Custom Pricing & Portion Weights',
       'Rich Description Editing',
       'Print-Ready PDF & Clean Excel Export',
-      'Lifetime Priority Updates',
     ],
     feature_highlight_title: 'Everything in Starter, Plus:',
-    button_text: 'Get Lifetime Pro',
+    button_text: 'Get MenuSnap Pro',
     is_popular: true,
     is_active: true,
     sort_order: 2,
-    is_category_unlimited: false,
-    category_limit: 10,
-    is_item_unlimited: false,
-    item_limit: 20,
+    is_category_unlimited: true,
+    category_limit: 0,
+    is_item_unlimited: true,
+    item_limit: 0,
     is_ai_scan_unlimited: false,
-    ai_scan_limit: 25,
+    ai_scan_limit: 10,
   },
   {
     package_id: 'agency',
     name: 'Agency',
     tagline: 'For consultants and agencies managing multiple restaurant brands.',
-    badge_text: 'Full Team • Lifetime',
-    price: 1499,
-    original_price: 4999,
+    badge_text: 'Full Team Access',
+    price: 4999,
+    original_price: 9999,
     billing_period_text: 'Lifetime Team Access • One-time payment',
     billing_cycle_text: '/ lifetime',
     discount_tag: '',
@@ -91,15 +100,14 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     coupon_discount: 0,
     features: [
       'Everything in Pro',
-      'Multiple Restaurant Blueprints',
+      'Multiple Restaurant Projects',
       'Client-wise Menu Workspaces',
       'Agency Multi-user Access',
       'Higher Export & Query Limits',
       'Direct Onboarding & Priority Support',
-      'Lifetime Agency License',
     ],
     feature_highlight_title: 'Everything in Pro, Plus:',
-    button_text: 'Get Lifetime Agency',
+    button_text: 'Contact for Agency',
     is_popular: false,
     is_active: true,
     sort_order: 3,
@@ -107,8 +115,8 @@ const DEFAULT_PACKAGES: Omit<PricingPackage, 'id'>[] = [
     category_limit: 0,
     is_item_unlimited: true,
     item_limit: 0,
-    is_ai_scan_unlimited: true,
-    ai_scan_limit: 0,
+    is_ai_scan_unlimited: false,
+    ai_scan_limit: 10,
   },
 ];
 
@@ -478,6 +486,7 @@ export async function createPricingPackageAction(payload: {
     );
 
     const insertedId = result.insertId;
+    revalidatePublicPricing();
     const fetchRes = await getPricingPackageByIdAction(insertedId);
     return { success: true, data: fetchRes.data };
   } catch (error: any) {
@@ -621,6 +630,7 @@ export async function updatePricingPackageAction(
     );
 
     const updatedRes = await getPricingPackageByIdAction(id);
+    revalidatePublicPricing();
     return { success: true, data: updatedRes.data };
   } catch (error: any) {
     console.error('updatePricingPackageAction error:', error);
@@ -646,6 +656,7 @@ export async function bulkUpdatePackagesCurrencyAction(
       'UPDATE pricing_packages SET currency_symbol = ?, currency_code = ?',
       [symbol, code]
     );
+    revalidatePublicPricing();
     return { success: true };
   } catch (error: any) {
     console.error('bulkUpdatePackagesCurrencyAction error:', error);
@@ -744,6 +755,7 @@ export async function deletePricingPackageAction(id: number): Promise<{
     if (result.affectedRows === 0) {
       return { success: false, error: 'Package not found or already deleted' };
     }
+    revalidatePublicPricing();
     return { success: true };
   } catch (error: any) {
     console.error('deletePricingPackageAction error:', error);
@@ -764,6 +776,7 @@ export async function togglePricingPackageActiveAction(
   try {
     await ensurePricingPackagesTable();
     await (pool as any).execute('UPDATE pricing_packages SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, id]);
+    revalidatePublicPricing();
     return { success: true };
   } catch (error: any) {
     console.error('togglePricingPackageActiveAction error:', error);
@@ -784,6 +797,7 @@ export async function reorderPricingPackagesAction(orderedIds: number[]): Promis
       const id = orderedIds[index];
       await (pool as any).execute('UPDATE pricing_packages SET sort_order = ? WHERE id = ?', [index + 1, id]);
     }
+    revalidatePublicPricing();
     return { success: true };
   } catch (error: any) {
     console.error('reorderPricingPackagesAction error:', error);

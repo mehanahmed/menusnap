@@ -1,7 +1,5 @@
 "use client"
 
-import { FileText } from 'lucide-react'
-
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Underline } from '@tiptap/extension-underline'
@@ -858,15 +856,6 @@ function GoogleDocsEditorInner({
     }, [maxPaperWidth])
 
     const paperContainerRef = useRef<HTMLDivElement>(null)
-    const [pageCount, setPageCount] = useState<number>(1)
-    const [currentPage, setCurrentPage] = useState<number>(1)
-
-    // Reset pagination state immediately when switching to another tab
-    useEffect(() => {
-        setPageCount(1)
-        setCurrentPage(1)
-    }, [activeTabId])
-
 
     const isRemoteUpdate = useRef(false)
     const socketRef = useRef(socket)
@@ -1052,65 +1041,7 @@ function GoogleDocsEditorInner({
         immediatelyRender: false,
     }, [docId]) // Stable editor instance, does not reset when socket connects
 
-    useEffect(() => {
-        if (isPageless) {
-            setPageCount(1)
-            return
-        }
 
-        const updatePagination = () => {
-            if (!editor || !editor.view || editor.isDestroyed) return
-            const editorDom = editor.view.dom as HTMLElement | null
-            if (!editorDom) return
-
-            // 1. Count any manual page breaks in the document
-            const pageBreakCount = editorDom.querySelectorAll('.doc-page-break').length
-
-            // 2. Measure actual content height from ProseMirror child elements
-            // (DO NOT measure paperContainerRef which has paperMinHeight applied!)
-            const children = editorDom.children
-            let maxBottom = 0
-            if (children && children.length > 0) {
-                for (let i = 0; i < children.length; i++) {
-                    const el = children[i] as HTMLElement
-                    const b = el.offsetTop + el.offsetHeight
-                    if (b > maxBottom) maxBottom = b
-                }
-            }
-
-            const totalContentHeight = maxBottom > 0 ? maxBottom + 56 : 0
-            const naturalPages = Math.max(1, Math.ceil(totalContentHeight / pageHeightNum))
-            const calculatedTotal = Math.max(1, Math.max(pageBreakCount + 1, naturalPages))
-
-            setPageCount(calculatedTotal)
-        }
-
-        updatePagination()
-        const timer1 = setTimeout(updatePagination, 50)
-        const timer2 = setTimeout(updatePagination, 200)
-        return () => {
-            clearTimeout(timer1)
-            clearTimeout(timer2)
-        }
-    }, [content, activeTabId, isPageless, pageHeightNum, editor])
-
-    useEffect(() => {
-        if (isPageless || pageCount <= 1) return
-
-        const handleScroll = () => {
-            const mainCanvas = document.querySelector('main')
-            if (!mainCanvas) return
-            const scrollTop = mainCanvas.scrollTop
-            const cur = Math.min(pageCount, Math.max(1, Math.floor(scrollTop / (pageHeightNum * 0.8)) + 1))
-            setCurrentPage(cur)
-        }
-
-        const mainCanvas = document.querySelector('main')
-        if (mainCanvas) {
-            mainCanvas.addEventListener('scroll', handleScroll, { passive: true })
-            return () => mainCanvas.removeEventListener('scroll', handleScroll)
-        }
-    }, [isPageless, pageCount, pageHeightNum])
 
 
     useEffect(() => {
@@ -1155,7 +1086,7 @@ function GoogleDocsEditorInner({
         if (editor && tabStops) (editor.storage as any).tabKey.tabStops = tabStops
     }, [editor, tabStops])
 
-    const paperMinHeight = isPageless ? undefined : `${Math.max(1, pageCount) * pageHeightNum}px`
+    const paperMinHeight = isPageless ? undefined : `${pageHeightNum}px`
 
     return (
         <div className="flex justify-center w-full min-h-full relative print:p-0">
@@ -1183,39 +1114,9 @@ function GoogleDocsEditorInner({
                         <EditorContent editor={editor} />
                     </div>
 
-                    {/* Automatic Visual Page Dividers for Paginated Mode */}
-                    {!isPageless && pageCount > 1 && Array.from({ length: pageCount - 1 }).map((_, idx) => {
-                        const pageNum = idx + 2
-                        const topPos = (idx + 1) * pageHeightNum
-                        return (
-                            <div
-                                key={pageNum}
-                                className="absolute left-0 right-0 pointer-events-none z-20 flex items-center print:hidden select-none"
-                                style={{ top: `${topPos}px`, transform: 'translateY(-50%)' }}
-                            >
-                                <div className="w-full flex items-center justify-between px-6">
-                                    <div className="flex-1 border-t-2 border-dashed border-gray-300" />
-                                    <div className="mx-4 flex items-center gap-1.5 bg-[#f1f3f4] text-gray-600 border border-gray-300 px-3 py-1 rounded-full text-[11px] font-semibold shadow-xs">
-                                        <FileText className="w-3.5 h-3.5 text-blue-600" />
-                                        <span>Page {pageNum}</span>
-                                    </div>
-                                    <div className="flex-1 border-t-2 border-dashed border-gray-300" />
-                                </div>
-                            </div>
-                        )
-                    })}
-
                     {customPaperFooter}
                 </div>
             </div>
-
-            {/* Floating Page Indicator */}
-            {!isPageless && pageCount > 1 && (
-                <div className="fixed bottom-6 right-6 z-40 bg-white/95 backdrop-blur-xs border border-gray-300 text-gray-700 shadow-md rounded-full px-3.5 py-1.5 text-xs font-medium flex items-center gap-2 select-none print:hidden transition-all duration-200">
-                    <FileText className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Page {currentPage} of {pageCount}</span>
-                </div>
-            )}
         </div>
     )
 }

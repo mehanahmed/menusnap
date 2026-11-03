@@ -177,11 +177,11 @@ export function CheckoutModal({
     basePrice = matchedPackage.price;
   } else {
     if (plan === "starter") {
-      basePrice = 199;
-    } else if (plan === "pro") {
       basePrice = 499;
-    } else if (plan === "agency") {
+    } else if (plan === "pro") {
       basePrice = 1499;
+    } else if (plan === "agency") {
+      basePrice = 4999;
     }
   }
 

@@ -1,5 +1,3 @@
-"use client";
-
 import React from "react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
@@ -23,8 +21,13 @@ import { FinalCTA } from "@/components/landing/FinalCTA";
 import { Footer } from "@/components/landing/Footer";
 import { StickyMobileCTA } from "@/components/landing/StickyMobileCTA";
 import { FAQS } from "@/lib/data";
+import { getPublicPricingPackagesAction } from "@/app/actions/packages";
 
-export default function V2Page() {
+export default async function V2Page() {
+  const packagesRes = await getPublicPricingPackagesAction();
+  const packages = packagesRes.success && packagesRes.data ? packagesRes.data : [];
+  const minPrice = packages.length > 0 ? Math.min(...packages.map((p) => p.price)) : 499;
+
   const softwareJsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -33,11 +36,18 @@ export default function V2Page() {
     operatingSystem: "Web",
     description:
       "Restaurant menu research and menu builder for Bangladesh. Explore 500+ restaurant and parlor menu references, research food items and price references, and build your own restaurant menu.",
-    offers: [
-      { "@type": "Offer", name: "Starter", price: "199", priceCurrency: "BDT" },
-      { "@type": "Offer", name: "Pro", price: "499", priceCurrency: "BDT" },
-      { "@type": "Offer", name: "Agency", price: "1499", priceCurrency: "BDT" },
-    ],
+    offers: packages.length > 0
+      ? packages.map((pkg) => ({
+          "@type": "Offer",
+          name: pkg.name,
+          price: String(pkg.price),
+          priceCurrency: pkg.currency_code || "BDT",
+        }))
+      : [
+          { "@type": "Offer", name: "Starter", price: "499", priceCurrency: "BDT" },
+          { "@type": "Offer", name: "Pro", price: "1499", priceCurrency: "BDT" },
+          { "@type": "Offer", name: "Agency", price: "4999", priceCurrency: "BDT" },
+        ],
     inLanguage: ["bn", "en"],
     publisher: { "@type": "Organization", name: "MenuSnap" },
   };
@@ -69,14 +79,14 @@ export default function V2Page() {
         <Benefits />
         <Audience />
         <BeforeAfter />
-        <Pricing />
+        <Pricing initialPackages={packages} />
         <PurchaseFlow />
         <Testimonials />
         <FAQ />
         <FinalCTA />
       </main>
       <Footer />
-      <StickyMobileCTA />
+      <StickyMobileCTA minPrice={minPrice} />
 
       <script
         type="application/ld+json"

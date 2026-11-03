@@ -4,12 +4,16 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { trackEvent } from "@/lib/analytics";
 
+interface StickyMobileCTAProps {
+  minPrice?: number;
+}
+
 /**
  * Sticky mobile purchase bar. Appears after the visitor scrolls past the
  * hero and hides while the footer is on screen so it never covers footer
  * links or the final CTA.
  */
-export function StickyMobileCTA() {
+export function StickyMobileCTA({ minPrice }: StickyMobileCTAProps = {}) {
   const [visible, setVisible] = useState(false);
   const [footerVisible, setFooterVisible] = useState(false);
 
@@ -35,6 +39,7 @@ export function StickyMobileCTA() {
   }, []);
 
   const show = visible && !footerVisible;
+  const displayPrice = minPrice && minPrice > 0 ? minPrice : 499;
 
   return (
     <div
@@ -49,7 +54,7 @@ export function StickyMobileCTA() {
         onClick={() => trackEvent("mobileCtaClicked")}
         className="flex h-12 w-full items-center justify-center rounded-xl bg-accent text-[15px] font-bold text-white shadow-pop transition-colors hover:bg-accent-deep"
       >
-        Get Lifetime Deal — From ৳199
+        Get Lifetime Deal — From ৳{displayPrice.toLocaleString()}
       </a>
     </div>
   );

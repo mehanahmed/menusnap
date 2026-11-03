@@ -129,7 +129,7 @@ export function HeroSection({
           transition={{ duration: 0.45, delay: 0.18 }}
           className="text-sm sm:text-base md:text-[17px] text-neutral-600 font-bengali max-w-2xl sm:max-w-3xl mx-auto text-center font-normal leading-relaxed sm:leading-[1.7] mb-8"
         >
-          বাংলাদেশের 5,000+ Restaurant & Parlor-এর Menu Reference Explore করুন, হাজারো Food Item Search করুন, Price সম্পর্কে ধারণা নিন এবং নিজের Restaurant-এর Complete Menu List তৈরি করুন।
+          বাংলাদেশের 500+ Restaurant & Parlor-এর Menu Reference Explore করুন, হাজারো Food Item Search করুন, Price সম্পর্কে ধারণা নিন এবং নিজের Restaurant-এর Complete Menu List তৈরি করুন।
         </motion.p>
 
         {/* 5. Action Buttons */}

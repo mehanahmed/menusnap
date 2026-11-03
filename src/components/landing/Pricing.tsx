@@ -17,86 +17,11 @@ function formatTaka(value: number): string {
 }
 
 export interface PricingProps {
+  initialPackages?: PricingPackage[];
   onSelectPlan?: (plan: string, duration?: string, coupon?: string) => void;
 }
 
-const FALLBACK_LIFETIME_PACKAGES: Omit<PricingPackage, "id">[] = [
-  {
-    package_id: "starter",
-    name: "Starter",
-    tagline: "For solo entrepreneurs exploring initial restaurant ideas.",
-    badge_text: "Lifetime Access",
-    price: 199,
-    original_price: 499,
-    billing_period_text: "Lifetime Access • Pay once, use forever",
-    billing_cycle_text: "/ lifetime",
-    features: [
-      "3,000+ Menu Database Access",
-      "Restaurant & Cuisine Browse",
-      "Food Item Search",
-      "Category-wise Exploration",
-      "Standard Price Reference",
-      "Basic Menu Builder (1 Project)",
-      "Cloud Menu Save",
-      "Lifetime Blueprints & Future Updates",
-    ],
-    button_text: "Get Lifetime Starter",
-    is_popular: false,
-    is_active: true,
-    sort_order: 1,
-  },
-  {
-    package_id: "pro",
-    name: "Pro",
-    tagline: "Complete menu research, market pricing & unlimited menu exports.",
-    badge_text: "Most Popular • Lifetime Deal",
-    price: 499,
-    original_price: 1499,
-    billing_period_text: "Lifetime Access • One-time payment",
-    billing_cycle_text: "/ lifetime",
-    features: [
-      "Everything in Starter",
-      "Advanced Item & Competitor Research",
-      "Market Price Spread Comparison",
-      "Unlimited Menu Building Projects",
-      "Item Shortlist & Favorites",
-      "Custom Category Organization",
-      "Custom Pricing & Portion Weights",
-      "Rich Description Editing",
-      "Print-Ready PDF & Clean Excel Export",
-      "Lifetime Priority Updates",
-    ],
-    button_text: "Get Lifetime Pro",
-    is_popular: true,
-    is_active: true,
-    sort_order: 2,
-  },
-  {
-    package_id: "agency",
-    name: "Agency",
-    tagline: "For consultants and agencies managing multiple restaurant brands.",
-    badge_text: "Full Team • Lifetime",
-    price: 1499,
-    original_price: 4999,
-    billing_period_text: "Lifetime Team Access • One-time payment",
-    billing_cycle_text: "/ lifetime",
-    features: [
-      "Everything in Pro",
-      "Multiple Restaurant Projects",
-      "Client-wise Menu Workspaces",
-      "Agency Multi-user Access",
-      "Higher Export & Query Limits",
-      "Direct Onboarding & Priority Support",
-      "Lifetime Agency License",
-    ],
-    button_text: "Get Lifetime Agency",
-    is_popular: false,
-    is_active: true,
-    sort_order: 3,
-  },
-];
-
-export function Pricing({ onSelectPlan }: PricingProps) {
+export function Pricing({ initialPackages, onSelectPlan }: PricingProps) {
   const [couponInput, setCouponInput] = useState("");
   const [couponApplied, setCouponApplied] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -109,26 +34,34 @@ export function Pricing({ onSelectPlan }: PricingProps) {
     discount_type?: "fixed" | "percentage";
     discount_value?: number;
   } | null>(null);
-  const [packages, setPackages] = useState<PricingPackage[]>([]);
+  const [packages, setPackages] = useState<PricingPackage[]>(initialPackages || []);
+  const [isLoading, setIsLoading] = useState<boolean>(!initialPackages || initialPackages.length === 0);
   const pricingRef = useRef<HTMLDivElement>(null);
 
-  /* Fetch dynamic lifetime pricing packages from database */
+  /* Fetch dynamic lifetime pricing packages from database if not initially provided */
   useEffect(() => {
     let isMounted = true;
-    getPublicPricingPackagesAction()
-      .then((res) => {
-        if (isMounted && res.success && res.data && res.data.length > 0) {
-          setPackages(res.data);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load public pricing packages:", err);
-      });
+    if (!initialPackages || initialPackages.length === 0) {
+      getPublicPricingPackagesAction()
+        .then((res) => {
+          if (isMounted && res.success && res.data && res.data.length > 0) {
+            setPackages(res.data);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load public pricing packages:", err);
+        })
+        .finally(() => {
+          if (isMounted) setIsLoading(false);
+        });
+    } else {
+      setIsLoading(false);
+    }
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialPackages]);
 
   /* Track pricing viewed once */
   useEffect(() => {
@@ -241,11 +174,9 @@ export function Pricing({ onSelectPlan }: PricingProps) {
     return `/checkout?${params.toString()}`;
   };
 
-  // Prepare display packages (dynamic from DB or fallback)
+  // Prepare display packages strictly from database
   const displayItems = useMemo(() => {
-    const sourceList = packages.length > 0 ? packages : (FALLBACK_LIFETIME_PACKAGES as PricingPackage[]);
-
-    return sourceList.map((pkg) => {
+    return packages.map((pkg) => {
       const isPro = pkg.is_popular;
       const basePrice = Number(pkg.price && pkg.price > 0 ? pkg.price : (pkg.price_1_month || 499));
       const originalPrice = pkg.original_price ? Number(pkg.original_price) : null;
@@ -304,137 +235,153 @@ export function Pricing({ onSelectPlan }: PricingProps) {
           description="One-time payment, unlimited lifetime menu blueprints and updates. No monthly or recurring fees."
         />
 
-        {/* Lifetime Banner Pill */}
-        <Reveal className="mt-8 flex justify-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-5 py-2 text-xs font-bold text-ink shadow-card">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-soft text-sm font-black text-accent-deep">
-              ∞
-            </span>
-            <span>Lifetime License • Pay Once, Use Forever</span>
-          </div>
-        </Reveal>
+
 
         {/* Dynamic Lifetime Plans Grid */}
-        <div
-          className={cn(
-            "mt-12 grid items-stretch gap-6",
-            displayItems.length === 1 && "mx-auto max-w-md grid-cols-1",
-            displayItems.length === 2 && "mx-auto max-w-3xl md:grid-cols-2",
-            displayItems.length === 3 && "lg:grid-cols-3",
-            displayItems.length >= 4 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-          )}
-        >
-          {displayItems.map((plan, i) => {
-            const isPro = plan.isPopular;
-            return (
-              <Reveal key={plan.id} delay={i * 80}>
-                <article
-                  className={cn(
-                    "relative flex h-full flex-col rounded-3xl p-7 transition-all duration-300 sm:p-8",
-                    isPro
-                      ? "border border-accent/40 bg-night text-white shadow-pop lg:-my-4 lg:scale-[1.03]"
-                      : "border border-line bg-white shadow-card hover:-translate-y-1 hover:shadow-lift",
-                  )}
-                >
-                  {isPro && (
-                    <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-accent px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-pop">
-                      {plan.badgeText || "Most Popular • Lifetime"}
-                    </span>
-                  )}
+        {isLoading && packages.length === 0 ? (
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className="rounded-3xl p-8 border border-line bg-white shadow-card animate-pulse space-y-6"
+              >
+                <div className="h-6 w-24 bg-gray-200 rounded" />
+                <div className="h-4 w-40 bg-gray-200 rounded" />
+                <div className="h-10 w-32 bg-gray-200 rounded" />
+                <div className="space-y-3 pt-6 border-t border-line">
+                  <div className="h-4 w-full bg-gray-200 rounded" />
+                  <div className="h-4 w-5/6 bg-gray-200 rounded" />
+                  <div className="h-4 w-4/6 bg-gray-200 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : displayItems.length > 0 ? (
+          <div
+            className={cn(
+              "mt-12 grid items-stretch gap-6",
+              displayItems.length === 1 && "mx-auto max-w-md grid-cols-1",
+              displayItems.length === 2 && "mx-auto max-w-3xl md:grid-cols-2",
+              displayItems.length === 3 && "lg:grid-cols-3",
+              displayItems.length >= 4 && "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+            )}
+          >
+            {displayItems.map((plan, i) => {
+              const isPro = plan.isPopular;
+              return (
+                <Reveal key={plan.id} delay={i * 80}>
+                  <article
+                    className={cn(
+                      "relative flex h-full flex-col rounded-3xl p-7 transition-all duration-300 sm:p-8",
+                      isPro
+                        ? "border border-accent/40 bg-night text-white shadow-pop lg:-my-4 lg:scale-[1.03]"
+                        : "border border-line bg-white shadow-card hover:-translate-y-1 hover:shadow-lift",
+                    )}
+                  >
+                    {isPro && (
+                      <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-accent px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-pop">
+                        {plan.badgeText || "Most Popular • Lifetime"}
+                      </span>
+                    )}
 
-                  <div>
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className={cn("text-xl font-extrabold", isPro ? "text-white" : "text-ink")}>
-                        {plan.name}
-                      </h3>
-                      {plan.badgeText && !isPro && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-[10px] font-extrabold text-accent-deep">
-                          🔥 {plan.badgeText}
-                        </span>
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className={cn("text-xl font-extrabold", isPro ? "text-white" : "text-ink")}>
+                          {plan.name}
+                        </h3>
+                        {plan.badgeText && !isPro && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-[10px] font-extrabold text-accent-deep">
+                            🔥 {plan.badgeText}
+                          </span>
+                        )}
+                      </div>
+                      {plan.tagline && (
+                        <p className={cn("mt-1 text-xs font-medium leading-relaxed", isPro ? "text-white/60" : "text-muted")}>
+                          {plan.tagline}
+                        </p>
                       )}
                     </div>
-                    {plan.tagline && (
-                      <p className={cn("mt-1 text-xs font-medium leading-relaxed", isPro ? "text-white/60" : "text-muted")}>
-                        {plan.tagline}
-                      </p>
-                    )}
-                  </div>
 
-                  {/* Price display */}
-                  <div className="mt-6">
-                    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span
-                        className={cn(
-                          "text-[2.6rem] font-extrabold leading-none tracking-tight",
-                          isPro ? "text-white" : "text-ink",
-                        )}
-                      >
-                        {(plan as any).currency_symbol || '৳'}{formatTaka(plan.price)}
-                      </span>
-                      <span className={cn("text-xs font-bold uppercase tracking-wider", isPro ? "text-accent" : "text-muted")}>
-                        {plan.billingCycleText || "/ lifetime"}
-                      </span>
-                    </p>
-
-                    {/* Strikethrough original price + savings pill */}
-                    {plan.originalPrice && plan.originalPrice > plan.price && (
-                      <p className={cn("mt-2 flex items-center gap-2 text-xs font-semibold", isPro ? "text-white/70" : "text-muted")}>
-                        <span className="line-through opacity-70">{(plan as any).currency_symbol || '৳'}{formatTaka(plan.originalPrice)}</span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success">
-                          <SparkleIcon className="h-3 w-3" /> Save {(plan as any).currency_symbol || '৳'}{formatTaka(plan.originalPrice - plan.price)}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Features list */}
-                  <ul className={cn("mt-6 flex flex-col gap-2.5 border-t pt-6", isPro ? "border-white/10" : "border-line")}>
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2.5">
+                    {/* Price display */}
+                    <div className="mt-6">
+                      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                         <span
                           className={cn(
-                            "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-                            isPro ? "bg-accent/25 text-accent" : "bg-accent-soft text-accent-deep",
+                            "text-[2.6rem] font-extrabold leading-none tracking-tight",
+                            isPro ? "text-white" : "text-ink",
                           )}
                         >
-                          <CheckIcon className="h-3 w-3" />
+                          {(plan as any).currency_symbol || '৳'}{formatTaka(plan.price)}
                         </span>
-                        <span className={cn("text-sm font-medium", isPro ? "text-white/85" : "text-ink")}>
-                          {feature}
+                        <span className={cn("text-xs font-bold uppercase tracking-wider", isPro ? "text-accent" : "text-muted")}>
+                          {plan.billingCycleText || "/ lifetime"}
                         </span>
-                      </li>
-                    ))}
-                  </ul>
+                      </p>
 
-                  {/* CTA button */}
-                  <div className="mt-8 flex flex-1 items-end">
-                    <Button
-                      href={checkoutHref(plan.id)}
-                      variant={isPro ? "primary" : "secondary"}
-                      size="lg"
-                      withArrow={isPro}
-                      className="w-full"
-                      onClick={(e) => {
-                        trackEvent("planSelected", { plan: plan.id, period: "lifetime" });
-                        trackEvent("checkoutStarted", { plan: plan.id, period: "lifetime" });
-                        if (onSelectPlan) {
-                          e.preventDefault();
-                          onSelectPlan(
-                            plan.id,
-                            "lifetime",
-                            couponApplied ? (plan.couponCode || COUPON.code) : undefined,
-                          );
-                        }
-                      }}
-                    >
-                      {plan.cta}
-                    </Button>
-                  </div>
-                </article>
-              </Reveal>
-            );
-          })}
-        </div>
+                      {/* Strikethrough original price + savings pill */}
+                      {plan.originalPrice && plan.originalPrice > plan.price && (
+                        <p className={cn("mt-2 flex items-center gap-2 text-xs font-semibold", isPro ? "text-white/70" : "text-muted")}>
+                          <span className="line-through opacity-70">{(plan as any).currency_symbol || '৳'}{formatTaka(plan.originalPrice)}</span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success">
+                            <SparkleIcon className="h-3 w-3" /> Save {(plan as any).currency_symbol || '৳'}{formatTaka(plan.originalPrice - plan.price)}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Features list */}
+                    <ul className={cn("mt-6 flex flex-col gap-2.5 border-t pt-6", isPro ? "border-white/10" : "border-line")}>
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-2.5">
+                          <span
+                            className={cn(
+                              "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                              isPro ? "bg-accent/25 text-accent" : "bg-accent-soft text-accent-deep",
+                            )}
+                          >
+                            <CheckIcon className="h-3 w-3" />
+                          </span>
+                          <span className={cn("text-sm font-medium", isPro ? "text-white/85" : "text-ink")}>
+                            {feature}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* CTA button */}
+                    <div className="mt-8 flex flex-1 items-end">
+                      <Button
+                        href={checkoutHref(plan.id)}
+                        variant={isPro ? "primary" : "secondary"}
+                        size="lg"
+                        withArrow={isPro}
+                        className="w-full"
+                        onClick={(e) => {
+                          trackEvent("planSelected", { plan: plan.id, period: "lifetime" });
+                          trackEvent("checkoutStarted", { plan: plan.id, period: "lifetime" });
+                          if (onSelectPlan) {
+                            e.preventDefault();
+                            onSelectPlan(
+                              plan.id,
+                              "lifetime",
+                              couponApplied ? (plan.couponCode || COUPON.code) : undefined,
+                            );
+                          }
+                        }}
+                      >
+                        {plan.cta}
+                      </Button>
+                    </div>
+                  </article>
+                </Reveal>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-12 text-center py-12 text-neutral-500 font-medium">
+            No pricing packages available at the moment.
+          </div>
+        )}
 
         {/* Coupon */}
         <Reveal className="mt-10">

@@ -158,9 +158,9 @@ function DedicatedCheckoutForm() {
     if (matchedPackage) {
       return matchedPackage.price;
     }
-    if (rawPlan === "starter") return 199;
-    if (rawPlan === "pro") return 499;
-    if (rawPlan === "agency") return 1499;
+    if (rawPlan === "starter") return 499;
+    if (rawPlan === "pro") return 1499;
+    if (rawPlan === "agency") return 4999;
     return 499;
   }, [matchedPackage, rawPlan]);
 
