@@ -20,6 +20,8 @@ export interface PricingPackage {
   tagline: string;
   badge_text?: string | null;
   price: number;
+  currency_symbol?: string | null;
+  currency_code?: string | null;
   original_price?: number | null;
   price_1_month?: number | null;
   price_3_months?: number | null;

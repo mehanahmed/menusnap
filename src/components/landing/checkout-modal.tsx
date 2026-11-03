@@ -173,6 +173,7 @@ export function CheckoutModal({
 
   // Base price calculation
   let basePrice = 0;
+  const currencySymbol = matchedPackage?.currency_symbol || '৳';
   if (matchedPackage) {
     basePrice = matchedPackage.price;
   } else {
@@ -208,7 +209,7 @@ export function CheckoutModal({
         if (res.valid) {
           setAppliedCoupon(cleanCode);
           setCouponDiscount(res.discount);
-          setCouponMessage(res.message || `৳${res.discount.toLocaleString()} discount applied`);
+          setCouponMessage(res.message || `${currencySymbol}${res.discount.toLocaleString()} discount applied`);
           setCouponError(null);
         } else {
           // Check package-specific fallback coupon
@@ -220,7 +221,7 @@ export function CheckoutModal({
             const fallbackDiscount = matchedPackage.coupon_discount || 0;
             setAppliedCoupon(cleanCode);
             setCouponDiscount(fallbackDiscount);
-            setCouponMessage(`৳${fallbackDiscount.toLocaleString()} package discount applied`);
+            setCouponMessage(`${currencySymbol}${fallbackDiscount.toLocaleString()} package discount applied`);
             setCouponError(null);
           } else {
             setAppliedCoupon(null);
@@ -455,7 +456,7 @@ export function CheckoutModal({
 
                 <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-200/60">
                   <span className="text-gray-500">Plan Subtotal</span>
-                  <span className="font-bold text-gray-800">৳{basePrice.toLocaleString()}</span>
+                  <span className="font-bold text-gray-800">{currencySymbol}{basePrice.toLocaleString()}</span>
                 </div>
 
                 {appliedCoupon && couponDiscount > 0 && (
@@ -463,13 +464,13 @@ export function CheckoutModal({
                     <span className="flex items-center gap-1">
                       <Tag className="w-3 h-3" /> Coupon: {appliedCoupon}
                     </span>
-                    <span>- ৳{couponDiscount.toLocaleString()}</span>
+                    <span>- {currencySymbol}{couponDiscount.toLocaleString()}</span>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-200 font-black text-gray-950">
                   <span>Total Payable:</span>
-                  <span className="text-lg text-[#FF5A36]">৳{finalAmount.toLocaleString()}</span>
+                  <span className="text-lg text-[#FF5A36]">{currencySymbol}{finalAmount.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -646,7 +647,7 @@ export function CheckoutModal({
                     </>
                   ) : (
                     <>
-                      <span>Pay ৳{finalAmount.toLocaleString()}</span>
+                      <span>Pay {currencySymbol}{finalAmount.toLocaleString()}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}

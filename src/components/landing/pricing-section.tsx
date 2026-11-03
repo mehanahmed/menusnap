@@ -267,7 +267,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
                   {/* Price Row */}
                   <div className="flex items-baseline mb-7">
                     <span className={`text-4xl font-extrabold tracking-tight ${isPop ? "text-white" : "text-black"}`}>
-                      ৳{pkg.price.toLocaleString()}
+                      {(pkg as any).currency_symbol || '৳'}{pkg.price.toLocaleString()}
                     </span>
                     <span className="text-xs text-neutral-400 font-normal ml-1">
                       {pkg.billing_cycle_text || "/lifetime"}

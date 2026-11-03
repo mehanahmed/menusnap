@@ -284,6 +284,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
         cta: pkg.button_text || (isPro ? "Get Lifetime Pro" : "Get Started"),
         isPopular: isPro,
         price: finalPrice,
+        currency_symbol: pkg.currency_symbol || '৳',
         originalPrice: canApplyCoupon ? basePrice : originalPrice,
         billingPeriodText: pkg.billing_period_text || "Lifetime Access • One-time payment",
         billingCycleText: pkg.billing_cycle_text || "/ lifetime",
@@ -368,7 +369,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
                           isPro ? "text-white" : "text-ink",
                         )}
                       >
-                        ৳{formatTaka(plan.price)}
+                        {(plan as any).currency_symbol || '৳'}{formatTaka(plan.price)}
                       </span>
                       <span className={cn("text-xs font-bold uppercase tracking-wider", isPro ? "text-accent" : "text-muted")}>
                         {plan.billingCycleText || "/ lifetime"}
@@ -378,9 +379,9 @@ export function Pricing({ onSelectPlan }: PricingProps) {
                     {/* Strikethrough original price + savings pill */}
                     {plan.originalPrice && plan.originalPrice > plan.price && (
                       <p className={cn("mt-2 flex items-center gap-2 text-xs font-semibold", isPro ? "text-white/70" : "text-muted")}>
-                        <span className="line-through opacity-70">৳{formatTaka(plan.originalPrice)}</span>
+                        <span className="line-through opacity-70">{(plan as any).currency_symbol || '৳'}{formatTaka(plan.originalPrice)}</span>
                         <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success">
-                          <SparkleIcon className="h-3 w-3" /> Save ৳{formatTaka(plan.originalPrice - plan.price)}
+                          <SparkleIcon className="h-3 w-3" /> Save {(plan as any).currency_symbol || '৳'}{formatTaka(plan.originalPrice - plan.price)}
                         </span>
                       </p>
                     )}

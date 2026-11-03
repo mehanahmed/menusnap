@@ -43,7 +43,8 @@ import {
   updatePricingPackageAction,
   deletePricingPackageAction,
   togglePricingPackageActiveAction,
-  reorderPricingPackagesAction
+  reorderPricingPackagesAction,
+  bulkUpdatePackagesCurrencyAction
 } from "@/app/actions/packages";
 
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,8 @@ interface PackageFormData {
   tagline: string;
   badge_text: string;
   price: number;
+  currency_symbol: string;
+  currency_code: string;
   original_price: number | "";
   billing_period_text: string;
   billing_cycle_text: string;
@@ -120,6 +123,8 @@ const DEFAULT_FORM_DATA: PackageFormData = {
   tagline: "",
   badge_text: "Lifetime Access",
   price: 999,
+  currency_symbol: "৳",
+  currency_code: "BDT",
   original_price: 1999,
   billing_period_text: "Lifetime Access • One-time payment",
   billing_cycle_text: "/ lifetime",
@@ -274,14 +279,19 @@ export default function AdminPackagesPage() {
     const popular = packages.find((p) => p.is_popular);
     const minPrice = packages.length > 0 ? Math.min(...packages.map((p) => p.price)) : 0;
     const maxPrice = packages.length > 0 ? Math.max(...packages.map((p) => p.price)) : 0;
-    return { total, active, popularName: popular?.name || "None", minPrice, maxPrice };
+    const currencySymbol = packages[0]?.currency_symbol || "৳";
+    return { total, active, popularName: popular?.name || "None", minPrice, maxPrice, currencySymbol };
   }, [packages]);
 
   // Handle open create modal
   const handleOpenCreate = () => {
     const nextOrder = packages.length > 0 ? Math.max(...packages.map((p) => p.sort_order)) + 1 : 1;
+    const defaultSymbol = packages[0]?.currency_symbol || "৳";
+    const defaultCode = packages[0]?.currency_code || (defaultSymbol === "$" ? "USD" : "BDT");
     setFormData({
       ...DEFAULT_FORM_DATA,
+      currency_symbol: defaultSymbol,
+      currency_code: defaultCode,
       sort_order: nextOrder,
       is_popular: packages.length === 0,
       is_category_unlimited: true,
@@ -305,6 +315,8 @@ export default function AdminPackagesPage() {
       tagline: pkg.tagline || "",
       badge_text: pkg.badge_text || "",
       price: pkg.price,
+      currency_symbol: pkg.currency_symbol || "৳",
+      currency_code: pkg.currency_code || (pkg.currency_symbol === "$" ? "USD" : "BDT"),
       original_price: pkg.original_price !== null && pkg.original_price !== undefined ? pkg.original_price : "",
       billing_period_text: pkg.billing_period_text || "Lifetime Access • One-time payment",
       billing_cycle_text: pkg.billing_cycle_text || "/ lifetime",
@@ -376,6 +388,8 @@ export default function AdminPackagesPage() {
         tagline: formData.tagline,
         badge_text: formData.badge_text || undefined,
         price: Number(formData.price) || 0,
+        currency_symbol: formData.currency_symbol || "৳",
+        currency_code: formData.currency_code || (formData.currency_symbol === "$" ? "USD" : "BDT"),
         original_price: formData.original_price !== "" ? Number(formData.original_price) : null,
         billing_period_text: formData.billing_period_text,
         billing_cycle_text: formData.billing_cycle_text?.trim() || "/ lifetime",
@@ -437,6 +451,40 @@ export default function AdminPackagesPage() {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Bulk Currency Switcher
+  const handleBulkUpdateCurrency = async (symbol: string, code: string) => {
+    if (!canEdit) {
+      toast({
+        title: "Permission Denied",
+        description: "You do not have permission to modify packages.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const res = await bulkUpdatePackagesCurrencyAction(symbol, code);
+      if (res.success) {
+        toast({
+          title: "Currency Updated",
+          description: `All packages have been updated to ${symbol} (${code}).`,
+        });
+        loadPackages();
+      } else {
+        toast({
+          title: "Update Failed",
+          description: res.error || "Failed to update currency.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update currency.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -606,7 +654,7 @@ export default function AdminPackagesPage() {
           <div>
             <p className="text-[11px] font-medium text-slate-400">Price Spread</p>
             <p className="text-sm font-black text-slate-900 dark:text-white mt-1">
-              ৳{stats.minPrice.toLocaleString()} - ৳{stats.maxPrice.toLocaleString()}
+              {stats.currencySymbol}{stats.minPrice.toLocaleString()} - {stats.currencySymbol}{stats.maxPrice.toLocaleString()}
             </p>
           </div>
           <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-600 dark:text-purple-400">
@@ -636,6 +684,76 @@ export default function AdminPackagesPage() {
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+          {/* Quick Currency Switcher Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2.5 rounded-xl text-xs font-semibold border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 gap-1.5"
+                title="Change package currency sign (TK / USD)"
+              >
+                <Coins className="w-3.5 h-3.5 text-[#FF5A36]" />
+                <span>Currency: <strong className="font-extrabold">{stats.currencySymbol}</strong></span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[190px] p-1.5 text-xs bg-white dark:bg-slate-900 shadow-xl rounded-xl border border-slate-200 dark:border-slate-800 z-[120]">
+              <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Switch All Packages To:
+              </div>
+              <DropdownMenuItem
+                onClick={() => handleBulkUpdateCurrency("৳", "BDT")}
+                className="cursor-pointer flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm">৳</span>
+                  <span>Taka (৳ / BDT)</span>
+                </div>
+                {stats.currencySymbol === "৳" && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleBulkUpdateCurrency("$", "USD")}
+                className="cursor-pointer flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm">$</span>
+                  <span>Dollar ($ / USD)</span>
+                </div>
+                {stats.currencySymbol === "$" && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleBulkUpdateCurrency("TK", "BDT")}
+                className="cursor-pointer flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs">TK</span>
+                  <span>TK (Text)</span>
+                </div>
+                {stats.currencySymbol === "TK" && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleBulkUpdateCurrency("USD", "USD")}
+                className="cursor-pointer flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs">USD</span>
+                  <span>USD (Text)</span>
+                </div>
+                {stats.currencySymbol === "USD" && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleBulkUpdateCurrency("€", "EUR")}
+                className="cursor-pointer flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm">€</span>
+                  <span>Euro (€ / EUR)</span>
+                </div>
+                {stats.currencySymbol === "€" && <Check className="w-3.5 h-3.5 text-emerald-500" />}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {/* Segmented status filter */}
           <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200/50 dark:border-slate-800">
             <button
@@ -799,7 +917,7 @@ export default function AdminPackagesPage() {
                   {/* Price Row */}
                   <div className="flex items-baseline mb-7">
                     <span className={`text-4xl font-extrabold tracking-tight ${isPop ? "text-white" : "text-black"}`}>
-                      ৳{pkg.price.toLocaleString()}
+                      {pkg.currency_symbol || "৳"}{pkg.price.toLocaleString()}
                     </span>
                     <span className="text-xs text-neutral-400 font-normal ml-1">
                       {pkg.billing_cycle_text || "/ lifetime"}
@@ -931,7 +1049,7 @@ export default function AdminPackagesPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-bold text-slate-900 dark:text-white text-xs">
-                    ৳{pkg.price.toLocaleString()}{" "}
+                    {pkg.currency_symbol || "৳"}{pkg.price.toLocaleString()}{" "}
                     <span className="text-[10px] font-normal text-slate-400">
                       {pkg.billing_cycle_text || "/ lifetime"}
                     </span>
@@ -939,7 +1057,7 @@ export default function AdminPackagesPage() {
                   <TableCell>
                     {pkg.original_price ? (
                       <span className="text-xs text-slate-400 line-through">
-                        ৳{pkg.original_price.toLocaleString()}
+                        {pkg.currency_symbol || "৳"}{pkg.original_price.toLocaleString()}
                       </span>
                     ) : (
                       <span className="text-xs text-slate-400">—</span>
@@ -948,7 +1066,7 @@ export default function AdminPackagesPage() {
                   <TableCell>
                     {pkg.coupon_code ? (
                       <Badge className="bg-orange-500/10 text-[#FF5A36] border-orange-500/20 font-mono text-[10px]">
-                        {pkg.coupon_code} (-৳{pkg.coupon_discount})
+                        {pkg.coupon_code} (-{pkg.currency_symbol || "৳"}{pkg.coupon_discount})
                       </Badge>
                     ) : (
                       <span className="text-xs text-slate-400">—</span>
@@ -1112,15 +1230,79 @@ export default function AdminPackagesPage() {
               </div>
             </div>
 
-            {/* Section 2: Pricing */}
-            <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <Coins className="w-3 h-3" /> Lifetime Pricing & Discounts (BDT)
-              </h4>
+            {/* Section 2: Pricing & Currency */}
+            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Coins className="w-3 h-3 text-[#FF5A36]" /> Lifetime Pricing & Currency
+                </h4>
+                <span className="text-[11px] text-slate-400">Configure currency symbol & prices</span>
+              </div>
+
+              {/* Currency Symbol Selection */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    Currency Sign / Symbol
+                  </Label>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    Current: <strong className="text-[#FF5A36] text-xs font-bold">{formData.currency_symbol || '৳'}</strong> ({formData.currency_code || 'BDT'})
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { symbol: "৳", code: "BDT", label: "৳ (Taka / BDT)" },
+                    { symbol: "$", code: "USD", label: "$ (USD Dollar)" },
+                    { symbol: "TK", code: "BDT", label: "TK (Taka Text)" },
+                    { symbol: "USD", code: "USD", label: "USD (Text)" },
+                    { symbol: "€", code: "EUR", label: "€ (Euro)" },
+                  ].map((curr) => {
+                    const isSelected = formData.currency_symbol === curr.symbol;
+                    return (
+                      <button
+                        key={curr.symbol}
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            currency_symbol: curr.symbol,
+                            currency_code: curr.code,
+                          }))
+                        }
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-slate-950 text-white dark:bg-white dark:text-slate-950 shadow-xs scale-[1.02]"
+                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                        }`}
+                      >
+                        <span className="text-sm font-black">{curr.symbol}</span>
+                        <span className="text-[10px] font-medium opacity-70">{curr.code}</span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Custom Symbol Input */}
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <Label className="text-[10px] font-semibold text-slate-400">Custom Sign:</Label>
+                    <Input
+                      placeholder="e.g. £, ₹, AED"
+                      value={formData.currency_symbol}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          currency_symbol: e.target.value,
+                        }))
+                      }
+                      className="w-24 h-8 rounded-lg text-xs font-bold bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold">Lifetime Price (৳) *</Label>
+                  <Label className="text-xs font-bold">Lifetime Price ({formData.currency_symbol || '৳'}) *</Label>
                   <Input
                     type="number"
                     min={0}
@@ -1134,7 +1316,7 @@ export default function AdminPackagesPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold">Regular Price (Strike-through)</Label>
+                  <Label className="text-xs font-bold">Regular Price ({formData.currency_symbol || '৳'})</Label>
                   <Input
                     type="number"
                     min={0}
@@ -1200,7 +1382,7 @@ export default function AdminPackagesPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold">Coupon Discount Amount (৳)</Label>
+                  <Label className="text-xs font-bold">Coupon Discount Amount ({formData.currency_symbol || '৳'})</Label>
                   <Input
                     type="number"
                     min={0}

@@ -125,6 +125,8 @@ export async function ensurePricingPackagesTable(): Promise<void> {
         tagline VARCHAR(255) DEFAULT '',
         badge_text VARCHAR(100) DEFAULT NULL,
         price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        currency_symbol VARCHAR(10) NOT NULL DEFAULT '৳',
+        currency_code VARCHAR(10) NOT NULL DEFAULT 'BDT',
         original_price DECIMAL(10,2) DEFAULT NULL,
         billing_period_text VARCHAR(100) DEFAULT 'Lifetime Access • One-time payment',
         billing_cycle_text VARCHAR(50) DEFAULT '/ lifetime',
@@ -203,6 +205,18 @@ export async function ensurePricingPackagesTable(): Promise<void> {
       }
     }
 
+    // Migration Check: Check if `currency_symbol` column exists
+    const [currCols]: any = await (pool as any).execute("SHOW COLUMNS FROM pricing_packages LIKE 'currency_symbol'");
+    if (!currCols || currCols.length === 0) {
+      try {
+        await (pool as any).execute("ALTER TABLE pricing_packages ADD COLUMN currency_symbol VARCHAR(10) NOT NULL DEFAULT '৳' AFTER price");
+        await (pool as any).execute("ALTER TABLE pricing_packages ADD COLUMN currency_code VARCHAR(10) NOT NULL DEFAULT 'BDT' AFTER currency_symbol");
+        await (pool as any).execute("UPDATE pricing_packages SET currency_symbol = '৳', currency_code = 'BDT' WHERE currency_symbol IS NULL OR currency_symbol = ''");
+      } catch (e) {
+        console.error('Migration error adding currency_symbol column:', e);
+      }
+    }
+
     // Check if table is empty and seed
     const [countRows]: any = await (pool as any).execute('SELECT COUNT(*) as count FROM pricing_packages');
     if (countRows[0]?.count === 0) {
@@ -273,6 +287,8 @@ function normalizePackageRow(row: any): PricingPackage {
     tagline: row.tagline || '',
     badge_text: row.badge_text || '',
     price: rawPrice,
+    currency_symbol: row.currency_symbol || '৳',
+    currency_code: row.currency_code || 'BDT',
     original_price: rawOriginal,
     price_1_month: row.price_1_month !== undefined && row.price_1_month !== null ? Number(row.price_1_month) : null,
     price_3_months: row.price_3_months !== undefined && row.price_3_months !== null ? Number(row.price_3_months) : null,
@@ -368,6 +384,8 @@ export async function createPricingPackageAction(payload: {
   tagline?: string;
   badge_text?: string;
   price: number;
+  currency_symbol?: string;
+  currency_code?: string;
   original_price?: number | null;
   billing_period_text?: string;
   billing_cycle_text?: string;
@@ -420,19 +438,24 @@ export async function createPricingPackageAction(payload: {
       await (pool as any).execute('UPDATE pricing_packages SET is_popular = 0');
     }
 
+    const currSymbol = payload.currency_symbol?.trim() || '৳';
+    const currCode = payload.currency_code?.trim() || (currSymbol === '$' ? 'USD' : 'BDT');
+
     const [result]: any = await (pool as any).execute(
       `INSERT INTO pricing_packages (
-        package_id, name, tagline, badge_text, price, original_price, billing_period_text, billing_cycle_text,
+        package_id, name, tagline, badge_text, price, currency_symbol, currency_code, original_price, billing_period_text, billing_cycle_text,
         discount_tag, coupon_code, coupon_discount,
         features, feature_highlight_title, button_text, is_popular, is_active, sort_order,
         is_category_unlimited, category_limit, is_item_unlimited, item_limit, is_ai_scan_unlimited, ai_scan_limit
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cleanPackageId,
         payload.name.trim(),
         payload.tagline?.trim() || '',
         payload.badge_text?.trim() || null,
         Number(payload.price) || 0,
+        currSymbol,
+        currCode,
         payload.original_price ? Number(payload.original_price) : null,
         payload.billing_period_text?.trim() || 'Lifetime Access • One-time payment',
         payload.billing_cycle_text?.trim() || '/ lifetime',
@@ -474,9 +497,11 @@ export async function updatePricingPackageAction(
     tagline?: string;
     badge_text?: string;
     price?: number;
+    currency_symbol?: string;
+    currency_code?: string;
     original_price?: number | null;
     billing_period_text?: string;
-  billing_cycle_text?: string;
+    billing_cycle_text?: string;
     discount_tag?: string;
     coupon_code?: string;
     coupon_discount?: number;
@@ -530,6 +555,13 @@ export async function updatePricingPackageAction(
       await (pool as any).execute('UPDATE pricing_packages SET is_popular = 0 WHERE id != ?', [id]);
     }
 
+    const currSymbol = payload.currency_symbol !== undefined 
+      ? (payload.currency_symbol.trim() || '৳') 
+      : (current.currency_symbol || '৳');
+    const currCode = payload.currency_code !== undefined 
+      ? (payload.currency_code.trim() || (currSymbol === '$' ? 'USD' : 'BDT')) 
+      : (current.currency_code || (currSymbol === '$' ? 'USD' : 'BDT'));
+
     await (pool as any).execute(
       `UPDATE pricing_packages SET
         package_id = ?,
@@ -537,6 +569,8 @@ export async function updatePricingPackageAction(
         tagline = ?,
         badge_text = ?,
         price = ?,
+        currency_symbol = ?,
+        currency_code = ?,
         original_price = ?,
         billing_period_text = ?,
         billing_cycle_text = ?,
@@ -562,6 +596,8 @@ export async function updatePricingPackageAction(
         payload.tagline !== undefined ? payload.tagline.trim() : current.tagline,
         payload.badge_text !== undefined ? (payload.badge_text.trim() || null) : (current.badge_text || null),
         payload.price !== undefined ? Number(payload.price) : current.price,
+        currSymbol,
+        currCode,
         payload.original_price !== undefined ? (payload.original_price ? Number(payload.original_price) : null) : current.original_price,
         payload.billing_period_text !== undefined ? payload.billing_period_text.trim() : current.billing_period_text,
         payload.billing_cycle_text !== undefined ? payload.billing_cycle_text.trim() : (current.billing_cycle_text || '/ lifetime'),
@@ -589,6 +625,31 @@ export async function updatePricingPackageAction(
   } catch (error: any) {
     console.error('updatePricingPackageAction error:', error);
     return { success: false, error: error.message || 'Failed to update package' };
+  }
+}
+
+/**
+ * Bulk updates the currency symbol and code for all pricing packages.
+ */
+export async function bulkUpdatePackagesCurrencyAction(
+  currency_symbol: string,
+  currency_code?: string
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    await ensurePricingPackagesTable();
+    const symbol = currency_symbol?.trim() || '৳';
+    const code = currency_code?.trim() || (symbol === '$' ? 'USD' : 'BDT');
+    await (pool as any).execute(
+      'UPDATE pricing_packages SET currency_symbol = ?, currency_code = ?',
+      [symbol, code]
+    );
+    return { success: true };
+  } catch (error: any) {
+    console.error('bulkUpdatePackagesCurrencyAction error:', error);
+    return { success: false, error: error.message || 'Failed to bulk update currency' };
   }
 }
 
