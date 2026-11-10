@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -20,12 +20,17 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  Palette,
+  QrCode,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
-import { decodeHtmlEntities } from '@/lib/utils';
+import { decodeHtmlEntities, cn } from '@/lib/utils';
 import { usePreferences } from '@/context/PreferencesContext';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { useToast } from '@/hooks/use-toast';
+import { MENU_SHEET_THEMES, getMenuSheetTheme, type MenuSheetTheme, type CustomThemeConfig } from './menu-sheet-themes';
+import { CustomDesignControls } from './custom-design-controls';
+import { getClientCustomThemeAction, saveClientCustomThemeAction, deleteClientCustomBackgroundAction } from '@/app/actions/custom-theme';
 
 export interface DraftSubItem {
   id?: string;
@@ -73,6 +78,96 @@ export function DraftShareDialog({
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [expandedVariations, setExpandedVariations] = useState<Record<string, boolean>>({});
+
+  // Theme selection with local draft memory and parlour-aware default
+  const [selectedThemeId, setSelectedThemeId] = useState<string>(() => {
+    if (typeof window !== 'undefined' && draft?.id) {
+      const stored = localStorage.getItem(`menuSheetTheme_${draft.id}`);
+      if (stored) return stored;
+    }
+    return draft?.primaryTag === 'parlour' ? 'rose' : 'sunset';
+  });
+
+  const [customConfig, setCustomConfig] = useState<CustomThemeConfig | null>(null);
+
+  // Load saved custom theme from client storage & server database after mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('menusnap_custom_theme');
+      if (stored) {
+        setCustomConfig(JSON.parse(stored));
+      }
+    } catch {}
+
+    getClientCustomThemeAction({
+      clientId: clientUser?.id,
+      whatsappNumber: clientUser?.whatsappNumber,
+      email: clientUser?.email,
+      draftId: draft?.id,
+    })
+      .then((res) => {
+        if (res.success && res.themeConfig) {
+          setCustomConfig(res.themeConfig);
+          try {
+            localStorage.setItem('menusnap_custom_theme', JSON.stringify(res.themeConfig));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+  }, [clientUser, draft?.id]);
+
+  const activeTheme = useMemo(
+    () => getMenuSheetTheme(selectedThemeId, customConfig),
+    [selectedThemeId, customConfig]
+  );
+
+  const handleThemeChange = (themeId: string) => {
+    setSelectedThemeId(themeId);
+    if (typeof window !== 'undefined' && draft?.id) {
+      try {
+        localStorage.setItem(`menuSheetTheme_${draft.id}`, themeId);
+      } catch {}
+    }
+  };
+
+  const handleUpdateCustomConfig = async (newConfig: CustomThemeConfig) => {
+    setCustomConfig(newConfig);
+    try {
+      localStorage.setItem('menusnap_custom_theme', JSON.stringify(newConfig));
+    } catch {}
+
+    saveClientCustomThemeAction({
+      clientId: clientUser?.id,
+      whatsappNumber: clientUser?.whatsappNumber,
+      email: clientUser?.email,
+      draftId: draft?.id,
+      themeConfig: newConfig,
+    }).catch(() => {});
+  };
+
+  const handleDeleteCustomBackground = async () => {
+    const updated: CustomThemeConfig = {
+      bgImageUrl: null,
+      shadeId: customConfig?.shadeId || 'charcoal',
+      updatedAt: new Date().toISOString(),
+    };
+    setCustomConfig(updated);
+    try {
+      localStorage.setItem('menusnap_custom_theme', JSON.stringify(updated));
+    } catch {}
+
+    deleteClientCustomBackgroundAction({
+      clientId: clientUser?.id,
+      whatsappNumber: clientUser?.whatsappNumber,
+      email: clientUser?.email,
+      draftId: draft?.id,
+    }).catch(() => {});
+
+    toast({
+      title: 'Background Removed',
+      description: 'Your custom background image has been deleted.',
+    });
+  };
 
   const idPrefixForDraft = useMemo(() => {
     if (!draft?.primaryTag) return 'restaurant';
@@ -141,12 +236,13 @@ export function DraftShareDialog({
     if (!draft) return;
 
     const shareUrl = typeof window !== 'undefined'
-      ? `${window.location.origin}/draft/view/${draft.id}`
+      ? `${window.location.origin}/draft/view/${draft.id}?theme=${activeTheme.id}`
       : '';
 
     // Build text summary
     const lines: string[] = [
       `Menu Selection for: ${businessName}`,
+      `Template Style: ${activeTheme.name}`,
       `Date: ${formattedDate}`,
       '',
     ];
@@ -162,8 +258,8 @@ export function DraftShareDialog({
       lines.push('');
     });
 
-    lines.push(`View menu sheet: ${shareUrl}`);
-    lines.push('Prepared with Color Hut Menu Builder');
+    lines.push(`View styled menu sheet: ${shareUrl}`);
+    lines.push('Powered by MenuSnap');
     const fullText = lines.join('\n');
 
     if (typeof navigator !== 'undefined' && navigator.share) {
@@ -211,7 +307,7 @@ export function DraftShareDialog({
       setTimeout(() => setCopied(false), 2500);
       toast({
         title: 'Menu Copied to Clipboard!',
-        description: 'Shareable menu text and link copied, ready to send via WhatsApp or chat.',
+        description: `Shareable menu text with "${activeTheme.name}" theme copied, ready to send via WhatsApp or chat.`,
       });
     } else {
       toast({
@@ -226,67 +322,128 @@ export function DraftShareDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-[95vw] sm:w-[92vw] max-h-[92vh] p-0 overflow-y-auto bg-muted border border-border shadow-2xl rounded-2xl">
+      <DialogContent className="max-w-5xl w-[95vw] sm:w-[92vw] max-h-[92vh] p-0 overflow-y-auto bg-muted border border-border shadow-2xl rounded-2xl [&>button.absolute]:hidden">
         <DialogHeader className="sr-only">
           <DialogTitle>Menu Selection Sheet - {businessName}</DialogTitle>
           <DialogDescription>View draft menu items in selection sheet format</DialogDescription>
         </DialogHeader>
 
         {/* Sticky top action bar */}
-        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs font-semibold text-primary border-primary/30">
-              Menu Sheet View
-            </Badge>
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              {draft.itemCount} items
-            </span>
-          </div>
+        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-3 sm:px-6 py-2.5 space-y-2">
+          {/* Row 1: Badge on left, Close button (X) on far right */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Badge variant="outline" className="text-xs font-semibold text-primary border-primary/30 px-2 py-0.5">
+                Menu Sheet View
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {draft.itemCount} items
+              </span>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleShare}
-              className="bg-card hover:bg-muted font-medium gap-2 shadow-sm text-xs sm:text-sm"
-            >
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Share2 className="h-4 w-4 text-primary" />}
-              {copied ? 'Copied!' : 'Share Text'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/draft/view/${draft.id}` : '';
-                const waText = encodeURIComponent(`Menu Selection for: ${businessName}\nView menu sheet: ${shareUrl}`);
-                window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
-              }}
-              className="bg-card hover:bg-muted font-medium gap-1.5 shadow-sm text-xs sm:text-sm text-green-600 hover:text-green-700"
-            >
-              <span className="text-sm">💬</span> WhatsApp
-            </Button>
-            <Link href={`/draft/view/${draft.id}`} target="_blank" className="hidden sm:inline-flex">
-              <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground">
-                <ExternalLink className="h-3.5 w-3.5" /> Full Page
-              </Button>
-            </Link>
+            {/* Cross close button on far right of top row */}
             <Button
               variant="ghost"
               size="icon"
               onClick={() => onOpenChange(false)}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-full"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted/80 transition-colors"
+              aria-label="Close dialog"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
+
+          {/* Row 2: Template selector taking full dedicated row (natural scroll on mobile, right-aligned on desktop) */}
+          <div className="flex items-center justify-start sm:justify-end w-full pt-0.5">
+            <div className="flex items-center gap-1 bg-muted/90 p-1 rounded-xl border border-border/70 overflow-x-auto max-w-full sm:ml-auto scrollbar-none">
+              <span className="text-[11px] font-semibold text-muted-foreground px-1.5 hidden md:flex items-center gap-1 shrink-0">
+                <Palette className="w-3.5 h-3.5 text-primary" /> Template:
+              </span>
+              {MENU_SHEET_THEMES.map((theme) => {
+                const isActive = activeTheme.id === theme.id;
+                return (
+                  <button
+                    key={theme.id}
+                    onClick={() => handleThemeChange(theme.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap shrink-0",
+                      isActive
+                        ? "bg-card text-foreground font-bold shadow-xs ring-1 ring-border/80"
+                        : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                    )}
+                    title={`${theme.name} — ${theme.description}`}
+                  >
+                    <span
+                      className={cn(
+                        "w-2.5 h-2.5 rounded-full shrink-0 shadow-xs transition-transform",
+                        isActive ? "scale-110 ring-1 ring-offset-1 ring-foreground" : "opacity-80"
+                      )}
+                      style={{ backgroundColor: theme.swatchColor }}
+                    />
+                    <span>{theme.shortName}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Row 3: Action buttons (Share Text, WhatsApp, Full Page, QR Code) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 pt-1 border-t border-border/40 overflow-x-auto scrollbar-none pb-0.5 sm:pb-0">
+            <Button
+              size="sm"
+              onClick={handleShare}
+              className="h-8 gap-1.5 text-xs font-medium border border-border bg-card text-foreground hover:bg-muted hover:text-foreground shadow-xs transition-colors shrink-0"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Share2 className="h-3.5 w-3.5 text-primary" />}
+              {copied ? 'Copied!' : 'Share Text'}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/draft/view/${draft.id}?theme=${activeTheme.id}` : '';
+                const waText = encodeURIComponent(`Menu Selection for: ${businessName}\nView menu sheet: ${shareUrl}`);
+                window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
+              }}
+              className="h-8 gap-1.5 text-xs font-medium border border-green-500/30 bg-card text-green-600 hover:bg-green-600 hover:text-white hover:border-green-600 shadow-xs transition-colors group shrink-0"
+            >
+              <span className="text-sm">💬</span> WhatsApp
+            </Button>
+            <Link href={`/draft/view/${draft.id}?theme=${activeTheme.id}`} target="_blank" className="shrink-0">
+              <Button size="sm" className="h-8 gap-1 text-xs font-medium border border-border/80 bg-card text-muted-foreground hover:bg-muted hover:text-foreground shadow-xs transition-colors shrink-0">
+                <ExternalLink className="h-3.5 w-3.5" /> Full Page
+              </Button>
+            </Link>
+            <Link href={`/draft/qr/${draft.id}?theme=${activeTheme.id}`} target="_blank" className="shrink-0">
+              <Button size="sm" className="h-8 gap-1.5 text-xs font-semibold border border-primary/30 bg-card text-primary hover:bg-primary hover:text-white hover:border-primary shadow-xs transition-colors group shrink-0">
+                <QrCode className="h-3.5 w-3.5 text-primary group-hover:text-white transition-colors" /> QR Code
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        {/* Main Sheet Container matching image 1 */}
-        <div className="p-3 sm:p-6 lg:p-8">
-          <div className="max-w-4xl mx-auto bg-card text-card-foreground p-6 sm:p-12 shadow-xl rounded-xl bg-watermark border border-border/40 overflow-hidden relative">
+        {/* Custom Design Controls (When Custom Design template is active) */}
+        {selectedThemeId === 'custom' && (
+          <div className="p-3 sm:px-6 bg-card border-b border-border shadow-xs">
+            <CustomDesignControls
+              customConfig={customConfig}
+              onUpdateConfig={handleUpdateCustomConfig}
+              onDeleteBackground={handleDeleteCustomBackground}
+            />
+          </div>
+        )}
+
+        {/* Main Sheet Container styled with activeTheme */}
+        <div className={cn("p-3 sm:p-6 lg:p-8 transition-colors duration-200 ease-in-out", activeTheme.sheetWrapperClass)}>
+          <div
+            className={cn(
+              "max-w-4xl mx-auto p-5 sm:p-8 lg:p-12 rounded-2xl overflow-hidden relative shadow-lg transition-colors duration-200 ease-in-out",
+              activeTheme.sheetCardClass
+            )}
+            style={activeTheme.watermarkStyle}
+          >
             {/* Sheet Header: Logo on left, For: Business on right */}
-            <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start border-b pb-8 mb-6 border-border gap-6">
-              <div className="bg-black rounded-lg w-full sm:w-auto px-5 py-2.5 flex items-center justify-center shadow-[inset_0_0_20px_rgba(255,255,255,0.1)]">
+            <div className={cn("flex flex-col sm:flex-row justify-between items-center sm:items-start pb-5 sm:pb-8 mb-5 sm:mb-8 gap-4 sm:gap-6 transition-colors", activeTheme.headerBorderClass)}>
+              <div className={cn("rounded-lg w-full sm:w-auto px-5 py-2.5 flex items-center justify-center transition-all", activeTheme.logoBoxClass)}>
                 <Image
                   src="/menusnap-logo-white.png"
                   alt="MenuSnap Logo"
@@ -297,24 +454,24 @@ export function DraftShareDialog({
                 />
               </div>
 
-              <div className="text-center sm:text-right text-muted-foreground text-sm space-y-1">
-                <p className="font-bold text-lg sm:text-2xl text-foreground">
+              <div className="text-center sm:text-right text-sm space-y-1">
+                <p className={cn("text-xl sm:text-2xl transition-colors", activeTheme.businessTitleClass)}>
                   For: {decodeHtmlEntities(businessName)}
                 </p>
-                <p className="flex items-center justify-center sm:justify-end gap-2 text-xs sm:text-sm">
-                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                <p className={cn("flex items-center justify-center sm:justify-end gap-2 text-xs sm:text-sm", activeTheme.dateTextClass)}>
+                  <CalendarDays className={cn("h-4 w-4", activeTheme.dateIconClass)} />
                   {formattedDate}
                 </p>
               </div>
             </div>
 
             {/* Selected Items grouped by category */}
-            <section className="space-y-8">
+            <section className="space-y-8 flex-1">
               {Object.keys(groupedItems).length > 0 ? (
                 Object.entries(groupedItems).map(([categoryName, items]) => (
                   <div key={categoryName}>
-                    {/* Orange category header with line */}
-                    <h3 className="text-xl font-semibold mb-4 border-b-2 border-primary/20 pb-2 text-primary">
+                    {/* Themed category header with refined border-bottom */}
+                    <h3 className={cn("text-lg sm:text-xl pb-2.5 mb-5 transition-colors", activeTheme.categoryTitleClass, activeTheme.categoryBorderClass)}>
                       {translateText(decodeHtmlEntities(categoryName))}
                     </h3>
 
@@ -328,18 +485,18 @@ export function DraftShareDialog({
                         return (
                           <div key={itemKey} className="space-y-1">
                             <div className="flex justify-between items-baseline gap-4">
-                              <h4 className="font-bold text-foreground text-base">
+                              <h4 className={cn("text-base", activeTheme.itemNameClass)}>
                                 {translateText(decodeHtmlEntities(item.name))}
                               </h4>
                               {item.price > 0 && (
-                                <p className="font-bold text-foreground shrink-0">
+                                <p className={cn("shrink-0", activeTheme.itemPriceClass)}>
                                   {currencySymbol}{item.price.toLocaleString()}
                                 </p>
                               )}
                             </div>
 
                             {item.description && (
-                              <p className="text-sm text-muted-foreground leading-relaxed">
+                              <p className={cn("text-xs sm:text-sm leading-relaxed", activeTheme.itemDescClass)}>
                                 {translateText(decodeHtmlEntities(item.description))}
                               </p>
                             )}
@@ -349,7 +506,7 @@ export function DraftShareDialog({
                                 variant="link"
                                 size="sm"
                                 onClick={() => toggleVariation(itemKey)}
-                                className="text-xs h-auto p-0 mt-1 text-primary hover:text-primary/80"
+                                className={cn("text-xs h-auto p-0 mt-1", activeTheme.variationLinkClass)}
                               >
                                 {isExpanded ? (
                                   <ChevronDown className="h-3 w-3 mr-1 inline" />
@@ -361,15 +518,15 @@ export function DraftShareDialog({
                             )}
 
                             {hasSubItems && isExpanded && (
-                              <div className="mt-2 pl-3 border-l-2 border-primary/20 space-y-1 bg-muted/30 p-2 rounded-r-md">
+                              <div className={cn("mt-2 pl-3 p-2.5 rounded-lg space-y-1.5 transition-all", activeTheme.variationBoxClass)}>
                                 {item.subItems!.map((sub, sIdx) => (
                                   <div
                                     key={sub.id || sIdx}
-                                    className="flex justify-between items-baseline text-xs text-muted-foreground p-1 bg-card rounded"
+                                    className={cn("flex justify-between items-baseline text-xs p-1.5 rounded-md", activeTheme.variationSubItemClass)}
                                   >
-                                    <p className="text-foreground/90">{translateText(decodeHtmlEntities(sub.name))}</p>
+                                    <p className="font-medium">{translateText(decodeHtmlEntities(sub.name))}</p>
                                     {typeof sub.price === 'number' && sub.price > 0 && (
-                                      <p className="font-medium text-primary">
+                                      <p className={activeTheme.variationPriceClass}>
                                         +{currencySymbol}{sub.price.toLocaleString()}
                                       </p>
                                     )}
@@ -391,9 +548,11 @@ export function DraftShareDialog({
             </section>
 
             {/* Footer */}
-            <footer className="text-center text-muted-foreground text-xs mt-12 pt-8 border-t border-border">
-              <p>Menu selection prepared with Color Hut Menu Builder.</p>
-              <p>For inquiries, please contact Color Hut at +8801919760626.</p>
+            <footer className={cn("text-center text-xs mt-12 pt-8 transition-colors duration-200 ease-in-out", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
+              <p className="font-semibold tracking-wide">
+                Powered by <span className="font-bold">MenuSnap</span>
+              </p>
+              <p className="mt-1 opacity-80">For inquiries, please contact Color Hut at +8801919760626.</p>
             </footer>
           </div>
         </div>

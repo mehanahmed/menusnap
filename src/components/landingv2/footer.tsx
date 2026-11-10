@@ -122,7 +122,7 @@ export function Footer({ landingSource }: { landingSource?: "v2" | "default" | "
                 </Link>
               </li>
               <li>
-                <Link href="/login" className="hover:text-white transition-colors">
+                <Link href="/login/" className="hover:text-white transition-colors">
                   Client Login
                 </Link>
               </li>
@@ -151,7 +151,7 @@ export function Footer({ landingSource }: { landingSource?: "v2" | "default" | "
                 </a>
               </li>
               <li>
-                <Link href="/login" className="hover:text-white transition-colors">
+                <Link href="/login/" className="hover:text-white transition-colors">
                   Help Center
                 </Link>
               </li>

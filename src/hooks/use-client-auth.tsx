@@ -152,6 +152,10 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
               parsed.subscriptionPackage = res.plan;
               hasChanged = true;
             }
+            if ((res as any).businessType && parsed.type !== (res as any).businessType) {
+              parsed.type = (res as any).businessType;
+              hasChanged = true;
+            }
             if (hasChanged) {
               localStorage.setItem(CLIENT_STORAGE_KEY, JSON.stringify(parsed));
               setClientUser({ ...parsed });
@@ -202,6 +206,10 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
             }
             if (res.plan && parsed.subscriptionPackage !== res.plan) {
               parsed.subscriptionPackage = res.plan;
+              hasChanged = true;
+            }
+            if ((res as any).businessType && parsed.type !== (res as any).businessType) {
+              parsed.type = (res as any).businessType;
               hasChanged = true;
             }
             if (hasChanged) {
@@ -377,7 +385,12 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (redirectTo !== null) {
-        router.push(redirectTo || '/dashboard');
+        const dest = redirectTo || '/magictab/#login-success';
+        if (typeof window !== 'undefined') {
+          window.location.href = dest;
+        } else {
+          router.push(dest);
+        }
       }
       setClientLoading(false);
       return true;
@@ -433,6 +446,21 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
         setCurrentPackage(client.subscriptionPackage);
       }
 
+      // Immediately sync package limits from server on login
+      try {
+        const subRes = await checkClientSubscription(client.whatsappNumber, client.email);
+        if (subRes.success) {
+          setIsSubscriber(Boolean(subRes.isSubscriber));
+          if (subRes.plan) setCurrentPackage(subRes.plan);
+          if (subRes.limits) {
+            setPackageLimits(subRes.limits);
+            localStorage.setItem(CLIENT_LIMITS_KEY, JSON.stringify(subRes.limits));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync subscription on login:", err);
+      }
+
       // Handle Remember Me
       if (typeof window !== 'undefined') {
         if (rememberMe) {
@@ -457,7 +485,12 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {}
 
       if (redirectTo !== null) {
-        router.push(redirectTo || '/dashboard');
+        const dest = redirectTo || '/magictab/#login-success';
+        if (typeof window !== 'undefined') {
+          window.location.href = dest;
+        } else {
+          router.push(dest);
+        }
       }
       setClientLoading(false);
       return true;
@@ -487,7 +520,7 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       aiScanLimit: 0,
       aiScansUsed: 0,
     });
-    router.push('/login');
+    router.push('/login/');
     toast({
       title: "Logged Out",
       description: "You have been successfully logged out.",

@@ -79,6 +79,7 @@ interface Category {
   name: string;
   icon: string;
   itemCount?: number;
+  totalCount?: number;
   status?: string;
   createdAt?: string;
   description?: string;
@@ -714,6 +715,8 @@ export default function MagicTabPage() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const magicSearchRef = useRef<HTMLTextAreaElement>(null);
   const [isMobileSearchActive, setIsMobileSearchActive] = useState(false);
+  const activeSessionDraftIdRef = useRef<string | null>(null);
+  const restoredDraftIdRef = useRef<string | null>(null);
 
   const registerCardRef = useCallback((id: string, el: HTMLDivElement | null) => {
     if (el) itemCardRefs.current.set(id, el);
@@ -750,31 +753,42 @@ export default function MagicTabPage() {
       }
     }
 
+    const isItemLimited = packageLimits && !packageLimits.isItemUnlimited && packageLimits.itemLimit > 0;
+
     return [...apiCategories].map(cat => {
       const idKey = String(cat.id).trim().toLowerCase();
       const nameKey = decodeHtmlEntities(cat.name).trim().toLowerCase();
+      const isCustomCat = String(cat.id).startsWith("custom-cat-");
       const dynamicCount = countMap.get(idKey) ?? countMap.get(nameKey);
-      const finalCount = dynamicCount !== undefined && dynamicCount > 0
-        ? dynamicCount
-        : (Number(cat.itemCount) || 0);
+      const dbCount = Number(cat.totalCount || cat.itemCount) || 0;
+      const totalCount = dynamicCount !== undefined && dynamicCount > 0 ? dynamicCount : dbCount;
+
+      const limitVal = packageLimits?.itemLimit ?? 0;
+      const hasLimit = Boolean(isItemLimited && !isCustomCat && limitVal > 0 && totalCount > limitVal);
+      const finalCount = hasLimit
+        ? (dynamicCount !== undefined ? dynamicCount : limitVal)
+        : totalCount;
 
       return {
         ...cat,
-        itemCount: finalCount,
+        itemCount: finalCount || totalCount || dbCount,
+        totalCount: hasLimit ? totalCount : undefined,
       };
     }).sort((a, b) => {
-      const diff = (b.itemCount || 0) - (a.itemCount || 0);
+      const bEffective = b.totalCount || b.itemCount || 0;
+      const aEffective = a.totalCount || a.itemCount || 0;
+      const diff = bEffective - aEffective;
       if (diff !== 0) return diff;
       return a.name.localeCompare(b.name);
     });
-  }, [apiCategories, allMenuItems]);
+  }, [apiCategories, allMenuItems, packageLimits]);
 
   const selectedCategory = useMemo(() => {
-    return sortedCategories.find(c => c.id === activeCategoryId) || null;
+    return sortedCategories.find(c => String(c.id).toLowerCase() === String(activeCategoryId || '').toLowerCase()) || null;
   }, [sortedCategories, activeCategoryId]);
 
   useEffect(() => {
-    if (sortedCategories.length > 0 && (!activeCategoryId || !sortedCategories.some(c => c.id === activeCategoryId))) {
+    if (sortedCategories.length > 0 && (!activeCategoryId || !sortedCategories.some(c => String(c.id).toLowerCase() === String(activeCategoryId).toLowerCase()))) {
       setActiveCategoryId(sortedCategories[0].id);
     }
   }, [sortedCategories, activeCategoryId]);
@@ -864,24 +878,24 @@ export default function MagicTabPage() {
       for (const item of serverItems) {
         const catKey = String(item.category || '').trim().toLowerCase();
         
-        let matchedCatId: string | null = null;
-        for (const cat of allowedServerCategories) {
-          if (String(cat.id).toLowerCase() === catKey || decodeHtmlEntities(cat.name).trim().toLowerCase() === catKey) {
-            matchedCatId = String(cat.id).toLowerCase();
-            break;
-          }
+        // Pass 1: Match by exact Category ID first (prevents name-ID collision, e.g. facial vs facial-basic)
+        let matchedCat = allowedServerCategories.find(c => String(c.id).toLowerCase() === catKey);
+        // Pass 2: Fallback to match by Category Name only if no ID matched
+        if (!matchedCat) {
+          matchedCat = allowedServerCategories.find(c => decodeHtmlEntities(c.name).trim().toLowerCase() === catKey);
         }
 
-        if (packageLimits && !packageLimits.isCategoryUnlimited && packageLimits.categoryLimit > 0 && !matchedCatId) {
+        if (packageLimits && !packageLimits.isCategoryUnlimited && packageLimits.categoryLimit > 0 && !matchedCat) {
           continue;
         }
 
-        const groupingKey = (matchedCatId || catKey).toLowerCase();
+        const assignedCatId = matchedCat ? String(matchedCat.id) : item.category;
+        const groupingKey = String(assignedCatId).toLowerCase();
         const currentCount = countPerCat.get(groupingKey) || 0;
 
         const standardizedItem: MenuItem = {
           ...item,
-          category: matchedCatId || item.category,
+          category: assignedCatId,
         };
 
         if (packageLimits && !packageLimits.isItemUnlimited && packageLimits.itemLimit > 0) {
@@ -947,10 +961,24 @@ export default function MagicTabPage() {
         { regex: /\b(combo|platter|set menu|setmenu|package)\b/i, keywords: ['setMenu', 'combo', 'platter', 'package'] },
       ];
 
-      // Self-heal any previously miscategorized local items (e.g. pizzas mistakenly assigned to custom set menus)
+      // Canonical map of server item IDs to their true database categoryId
+      const serverItemCategoryMap = new Map<string, string>();
+      for (const si of serverItems) {
+        serverItemCategoryMap.set(String(si.id), String(si.category));
+      }
+
+      // Self-heal any previously miscategorized local items:
+      // A) Server items must NEVER drift or have their category mutated by old draft restores
+      // B) Self-heal pizzas/food mistakenly assigned to set menus
       let localItemsUpdated = false;
       for (const it of localItems) {
-        if (it.category && (it.category.startsWith('custom-cat-') || it.category.toLowerCase().includes('set menu'))) {
+        if (serverItemCategoryMap.has(String(it.id))) {
+          const canonical = serverItemCategoryMap.get(String(it.id))!;
+          if (String(it.category) !== canonical) {
+            it.category = canonical;
+            localItemsUpdated = true;
+          }
+        } else if (it.category && (it.category.startsWith('custom-cat-') || it.category.toLowerCase().includes('set menu'))) {
           for (const entry of KEYWORD_MAP) {
             if (entry.regex.test(it.name)) {
               const found = allowedServerCategories.find(c => {
@@ -978,6 +1006,8 @@ export default function MagicTabPage() {
       const draftIdToRestore = typeof window !== 'undefined' ? localStorage.getItem('draftToRestoreId') : null;
 
       if (draftIdToRestore) {
+        restoredDraftIdRef.current = draftIdToRestore;
+        activeSessionDraftIdRef.current = draftIdToRestore;
         localStorage.removeItem('draftToRestoreId');
         try {
           let draftToRestore: any = null;
@@ -1022,26 +1052,58 @@ export default function MagicTabPage() {
 
               let matchedCatId: string | null = null;
 
-              // A. Keyword match on item name (e.g. "Chicken Exotica Pizza" -> pizza)
-              for (const entry of KEYWORD_MAP) {
-                if (entry.regex.test(lowerName)) {
-                  const found = allowedServerCategories.find(c => {
-                    const idClean = cleanStr(c.id);
-                    const nameClean = cleanStr(c.name);
-                    return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
-                  }) || localCategories.find(c => {
-                    const idClean = cleanStr(c.id);
-                    const nameClean = cleanStr(c.name);
-                    return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
-                  });
-                  if (found) {
-                    matchedCatId = String(found.id);
-                    break;
+              // 1. If item is an existing server item, preserve its canonical database category
+              if (serverItemCategoryMap.has(String(item.id))) {
+                matchedCatId = serverItemCategoryMap.get(String(item.id))!;
+              } else {
+                const serverItemMatch = serverItems.find(si => cleanStr(si.name) === cleanStr(itemName));
+                if (serverItemMatch) {
+                  matchedCatId = String(serverItemMatch.category);
+                }
+              }
+
+              // 2. Exact match by Category ID first (prevents name-ID collision, e.g. id 'facial' which is Massage vs name 'Facial')
+              if (!matchedCatId && rawCat) {
+                const lowerRaw = rawCat.trim().toLowerCase();
+                const exactIdMatch = allowedServerCategories.find(c => String(c.id).toLowerCase() === lowerRaw) ||
+                                     localCategories.find(c => String(c.id).toLowerCase() === lowerRaw);
+                if (exactIdMatch) {
+                  matchedCatId = String(exactIdMatch.id);
+                }
+              }
+
+              // 3. Exact match by Category Name (only if no category ID matched)
+              if (!matchedCatId && rawCat && !rawCat.toLowerCase().startsWith('custom-cat-')) {
+                const lowerRaw = rawCat.trim().toLowerCase();
+                const exactNameMatch = allowedServerCategories.find(c => decodeHtmlEntities(c.name).trim().toLowerCase() === lowerRaw) ||
+                                       localCategories.find(c => decodeHtmlEntities(c.name).trim().toLowerCase() === lowerRaw);
+                if (exactNameMatch) {
+                  matchedCatId = String(exactNameMatch.id);
+                }
+              }
+
+              // 4. Keyword match on item name (e.g. "Chicken Exotica Pizza" -> pizza)
+              if (!matchedCatId) {
+                for (const entry of KEYWORD_MAP) {
+                  if (entry.regex.test(lowerName)) {
+                    const found = allowedServerCategories.find(c => {
+                      const idClean = cleanStr(c.id);
+                      const nameClean = cleanStr(c.name);
+                      return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
+                    }) || localCategories.find(c => {
+                      const idClean = cleanStr(c.id);
+                      const nameClean = cleanStr(c.name);
+                      return entry.keywords.some(kw => idClean === kw || nameClean === kw || nameClean.includes(kw));
+                    });
+                    if (found) {
+                      matchedCatId = String(found.id);
+                      break;
+                    }
                   }
                 }
               }
 
-              // B. Keyword match on category name
+              // 5. Keyword match on category name
               if (!matchedCatId && !rawCat.toLowerCase().startsWith('custom-cat-')) {
                 for (const entry of KEYWORD_MAP) {
                   if (entry.regex.test(lowerCat)) {
@@ -1062,7 +1124,7 @@ export default function MagicTabPage() {
                 }
               }
 
-              // C. Direct clean string match against server or existing local categories
+              // 6. Fuzzy clean string match against server or existing local categories
               if (!matchedCatId && rawCat && !rawCat.toLowerCase().startsWith('custom-cat-')) {
                 const targetClean = cleanStr(rawCat);
                 const found = allowedServerCategories.find(c => {
@@ -1164,24 +1226,46 @@ export default function MagicTabPage() {
         }
       }
 
+      // Deduplicate items: localItems take precedence over allowedServerItems with the same ID,
+      // BUT server items MUST ALWAYS retain their canonical database category!
+      const itemsMap = new Map<string, MenuItem>();
+      for (const item of allowedServerItems) {
+        itemsMap.set(String(item.id), item);
+      }
+      for (const item of localItems) {
+        const canonicalCat = serverItemCategoryMap.get(String(item.id));
+        const finalItem = canonicalCat ? { ...item, category: canonicalCat } : item;
+        itemsMap.set(String(item.id), finalItem);
+      }
+      const mergedItems = Array.from(itemsMap.values());
+
       // Calculate item count per category
       const countByCatId = new Map<string, number>();
-      for (const it of [...allowedServerItems, ...localItems]) {
+      for (const it of mergedItems) {
         const catKey = String(it.category || '').trim().toLowerCase();
         countByCatId.set(catKey, (countByCatId.get(catKey) || 0) + 1);
       }
 
+      const isItemLimited = packageLimits && !packageLimits.isItemUnlimited && packageLimits.itemLimit > 0;
+
       const combinedCategories = [...allowedServerCategories, ...localCategories].map(cat => {
         const idKey = String(cat.id).trim().toLowerCase();
         const nameKey = decodeHtmlEntities(cat.name).trim().toLowerCase();
+        const isCustomCat = String(cat.id).startsWith("custom-cat-");
         const dynamicCount = countByCatId.get(idKey) ?? countByCatId.get(nameKey);
-        const calculatedCount = dynamicCount !== undefined && dynamicCount > 0
-          ? dynamicCount
-          : (Number(cat.itemCount) || 0);
+        const dbCount = Number(cat.itemCount) || 0;
+        const totalCount = dynamicCount !== undefined && dynamicCount > 0 ? dynamicCount : dbCount;
+
+        const limitVal = packageLimits?.itemLimit ?? 0;
+        const hasLimit = Boolean(isItemLimited && !isCustomCat && limitVal > 0 && totalCount > limitVal);
+        const calculatedCount = hasLimit
+          ? (dynamicCount !== undefined ? dynamicCount : limitVal)
+          : totalCount;
 
         return {
           ...cat,
-          itemCount: calculatedCount,
+          itemCount: calculatedCount || totalCount || dbCount,
+          totalCount: hasLimit ? totalCount : undefined,
         };
       });
 
@@ -1214,9 +1298,26 @@ export default function MagicTabPage() {
         if (targetCategoryIdToActivate && uniqueCategories.some(c => c.id === targetCategoryIdToActivate)) {
           return targetCategoryIdToActivate;
         }
-        return (prev && uniqueCategories.some(c => c.id === prev)) ? prev : (uniqueCategories[0]?.id || null);
+        return (prev && uniqueCategories.some(c => String(c.id).toLowerCase() === String(prev).toLowerCase())) ? prev : (uniqueCategories[0]?.id || null);
       });
-      setAllMenuItems([...allowedServerItems, ...localItems]);
+      setAllMenuItems(mergedItems);
+      if (!draftIdToRestore && typeof window !== 'undefined') {
+        const activeDraftRaw = localStorage.getItem('magicTabActiveDraft');
+        if (activeDraftRaw) {
+          try {
+            const activeDraft = JSON.parse(activeDraftRaw);
+            if (activeDraft && Array.isArray(activeDraft.items) && activeDraft.items.length > 0) {
+              const activeMap: Record<string, boolean> = {};
+              activeDraft.items.forEach((it: any) => {
+                if (it?.id) activeMap[String(it.id)] = true;
+              });
+              setSelectedItems(activeMap);
+              if (activeDraft.id) activeSessionDraftIdRef.current = activeDraft.id;
+              if (activeDraft.restoredFromId) restoredDraftIdRef.current = activeDraft.restoredFromId;
+            }
+          } catch {}
+        }
+      }
     } catch (err: any) {
       console.error("MagicTab Data Load Error:", err);
       setError(err.message || "Could not load menu items and categories.");
@@ -1446,11 +1547,18 @@ export default function MagicTabPage() {
     }
 
     if (activeCategoryId) {
-      items = items.filter(item => String(item.category) === String(activeCategoryId));
+      const activeCat = sortedCategories.find(c => String(c.id).toLowerCase() === String(activeCategoryId).toLowerCase());
+      const activeIdLower = String(activeCategoryId).trim().toLowerCase();
+      const activeNameLower = activeCat ? decodeHtmlEntities(activeCat.name).trim().toLowerCase() : '';
+
+      items = items.filter(item => {
+        const itemCatLower = String(item.category || '').trim().toLowerCase();
+        return itemCatLower === activeIdLower;
+      });
     }
 
     return items;
-  }, [activeCategoryId, allMenuItems, debouncedSearchTerm]);
+  }, [activeCategoryId, allMenuItems, debouncedSearchTerm, sortedCategories]);
 
   useEffect(() => {
     if (language !== 'en' && currentMenuItems.length > 0) {
@@ -1518,13 +1626,57 @@ export default function MagicTabPage() {
     setExpandedSubItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   }, []);
 
+  // Auto-stage selected items into magicTabActiveDraft so visiting Draft tab immediately creates a draft
+  useEffect(() => {
+    if (typeof window === 'undefined' || loadingItems || loadingCategories) return;
+
+    const itemsToSave = allMenuItems.filter(item => selectedItems[String(item.id)]);
+    if (itemsToSave.length > 0) {
+      if (!activeSessionDraftIdRef.current) {
+        activeSessionDraftIdRef.current = `draft-${Date.now()}`;
+      }
+      const activeDraft = {
+        id: activeSessionDraftIdRef.current,
+        name: `Draft - ${new Date().toLocaleString()}`,
+        createdAt: new Date().toISOString(),
+        itemCount: itemsToSave.length,
+        primaryTag: selectedMenuType,
+        price: itemsToSave.reduce((sum, item) => sum + Number(item.price || 0), 0),
+        previewAvatars: itemsToSave.slice(0, 3).map(i => (i.name ? i.name.charAt(0) : '?')),
+        items: itemsToSave.map(item => ({
+          id: String(item.id),
+          name: item.name,
+          price: Number(item.price || 0),
+          categoryId: String(item.category || (item as any).categoryId || 'unknown'),
+          category: String(item.category || (item as any).categoryId || 'unknown'),
+          description: item.description || null,
+          image: item.image || null,
+          subItems: Array.isArray(item.subItems) ? item.subItems : [],
+        })),
+        restoredFromId: restoredDraftIdRef.current || undefined,
+      };
+
+      try {
+        localStorage.setItem('magicTabActiveDraft', JSON.stringify(activeDraft));
+      } catch (e) {
+        console.error('Failed to save active draft to localStorage:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem('magicTabActiveDraft');
+        activeSessionDraftIdRef.current = null;
+        restoredDraftIdRef.current = null;
+      } catch {}
+    }
+  }, [selectedItems, allMenuItems, selectedMenuType, loadingItems, loadingCategories]);
+
   const handlePreviewAndSave = useCallback(() => {
     const itemsToSave = allMenuItems.filter(item => selectedItems[item.id]);
     if (itemsToSave.length === 0) {
       return;
     }
 
-    const draftId = `draft-${Date.now()}`;
+    const draftId = activeSessionDraftIdRef.current || `draft-${Date.now()}`;
     const draftName = `Draft - ${new Date().toLocaleString()}`;
     const draft = {
       id: draftId,
@@ -1532,14 +1684,41 @@ export default function MagicTabPage() {
       createdAt: new Date().toISOString(),
       itemCount: itemsToSave.length,
       primaryTag: selectedMenuType,
-      previewAvatars: itemsToSave.slice(0, 3).map(i => i.name.charAt(0)),
-      items: itemsToSave,
+      previewAvatars: itemsToSave.slice(0, 3).map(i => (i.name ? i.name.charAt(0) : '?')),
+      price: itemsToSave.reduce((sum, item) => sum + Number(item.price || 0), 0),
+      items: itemsToSave.map(item => ({
+        id: String(item.id),
+        name: item.name,
+        price: Number(item.price || 0),
+        categoryId: String(item.category || (item as any).categoryId || 'unknown'),
+        category: String(item.category || (item as any).categoryId || 'unknown'),
+        description: item.description || null,
+        image: item.image || null,
+        subItems: Array.isArray(item.subItems) ? item.subItems : [],
+      })),
     };
 
     try {
       const existingDrafts = JSON.parse(localStorage.getItem(DRAFTS_STORAGE_KEY) || '[]');
-      existingDrafts.unshift(draft);
+      if (restoredDraftIdRef.current) {
+        const idx = existingDrafts.findIndex((d: any) => String(d.id) === String(restoredDraftIdRef.current));
+        if (idx !== -1) {
+          existingDrafts[idx] = { ...existingDrafts[idx], ...draft, id: restoredDraftIdRef.current };
+        } else {
+          existingDrafts.unshift(draft);
+        }
+      } else {
+        const existingIdx = existingDrafts.findIndex((d: any) => String(d.id) === String(draftId));
+        if (existingIdx !== -1) {
+          existingDrafts[existingIdx] = draft;
+        } else {
+          existingDrafts.unshift(draft);
+        }
+      }
       localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(existingDrafts));
+      localStorage.removeItem('magicTabActiveDraft');
+      activeSessionDraftIdRef.current = null;
+      restoredDraftIdRef.current = null;
     } catch (e) {
       // Error handling without toast
     }
@@ -1745,7 +1924,7 @@ export default function MagicTabPage() {
 
       <div className="flex flex-col md:flex-row h-[100dvh] md:h-screen overflow-hidden">
 
-        <div className="hidden md:block h-full">
+        <div className="hidden md:block h-full shrink-0 w-72 xl:w-80 overflow-hidden">
           <CategoryList
             key={`categories-${language}`}
             categories={sortedCategories}
@@ -1940,11 +2119,18 @@ export default function MagicTabPage() {
                                     <span className="text-xl flex-shrink-0">{cat.icon}</span>
                                     <span className="font-semibold flex-1 min-w-0 truncate text-left">{decodeHtmlEntities(cat.name)}</span>
                                     {cat.itemCount !== undefined && Number(cat.itemCount) > 0 && (
-                                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground ml-auto mr-1 shrink-0">
-                                        {cat.itemCount}
-                                      </span>
-                                    )}
-                                    {activeCategoryId === cat.id && <div className={cn("w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0", (cat.itemCount && Number(cat.itemCount) > 0) ? "" : "ml-auto")} />}
+                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground ml-auto mr-1 shrink-0 flex items-center gap-1">
+                                      {cat.totalCount && cat.totalCount > cat.itemCount ? (
+                                        <>
+                                          <span className="line-through text-muted-foreground/45 text-[11px] decoration-muted-foreground/60">{cat.totalCount}</span>
+                                          <span className="text-orange-600 dark:text-orange-400 font-bold">{cat.itemCount}</span>
+                                        </>
+                                      ) : (
+                                        <span>{cat.itemCount}</span>
+                                      )}
+                                    </span>
+                                  )}
+                                    {String(activeCategoryId || '').toLowerCase() === String(cat.id).toLowerCase() && <div className={cn("w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0", (cat.itemCount && Number(cat.itemCount) > 0) ? "" : "ml-auto")} />}
                                   </Button>
                                 ))}
                             </div>
@@ -1975,9 +2161,9 @@ export default function MagicTabPage() {
               <div className="text-center py-10"><p className="text-destructive font-medium">Error: {error}</p></div>
             ) : (
               <div className={cn("grid grid-cols-1 gap-3 md:gap-4 pb-32 md:pb-6", gridLayoutClasses)}>
-                  {currentMenuItems.map((item) => (
+                  {currentMenuItems.map((item, index) => (
                     <MenuItemCard
-                      key={`${item.id}-${language}`}
+                      key={`${item.id}-${index}-${language}`}
                       registerCardRef={registerCardRef}
                       item={item}
                       isSelected={!!selectedItems[item.id]}

@@ -412,7 +412,7 @@ export function CheckoutModal({
                 </p>
               </div>
               <Link
-                href={`/login?tab=register&email=${encodeURIComponent(
+                href={`/login/?tab=register&email=${encodeURIComponent(
                   email
                 )}&name=${encodeURIComponent(fullName)}&whatsapp=${encodeURIComponent(
                   phone

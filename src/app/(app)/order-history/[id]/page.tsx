@@ -157,7 +157,7 @@ export default function ClientOrderDetailsPage() {
     useEffect(() => {
         if (clientLoading) return;
         if (!clientUser) {
-            router.push('/login');
+            router.push('/login/');
             return;
         }
         if (!orderIdFromUrl) return;

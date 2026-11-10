@@ -401,7 +401,71 @@ export default function DraftPage(): ReactNode {
     setIsLoading(true);
     setError(null);
     try {
-      const storedDrafts = localStorage.getItem(DRAFTS_STORAGE_KEY);
+      // 1. Commit active draft staged from MagicTab if any
+      const activeDraftRaw = localStorage.getItem('magicTabActiveDraft');
+      let storedDrafts = localStorage.getItem(DRAFTS_STORAGE_KEY);
+      let stagedDrafts: any[] = [];
+      if (storedDrafts) {
+        try {
+          stagedDrafts = JSON.parse(storedDrafts);
+        } catch {
+          stagedDrafts = [];
+        }
+      }
+
+      if (activeDraftRaw) {
+        try {
+          const activeDraft = JSON.parse(activeDraftRaw);
+          if (activeDraft && Array.isArray(activeDraft.items) && activeDraft.items.length > 0) {
+            const finalDraftId = activeDraft.id || `draft-${Date.now()}`;
+            const finalDraftName = activeDraft.name || `Draft - ${new Date().toLocaleString()}`;
+            const finalDraft = {
+              id: finalDraftId,
+              name: finalDraftName,
+              createdAt: activeDraft.createdAt || new Date().toISOString(),
+              itemCount: activeDraft.items.length,
+              primaryTag: activeDraft.primaryTag || 'restaurant',
+              price: activeDraft.price || activeDraft.items.reduce((s: number, i: any) => s + Number(i.price || 0), 0),
+              previewAvatars: Array.isArray(activeDraft.previewAvatars) && activeDraft.previewAvatars.length > 0
+                ? activeDraft.previewAvatars
+                : activeDraft.items.slice(0, 3).map((i: any) => (i.name ? i.name.charAt(0) : '?')),
+              items: activeDraft.items,
+            };
+
+            if (activeDraft.restoredFromId) {
+              const existingIdx = stagedDrafts.findIndex((d: any) => String(d.id) === String(activeDraft.restoredFromId));
+              if (existingIdx !== -1) {
+                stagedDrafts[existingIdx] = {
+                  ...stagedDrafts[existingIdx],
+                  ...finalDraft,
+                  id: activeDraft.restoredFromId,
+                };
+              } else {
+                stagedDrafts.unshift(finalDraft);
+              }
+            } else {
+              const existingIdx = stagedDrafts.findIndex((d: any) => String(d.id) === String(finalDraftId));
+              if (existingIdx !== -1) {
+                stagedDrafts[existingIdx] = finalDraft;
+              } else {
+                stagedDrafts.unshift(finalDraft);
+              }
+            }
+
+            localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(stagedDrafts));
+            storedDrafts = JSON.stringify(stagedDrafts);
+            toast({
+              title: "Draft Created!",
+              description: `Draft with ${finalDraft.itemCount} items saved from MagicTab.`,
+              variant: "success",
+            });
+          }
+        } catch (commitErr) {
+          console.error("Error committing active draft in DraftPage:", commitErr);
+        } finally {
+          localStorage.removeItem('magicTabActiveDraft');
+        }
+      }
       if (storedDrafts) {
         const parsedDrafts: any[] = JSON.parse(storedDrafts);
         const validatedDrafts = parsedDrafts.map(draft => {

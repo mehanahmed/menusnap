@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import React, { useEffect, useState, useMemo, Suspense } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -14,20 +14,26 @@ import {
   ArrowLeft,
   AlertTriangle,
   Check,
+  Palette,
+  QrCode,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
-import { decodeHtmlEntities } from '@/lib/utils';
+import { decodeHtmlEntities, cn } from '@/lib/utils';
 import { getCategoriesFromMySql } from '@/app/actions/orders';
 import { getUserDraftByIdAction } from '@/app/actions/user-drafts';
 import { usePreferences } from '@/context/PreferencesContext';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { useToast } from '@/hooks/use-toast';
 import type { DraftItemData, DraftSubItem, CategoryLookup } from '@/components/menu/draft-share-dialog';
+import { MENU_SHEET_THEMES, getMenuSheetTheme, type MenuSheetTheme, type CustomThemeConfig } from '@/components/menu/menu-sheet-themes';
+import { CustomDesignControls } from '@/components/menu/custom-design-controls';
+import { getClientCustomThemeAction, saveClientCustomThemeAction, deleteClientCustomBackgroundAction } from '@/app/actions/custom-theme';
 
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
 
-export default function DraftViewPage() {
+function DraftViewContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const draftId = params.id as string;
   const router = useRouter();
   const { currencySymbol, translateText } = usePreferences();
@@ -40,6 +46,98 @@ export default function DraftViewPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [expandedVariations, setExpandedVariations] = useState<Record<string, boolean>>({});
+
+  // Resolve search parameters synchronously during SSR & client render (eliminates hydration mismatches)
+  const urlTheme = searchParams.get('theme');
+  const isCustomerMode = searchParams.get('customer') === '1' || searchParams.get('mode') === 'customer' || searchParams.get('view') === 'public';
+
+  // Theme selection state, initialized from URL query param or default
+  const [selectedThemeId, setSelectedThemeId] = useState<string>(urlTheme || 'sunset');
+
+  // Initialize with null on both SSR and client to ensure identical initial hydration
+  const [customConfig, setCustomConfig] = useState<CustomThemeConfig | null>(null);
+
+  // Load saved custom theme from client storage & server database after mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('menusnap_custom_theme');
+      if (stored) {
+        setCustomConfig(JSON.parse(stored));
+      }
+    } catch {}
+
+    getClientCustomThemeAction({
+      clientId: clientUser?.id,
+      whatsappNumber: clientUser?.whatsappNumber,
+      email: clientUser?.email,
+      draftId,
+    })
+      .then((res) => {
+        if (res.success && res.themeConfig) {
+          setCustomConfig(res.themeConfig);
+          try {
+            localStorage.setItem('menusnap_custom_theme', JSON.stringify(res.themeConfig));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+  }, [clientUser, draftId]);
+
+  const activeTheme = useMemo(
+    () => getMenuSheetTheme(selectedThemeId, customConfig),
+    [selectedThemeId, customConfig]
+  );
+
+  const handleThemeChange = (themeId: string) => {
+    setSelectedThemeId(themeId);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`menuSheetTheme_${draftId}`, themeId);
+        const url = new URL(window.location.href);
+        url.searchParams.set('theme', themeId);
+        window.history.replaceState({}, '', url.toString());
+      } catch {}
+    }
+  };
+
+  const handleUpdateCustomConfig = async (newConfig: CustomThemeConfig) => {
+    setCustomConfig(newConfig);
+    try {
+      localStorage.setItem('menusnap_custom_theme', JSON.stringify(newConfig));
+    } catch {}
+
+    saveClientCustomThemeAction({
+      clientId: clientUser?.id,
+      whatsappNumber: clientUser?.whatsappNumber,
+      email: clientUser?.email,
+      draftId,
+      themeConfig: newConfig,
+    }).catch(() => {});
+  };
+
+  const handleDeleteCustomBackground = async () => {
+    const updated: CustomThemeConfig = {
+      bgImageUrl: null,
+      shadeId: customConfig?.shadeId || 'charcoal',
+      updatedAt: new Date().toISOString(),
+    };
+    setCustomConfig(updated);
+    try {
+      localStorage.setItem('menusnap_custom_theme', JSON.stringify(updated));
+    } catch {}
+
+    deleteClientCustomBackgroundAction({
+      clientId: clientUser?.id,
+      whatsappNumber: clientUser?.whatsappNumber,
+      email: clientUser?.email,
+      draftId,
+    }).catch(() => {});
+
+    toast({
+      title: 'Background Removed',
+      description: 'Your custom background image has been deleted.',
+    });
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -163,10 +261,13 @@ export default function DraftViewPage() {
   const handleShare = async () => {
     if (!draft) return;
 
-    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+    const shareUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/draft/view/${draft.id}?theme=${activeTheme.id}`
+      : '';
 
     const lines: string[] = [
       `Menu Selection for: ${businessName}`,
+      `Template Style: ${activeTheme.name}`,
       `Date: ${formattedDate}`,
       '',
     ];
@@ -182,8 +283,8 @@ export default function DraftViewPage() {
       lines.push('');
     });
 
-    lines.push(`View menu sheet: ${shareUrl}`);
-    lines.push('Prepared with Color Hut Menu Builder');
+    lines.push(`View styled menu sheet: ${shareUrl}`);
+    lines.push('Powered by MenuSnap');
     const fullText = lines.join('\n');
 
     if (typeof navigator !== 'undefined' && navigator.share) {
@@ -206,7 +307,7 @@ export default function DraftViewPage() {
         setTimeout(() => setCopied(false), 2500);
         toast({
           title: 'Menu Copied to Clipboard!',
-          description: 'Shareable menu text and link copied, ready to send via WhatsApp or chat.',
+          description: `Shareable menu text with "${activeTheme.name}" theme copied, ready to send via WhatsApp or chat.`,
         });
       } catch {
         toast({
@@ -220,18 +321,62 @@ export default function DraftViewPage() {
 
   if (isLoading) {
     return (
-      <div className="bg-muted min-h-screen p-4 sm:p-8">
-        <main className="max-w-5xl mx-auto bg-card p-6 sm:p-12 shadow-2xl rounded-lg space-y-8">
-          <div className="flex justify-between items-start border-b pb-8">
-            <Skeleton className="h-14 w-1/3" />
-            <div className="space-y-2 text-right">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-56" />
+      <div
+        className={cn(
+          "min-h-screen bg-muted/30 transition-colors duration-200 ease-in-out",
+          isCustomerMode ? "py-4 sm:py-10 px-2 sm:px-6" : "p-2 sm:p-6 lg:p-8"
+        )}
+      >
+        {!isCustomerMode && (
+          <header className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3 mb-5 px-2 sm:px-0">
+            <Skeleton className="h-8 w-28 rounded-lg" />
+            <Skeleton className="h-8 w-64 rounded-xl" />
+            <Skeleton className="h-8 w-44 rounded-lg" />
+          </header>
+        )}
+
+        <main
+          className="max-w-5xl mx-auto p-5 sm:p-10 lg:p-14 rounded-2xl relative overflow-hidden min-h-[85vh] space-y-10 bg-card border border-border shadow-2xl"
+        >
+          {/* Header Skeleton */}
+          <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start pb-8 mb-8 gap-6 border-b border-border/40">
+            <div className="rounded-lg px-5 py-2.5 flex items-center justify-center bg-muted/60">
+              <div className="h-9 w-32 bg-muted-foreground/20 animate-pulse rounded" />
+            </div>
+            <div className="space-y-2 text-center sm:text-right w-full sm:w-auto">
+              <Skeleton className="h-7 w-48 sm:ml-auto" />
+              <Skeleton className="h-4 w-32 sm:ml-auto" />
             </div>
           </div>
-          <Skeleton className="h-6 w-40" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+
+          {/* Full Page Categories Skeleton */}
+          <section className="space-y-10">
+            {Array.from({ length: 3 }).map((_, catIdx) => (
+              <div key={catIdx} className="space-y-6">
+                {/* Category title skeleton */}
+                <div className="pb-2.5 border-b border-border/40">
+                  <Skeleton className="h-6 w-36 rounded" />
+                </div>
+                {/* 2-column grid of menu items skeleton */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+                  {Array.from({ length: 4 }).map((_, itemIdx) => (
+                    <div key={itemIdx} className="space-y-2">
+                      <div className="flex justify-between items-baseline gap-4">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-4 w-12" />
+                      </div>
+                      <Skeleton className="h-3 w-4/5 opacity-60" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
+
+          {/* Footer Skeleton */}
+          <div className="text-center mt-12 pt-8 border-t border-border/40 flex flex-col items-center justify-center gap-1.5 opacity-60">
+            <Skeleton className="h-4 w-44 mx-auto" />
+            <Skeleton className="h-3 w-28 mx-auto" />
           </div>
         </main>
       </div>
@@ -241,7 +386,7 @@ export default function DraftViewPage() {
   if (error || !draft) {
     return (
       <div className="bg-muted min-h-screen p-8 flex flex-col items-center justify-center text-center">
-        <div className="bg-card p-8 rounded-lg shadow-xl border border-destructive/50 max-w-lg space-y-4">
+        <div className="bg-card p-8 rounded-2xl shadow-xl border border-destructive/50 max-w-lg space-y-4">
           <AlertTriangle className="h-12 w-12 text-destructive mx-auto" />
           <h2 className="text-xl font-semibold text-destructive">Could Not Load Draft Menu</h2>
           <p className="text-muted-foreground">{error || 'Draft not found.'}</p>
@@ -254,30 +399,110 @@ export default function DraftViewPage() {
   }
 
   return (
-    <div className="bg-muted min-h-screen p-2 sm:p-6 lg:p-8">
-      {/* Top action bar: Back to drafts + Share button (no print) */}
-      <header className="max-w-5xl mx-auto flex items-center justify-between gap-2 mb-4 px-2 sm:px-0">
-        <Link href="/draft">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-4 w-4" /> Back to Drafts
-          </Button>
-        </Link>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleShare}
-          className="bg-card w-full sm:w-auto shadow-sm hover:bg-muted font-medium gap-2"
-        >
-          {copied ? <Check className="h-4 w-4 text-green-500" /> : <Share2 className="h-4 w-4 text-primary" />}
-          {copied ? 'Copied!' : 'Share'}
-        </Button>
-      </header>
+    <div
+      suppressHydrationWarning
+      className={cn(
+        "min-h-screen transition-colors duration-200 ease-in-out",
+        isCustomerMode ? "py-4 sm:py-10 px-2 sm:px-6" : "p-2 sm:p-6 lg:p-8",
+        activeTheme.sheetWrapperClass
+      )}
+    >
+      {/* Top action bar: only shown for admin/owner; completely hidden for customers */}
+      {!isCustomerMode && (
+        <header className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3 mb-5 px-2 sm:px-0">
+          <Link href="/draft">
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-4 w-4" /> Back to Drafts
+            </Button>
+          </Link>
 
-      {/* Main presentation sheet matching image 1 */}
-      <main className="max-w-5xl mx-auto bg-card text-card-foreground p-6 sm:p-12 shadow-2xl rounded-lg bg-watermark border border-border/40 overflow-hidden">
+          {/* Curated Theme Selector */}
+          <div className="flex items-center gap-1 bg-card/90 backdrop-blur p-1 rounded-xl border border-border shadow-xs overflow-x-auto max-w-full">
+            <span className="text-[11px] font-semibold text-muted-foreground px-1.5 hidden md:flex items-center gap-1">
+              <Palette className="w-3.5 h-3.5 text-primary" /> Template:
+            </span>
+            {MENU_SHEET_THEMES.map((theme) => {
+              const isActive = activeTheme.id === theme.id;
+              return (
+                <button
+                  key={theme.id}
+                  onClick={() => handleThemeChange(theme.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
+                    isActive
+                      ? "bg-background text-foreground font-bold shadow-xs ring-1 ring-border"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                  )}
+                  title={`${theme.name} — ${theme.description}`}
+                >
+                  <span
+                    className={cn(
+                      "w-2.5 h-2.5 rounded-full shrink-0 shadow-xs transition-transform",
+                      isActive ? "scale-110 ring-1 ring-offset-1 ring-foreground" : "opacity-80"
+                    )}
+                    style={{ backgroundColor: theme.swatchColor }}
+                  />
+                  <span>{theme.shortName}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Link href={`/draft/qr/${draft.id}?theme=${activeTheme.id}`} target="_blank">
+              <Button
+                size="sm"
+                className="h-8 gap-1.5 text-xs font-semibold border border-primary/30 bg-card text-primary hover:bg-primary hover:text-white hover:border-primary shadow-xs transition-colors group"
+              >
+                <QrCode className="h-3.5 w-3.5 text-primary group-hover:text-white transition-colors" /> QR Code
+              </Button>
+            </Link>
+            <Button
+              size="sm"
+              onClick={() => {
+                const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/draft/view/${draft.id}?theme=${activeTheme.id}` : '';
+                const waText = encodeURIComponent(`Menu Selection for: ${businessName}\nView menu sheet: ${shareUrl}`);
+                window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
+              }}
+              className="h-8 gap-1.5 text-xs font-medium border border-green-500/30 bg-card text-green-600 hover:bg-green-600 hover:text-white hover:border-green-600 shadow-xs transition-colors group"
+            >
+              <span className="text-sm">💬</span> WhatsApp
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleShare}
+              className="h-8 gap-1.5 text-xs font-medium border border-border bg-card text-foreground hover:bg-muted hover:text-foreground shadow-xs transition-colors"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Share2 className="h-3.5 w-3.5 text-primary" />}
+              {copied ? 'Copied!' : 'Share'}
+            </Button>
+          </div>
+        </header>
+      )}
+
+      {/* Custom Design Controls (When Custom Design template is active in owner mode) */}
+      {!isCustomerMode && selectedThemeId === 'custom' && (
+        <div className="max-w-5xl mx-auto mb-6">
+          <CustomDesignControls
+            customConfig={customConfig}
+            onUpdateConfig={handleUpdateCustomConfig}
+            onDeleteBackground={handleDeleteCustomBackground}
+          />
+        </div>
+      )}
+
+      {/* Main presentation sheet matching activeTheme */}
+      <main
+        suppressHydrationWarning
+        className={cn(
+          "max-w-5xl mx-auto p-6 sm:p-12 rounded-2xl overflow-hidden relative shadow-lg transition-colors duration-200 ease-in-out",
+          activeTheme.sheetCardClass
+        )}
+        style={activeTheme.watermarkStyle}
+      >
         {/* Header: Logo on left, For + Date on right */}
-        <div className="flex flex-col sm:flex-row justify-between items-center sm:items-start border-b pb-8 mb-6 border-border gap-6">
-          <div className="bg-black rounded-lg w-full sm:w-auto px-5 py-2.5 flex items-center justify-center shadow-[inset_0_0_20px_rgba(255,255,255,0.1)]">
+        <div className={cn("flex flex-col sm:flex-row justify-between items-center sm:items-start pb-8 mb-8 gap-6 transition-colors", activeTheme.headerBorderClass)}>
+          <div className={cn("rounded-lg w-full sm:w-auto px-5 py-2.5 flex items-center justify-center transition-all", activeTheme.logoBoxClass)}>
             <Image
               src="/menusnap-logo-white.png"
               alt="MenuSnap Logo"
@@ -287,23 +512,24 @@ export default function DraftViewPage() {
               priority
             />
           </div>
-          <div className="text-center sm:text-right text-muted-foreground text-sm space-y-1">
-            <p className="font-bold text-lg sm:text-2xl text-foreground">
+          <div className="text-center sm:text-right text-sm space-y-1">
+            <p className={cn("text-xl sm:text-2xl transition-colors", activeTheme.businessTitleClass)}>
               For: {decodeHtmlEntities(businessName)}
             </p>
-            <p className="flex items-center justify-center sm:justify-end gap-2 text-xs sm:text-sm">
-              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <p className={cn("flex items-center justify-center sm:justify-end gap-2 text-xs sm:text-sm", activeTheme.dateTextClass)}>
+              <CalendarDays className={cn("h-4 w-4", activeTheme.dateIconClass)} />
               {formattedDate}
             </p>
           </div>
         </div>
 
         {/* Selected Items grouped by category */}
-        <section className="space-y-8">
+        <section className="space-y-8 flex-1">
           {Object.keys(groupedItems).length > 0 ? (
             Object.entries(groupedItems).map(([categoryName, items]) => (
               <div key={categoryName}>
-                <h3 className="text-xl font-semibold mb-4 border-b-2 border-primary/20 pb-2 text-primary">
+                {/* Themed category header with refined border-bottom */}
+                <h3 className={cn("text-lg sm:text-xl pb-2.5 mb-5 transition-colors", activeTheme.categoryTitleClass, activeTheme.categoryBorderClass)}>
                   {translateText(decodeHtmlEntities(categoryName))}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
@@ -315,18 +541,18 @@ export default function DraftViewPage() {
                     return (
                       <div key={itemKey} className="space-y-1">
                         <div className="flex justify-between items-baseline gap-4">
-                          <h4 className="font-bold text-foreground text-base">
+                          <h4 className={cn("text-base", activeTheme.itemNameClass)}>
                             {translateText(decodeHtmlEntities(item.name))}
                           </h4>
                           {item.price > 0 && (
-                            <p className="font-bold text-foreground shrink-0">
+                            <p className={cn("shrink-0", activeTheme.itemPriceClass)}>
                               {currencySymbol}{item.price.toLocaleString()}
                             </p>
                           )}
                         </div>
 
                         {item.description && (
-                          <p className="text-sm text-muted-foreground leading-relaxed">
+                          <p className={cn("text-xs sm:text-sm leading-relaxed", activeTheme.itemDescClass)}>
                             {translateText(decodeHtmlEntities(item.description))}
                           </p>
                         )}
@@ -336,7 +562,7 @@ export default function DraftViewPage() {
                             variant="link"
                             size="sm"
                             onClick={() => toggleVariation(itemKey)}
-                            className="text-xs h-auto p-0 mt-1 text-primary hover:text-primary/80"
+                            className={cn("text-xs h-auto p-0 mt-1", activeTheme.variationLinkClass)}
                           >
                             {isExpanded ? (
                               <ChevronDown className="h-3 w-3 mr-1 inline" />
@@ -348,15 +574,15 @@ export default function DraftViewPage() {
                         )}
 
                         {hasSubItems && isExpanded && (
-                          <div className="mt-2 pl-3 border-l-2 border-primary/20 space-y-1 bg-muted/30 p-2 rounded-r-md">
+                          <div className={cn("mt-2 pl-3 p-2.5 rounded-lg space-y-1.5 transition-all", activeTheme.variationBoxClass)}>
                             {item.subItems!.map((sub, sIdx) => (
                               <div
                                 key={sub.id || sIdx}
-                                className="flex justify-between items-baseline text-xs text-muted-foreground p-1 bg-card rounded"
+                                className={cn("flex justify-between items-baseline text-xs p-1.5 rounded-md", activeTheme.variationSubItemClass)}
                               >
-                                <p className="text-foreground/90">{translateText(decodeHtmlEntities(sub.name))}</p>
+                                <p className="font-medium">{translateText(decodeHtmlEntities(sub.name))}</p>
                                 {typeof sub.price === 'number' && sub.price > 0 && (
-                                  <p className="font-medium text-primary">
+                                  <p className={activeTheme.variationPriceClass}>
                                     +{currencySymbol}{sub.price.toLocaleString()}
                                   </p>
                                 )}
@@ -378,11 +604,41 @@ export default function DraftViewPage() {
         </section>
 
         {/* Footer */}
-        <footer className="text-center text-muted-foreground text-xs mt-12 pt-8 border-t border-border">
-          <p>Menu selection prepared with Color Hut Menu Builder.</p>
-          <p>For inquiries, please contact Color Hut at +8801919760626.</p>
+        <footer className={cn("text-center text-xs mt-12 pt-8 transition-colors duration-200 ease-in-out", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
+          <p className="font-semibold tracking-wide">
+            Powered by <span className="font-bold">MenuSnap</span>
+          </p>
+          <p className="mt-1 opacity-80">For inquiries, please contact Color Hut at +8801919760626.</p>
         </footer>
       </main>
     </div>
+  );
+}
+
+function DraftViewLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-[#F9F5F0] py-4 sm:py-10 px-2 sm:px-6">
+      <div className="max-w-5xl mx-auto p-5 sm:p-10 lg:p-14 rounded-2xl bg-white shadow-xl min-h-[85vh] space-y-10 animate-pulse">
+        <div className="flex justify-between items-center pb-8 border-b border-orange-200/60">
+          <div className="h-9 w-32 bg-slate-200 rounded-lg" />
+          <div className="h-7 w-48 bg-slate-200 rounded" />
+        </div>
+        <div className="space-y-6">
+          <div className="h-6 w-36 bg-slate-200 rounded" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="h-16 bg-slate-100 rounded-lg" />
+            <div className="h-16 bg-slate-100 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function DraftViewPage() {
+  return (
+    <Suspense fallback={<DraftViewLoadingFallback />}>
+      <DraftViewContent />
+    </Suspense>
   );
 }

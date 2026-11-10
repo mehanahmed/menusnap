@@ -11,7 +11,10 @@ import { getAdminSessionAction } from './admin-auth';
 /**
  * Ensures the clients table exists and has the required columns.
  */
+let clientsTableInitialized = false;
+
 async function ensureClientsTable() {
+  if (clientsTableInitialized) return;
   try {
     // 1. Create table if it doesn't exist
     await pool.execute(`
@@ -107,6 +110,7 @@ async function ensureClientsTable() {
       console.log("Adding 'updated_by' column to client_notes table...");
       await pool.execute("ALTER TABLE client_notes ADD COLUMN updated_by INT NULL");
     }
+    clientsTableInitialized = true;
   } catch (err) {
     console.error("Critical Database initialization error:", err);
     throw err; // Propagate error so calling functions know initialization failed
@@ -782,6 +786,7 @@ export async function checkClientSubscription(
   isSubscriber: boolean;
   isAdmin?: boolean;
   plan?: string;
+  businessType?: 'restaurant' | 'parlour';
   limits?: {
     isCategoryUnlimited: boolean;
     categoryLimit: number;
@@ -883,10 +888,11 @@ export async function checkClientSubscription(
     let clientRow: any = null;
     try {
       const [cRows]: any = await pool.execute(
-        `SELECT id, stage, is_subscriber, subscription_package, ai_scans_used FROM clients 
+        `SELECT id, business_name, business_type, stage, is_subscriber, subscription_package, ai_scans_used FROM clients 
          WHERE (whatsapp_number = ? AND ? != '') OR (email = ? AND ? != '') 
+         ORDER BY (whatsapp_number = ? AND ? != '') DESC, id DESC
          LIMIT 1`,
-        [cleanPhone, cleanPhone, cleanEmail, cleanEmail]
+        [cleanPhone, cleanPhone, cleanEmail, cleanEmail, cleanPhone, cleanPhone]
       );
       if (cRows && cRows.length > 0) {
         clientRow = cRows[0];
@@ -895,10 +901,11 @@ export async function checkClientSubscription(
       if (queryErr?.message?.includes('subscription_package')) {
         await pool.execute('ALTER TABLE clients ADD COLUMN subscription_package VARCHAR(100) NULL DEFAULT NULL AFTER is_subscriber').catch(() => {});
         const [cRows]: any = await pool.execute(
-          `SELECT id, stage, is_subscriber, subscription_package, ai_scans_used FROM clients 
+          `SELECT id, business_name, business_type, stage, is_subscriber, subscription_package, ai_scans_used FROM clients 
            WHERE (whatsapp_number = ? AND ? != '') OR (email = ? AND ? != '') 
+           ORDER BY (whatsapp_number = ? AND ? != '') DESC, id DESC
            LIMIT 1`,
-          [cleanPhone, cleanPhone, cleanEmail, cleanEmail]
+          [cleanPhone, cleanPhone, cleanEmail, cleanEmail, cleanPhone, cleanPhone]
         );
         if (cRows && cRows.length > 0) {
           clientRow = cRows[0];
@@ -915,8 +922,8 @@ export async function checkClientSubscription(
         `SELECT id, plan FROM paystation_transactions 
          WHERE (status = 'Successful' OR status = 'Free') 
            AND ((customer_phone = ? AND ? != '') OR (customer_email = ? AND ? != ''))
-         ORDER BY id DESC LIMIT 1`,
-        [cleanPhone, cleanPhone, cleanEmail, cleanEmail]
+         ORDER BY (customer_phone = ? AND ? != '') DESC, id DESC LIMIT 1`,
+        [cleanPhone, cleanPhone, cleanEmail, cleanEmail, cleanPhone, cleanPhone]
       );
       if (txRows && txRows.length > 0 && txRows[0].plan) {
         transactionPlan = txRows[0].plan;
@@ -950,6 +957,7 @@ export async function checkClientSubscription(
       success: true,
       isSubscriber,
       plan: resolvedPlan,
+      businessType: clientRow?.business_type === 'parlour' ? 'parlour' : 'restaurant',
       limits,
       isAdmin: hasAdminSession,
     };

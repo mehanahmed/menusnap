@@ -209,7 +209,7 @@ async function ensureCategoryCounts() {
       UPDATE categories c
       SET itemCount = (
         SELECT COUNT(*) FROM menu_items m 
-        WHERE m.categoryId = c.id OR LOWER(TRIM(m.categoryId)) = LOWER(TRIM(c.name))
+        WHERE m.categoryId = c.id
       )
       WHERE c.itemCount IS NULL OR c.itemCount = 0
     `);
@@ -231,7 +231,7 @@ export async function getCategoriesFromMySql(type?: 'restaurant' | 'parlour', vi
       SELECT c.*,
              GREATEST(
                COALESCE(c.itemCount, 0),
-               (SELECT COUNT(*) FROM menu_items m WHERE m.categoryId = c.id OR LOWER(TRIM(m.categoryId)) = LOWER(TRIM(c.name)))
+               (SELECT COUNT(*) FROM menu_items m WHERE m.categoryId = c.id)
              ) as itemCount,
              DATE_FORMAT(c.createdAt, '%Y-%m-%d %H:%i:%s') as createdAt
       FROM categories c

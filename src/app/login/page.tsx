@@ -219,10 +219,21 @@ function LoginContent() {
     }
   }, []);
 
+  // Ensure pathname has trailing slash for consistency
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+      window.history.replaceState(null, '', '/login/' + window.location.search + window.location.hash);
+    }
+  }, []);
+
   // Auto-redirect if already logged in
   useEffect(() => {
     if (isClientLoggedIn && !loggingIn) {
-      router.push('/magictab/#login-success');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/magictab/#login-success';
+      } else {
+        router.push('/magictab/#login-success');
+      }
     }
   }, [isClientLoggedIn, router, loggingIn]);
 
@@ -238,23 +249,27 @@ function LoginContent() {
     if (!cleanId || !loginPassword) return;
 
     // Pre-check if account has no password set in database
-    const statusRes = await checkClientStatus(cleanId);
-    if (statusRes.success && statusRes.exists && !statusRes.hasPassword) {
-      setAccountNeedsPassword(true);
-      setAccountExists(false);
-      setActiveTab('register');
-      if (statusRes.client) {
-        if (statusRes.client.businessName) setBusinessName(statusRes.client.businessName);
-        if (statusRes.client.businessType) {
-          setType(statusRes.client.businessType);
-          setTheme(statusRes.client.businessType === 'parlour' ? 'parlour' : 'default');
+    try {
+      const statusRes = await checkClientStatus(cleanId);
+      if (statusRes.success && statusRes.exists && !statusRes.hasPassword) {
+        setAccountNeedsPassword(true);
+        setAccountExists(false);
+        setActiveTab('register');
+        if (statusRes.client) {
+          if (statusRes.client.businessName) setBusinessName(statusRes.client.businessName);
+          if (statusRes.client.businessType) {
+            setType(statusRes.client.businessType);
+            setTheme(statusRes.client.businessType === 'parlour' ? 'parlour' : 'default');
+          }
+          if (statusRes.client.division) setDivision(statusRes.client.division);
+          if (statusRes.client.district) setDistrict(statusRes.client.district);
+          if (statusRes.client.email) setEmail(statusRes.client.email);
+          if (statusRes.client.whatsappNumber) setWhatsapp(statusRes.client.whatsappNumber);
         }
-        if (statusRes.client.division) setDivision(statusRes.client.division);
-        if (statusRes.client.district) setDistrict(statusRes.client.district);
-        if (statusRes.client.email) setEmail(statusRes.client.email);
-        if (statusRes.client.whatsappNumber) setWhatsapp(statusRes.client.whatsappNumber);
+        return;
       }
-      return;
+    } catch (statusErr) {
+      console.warn("Status check failed, continuing with direct login:", statusErr);
     }
 
     setLoggingIn(true);
@@ -284,6 +299,7 @@ function LoginContent() {
         });
         localStorage.setItem('loginSuccessUntil', (Date.now() + 20000).toString());
         localStorage.setItem('loginToastShown', 'false');
+        window.location.href = '/magictab/#login-success';
       }
     } else {
       setLoggingIn(false);
@@ -342,6 +358,7 @@ function LoginContent() {
           });
           localStorage.setItem('loginSuccessUntil', (Date.now() + 20000).toString());
           localStorage.setItem('loginToastShown', 'false');
+          window.location.href = '/magictab/#login-success';
         }
       } else {
         setLoggingIn(false);

@@ -73,7 +73,7 @@ export function PolarisNavbar() {
         {/* Right Desktop Actions */}
         <div className="hidden md:flex items-center gap-5 lg:gap-6">
           <Link
-            href="/login"
+            href="/login/"
             className="text-[14px] lg:text-[14.5px] font-medium text-gray-800 hover:text-gray-950 transition-colors cursor-pointer select-none"
           >
             Log in
@@ -141,7 +141,7 @@ export function PolarisNavbar() {
 
             <div className="pt-3 border-t border-gray-100 flex flex-col gap-2.5">
               <Link
-                href="/login"
+                href="/login/"
                 onClick={() => setMobileMenuOpen(false)}
                 className="text-center py-2 text-[14.5px] font-medium text-gray-800 hover:text-gray-950 transition-colors rounded-lg hover:bg-gray-50"
               >

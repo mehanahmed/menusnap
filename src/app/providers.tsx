@@ -99,6 +99,44 @@ function ChunkErrorAutoReloader() {
   return null;
 }
 
+function ExtensionCleaner() {
+  useEffect(() => {
+    try {
+      const clean = () => {
+        const els = document.querySelectorAll('[bis_skin_checked]');
+        for (let i = 0; i < els.length; i++) els[i].removeAttribute('bis_skin_checked');
+      };
+      clean();
+      const obs = new MutationObserver((muts) => {
+        for (let i = 0; i < muts.length; i++) {
+          const m = muts[i];
+          if (m.type === 'attributes' && m.attributeName === 'bis_skin_checked' && m.target) {
+            (m.target as Element).removeAttribute('bis_skin_checked');
+          } else if (m.type === 'childList') {
+            for (let j = 0; j < m.addedNodes.length; j++) {
+              const node = m.addedNodes[j] as Element;
+              if (node.nodeType === 1) {
+                if (node.hasAttribute('bis_skin_checked')) node.removeAttribute('bis_skin_checked');
+                const nested = node.querySelectorAll ? node.querySelectorAll('[bis_skin_checked]') : [];
+                for (let k = 0; k < nested.length; k++) nested[k].removeAttribute('bis_skin_checked');
+              }
+            }
+          }
+        }
+      });
+      obs.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['bis_skin_checked'],
+        childList: true,
+        subtree: true,
+      });
+      return () => obs.disconnect();
+    } catch (_) {}
+  }, []);
+
+  return null;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ClientAuthProvider>
@@ -106,6 +144,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <PreferencesProvider>
         <Suspense fallback={null}>
           <ChunkErrorAutoReloader />
+          <ExtensionCleaner />
           <DraftAutoSyncer />
           <MetaPixelScriptLoader />
           <GtmScriptLoader />

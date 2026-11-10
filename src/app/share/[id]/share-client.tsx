@@ -339,8 +339,10 @@ export default function ShareClient() {
 
         {/* Footer */}
         <footer className="text-center text-muted-foreground text-xs mt-12 pt-8 border-t border-border">
-          <p>Menu selection prepared with Color Hut Menu Builder.</p>
-          <p>For inquiries, please contact Color Hut at +8801919760626.</p>
+          <p className="font-semibold tracking-wide">
+            Powered by <span className="font-bold text-foreground">MenuSnap</span>
+          </p>
+          <p className="mt-1 opacity-80">For inquiries, please contact Color Hut at +8801919760626.</p>
         </footer>
       </main>
     </div>

@@ -239,7 +239,7 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
         <div className="hidden md:flex items-center gap-4">
           {!loggedIn && (
             <Link
-              href="/login"
+              href="/login/"
               className={`text-[14px] font-medium transition-colors px-3 py-1.5 cursor-pointer select-none ${
                 isDark
                   ? "text-gray-200 hover:text-white"
@@ -324,7 +324,7 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
             >
               {!loggedIn && (
                 <Link
-                  href="/login"
+                  href="/login/"
                   onClick={() => setMobileMenuOpen(false)}
                   className={`w-full text-center py-2.5 text-[14.5px] font-semibold rounded-xl transition-colors ${
                     isDark

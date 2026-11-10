@@ -645,7 +645,7 @@ export const FOOTER_COLUMNS = [
       { label: "Explore", href: "#product" },
       { label: "Features", href: "#features" },
       { label: "Pricing", href: "#pricing" },
-      { label: "Login", href: "/login" },
+      { label: "Login", href: "/login/" },
     ],
   },
   {
