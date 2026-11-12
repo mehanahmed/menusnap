@@ -349,6 +349,32 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
         isSubscriber: dbIsSubscriber,
         subscriptionPackage: dbSubPackage,
       };
+      // On new registration OR switching accounts, always purge stale cache
+      try {
+        const prevRaw = localStorage.getItem(CLIENT_STORAGE_KEY);
+        let isDifferentAccount = loginAction === 'created';
+        if (prevRaw) {
+          const prevUser = JSON.parse(prevRaw);
+          if (
+            (prevUser?.id && userToStore.id && prevUser.id !== userToStore.id) ||
+            (prevUser?.whatsappNumber && userToStore.whatsappNumber && prevUser.whatsappNumber !== userToStore.whatsappNumber) ||
+            (prevUser?.email && userToStore.email && prevUser.email !== userToStore.email)
+          ) {
+            isDifferentAccount = true;
+          }
+        }
+
+        if (isDifferentAccount) {
+          localStorage.removeItem('menuBuilderDrafts');
+          localStorage.removeItem('menusnap_customer_orders');
+          localStorage.removeItem('menusnap_active_saved_draft_id');
+          localStorage.removeItem('menusnap_active_saved_draft_name');
+          localStorage.removeItem('magicTabActiveDraft');
+          localStorage.removeItem('draftToRestoreId');
+          localStorage.removeItem('menusnap_custom_theme');
+        }
+      } catch (_) {}
+
       localStorage.setItem(CLIENT_STORAGE_KEY, JSON.stringify(userToStore));
       setClientUser(userToStore);
       setIsSubscriber(dbIsSubscriber);
@@ -439,6 +465,32 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
         subscriptionPackage: client.subscriptionPackage,
       };
 
+      // On switching accounts, always purge stale cache
+      try {
+        const prevRaw = localStorage.getItem(CLIENT_STORAGE_KEY);
+        let isDifferentAccount = false;
+        if (prevRaw) {
+          const prevUser = JSON.parse(prevRaw);
+          if (
+            (prevUser?.id && userToStore.id && prevUser.id !== userToStore.id) ||
+            (prevUser?.whatsappNumber && userToStore.whatsappNumber && prevUser.whatsappNumber !== userToStore.whatsappNumber) ||
+            (prevUser?.email && userToStore.email && prevUser.email !== userToStore.email)
+          ) {
+            isDifferentAccount = true;
+          }
+        }
+
+        if (isDifferentAccount) {
+          localStorage.removeItem('menuBuilderDrafts');
+          localStorage.removeItem('menusnap_customer_orders');
+          localStorage.removeItem('menusnap_active_saved_draft_id');
+          localStorage.removeItem('menusnap_active_saved_draft_name');
+          localStorage.removeItem('magicTabActiveDraft');
+          localStorage.removeItem('draftToRestoreId');
+          localStorage.removeItem('menusnap_custom_theme');
+        }
+      } catch (_) {}
+
       localStorage.setItem(CLIENT_STORAGE_KEY, JSON.stringify(userToStore));
       setClientUser(userToStore);
       setIsSubscriber(Boolean(client.isSubscriber));
@@ -508,6 +560,13 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(CLIENT_STORAGE_KEY);
+    localStorage.removeItem('menuBuilderDrafts');
+    localStorage.removeItem('menusnap_customer_orders');
+    localStorage.removeItem('menusnap_active_saved_draft_id');
+    localStorage.removeItem('menusnap_active_saved_draft_name');
+    localStorage.removeItem('magicTabActiveDraft');
+    localStorage.removeItem('draftToRestoreId');
+    localStorage.removeItem('menusnap_custom_theme');
     setClientUser(null);
     setIsSubscriber(false);
     setCurrentPackage(null);

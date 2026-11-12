@@ -7,6 +7,7 @@ import Link from 'next/link';
 import QRCode from 'qrcode';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ArrowLeft,
@@ -19,11 +20,16 @@ import {
   QrCode as QrIcon,
   Info,
   Loader2,
+  CheckCircle2,
+  BookmarkCheck,
+  AlertTriangle,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { decodeHtmlEntities, cn } from '@/lib/utils';
 import { getUserDraftByIdAction } from '@/app/actions/user-drafts';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useActiveSavedDraft } from '@/hooks/use-active-saved-draft';
 import type { DraftItemData } from '@/components/menu/draft-share-dialog';
 import { MENU_SHEET_THEMES, getMenuSheetTheme, type MenuSheetTheme } from '@/components/menu/menu-sheet-themes';
 import { MENUSNAP_WHITE_LOGO_DATA_URL } from '@/components/menu/menusnap-logo-data';
@@ -44,6 +50,50 @@ function DraftQrContent() {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [isExporting, setIsExporting] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Active saved draft verification (only active saved draft can have a live QR stand)
+  const {
+    activeSavedDraftId,
+    activeSavedDraftName,
+    isDraftSaved,
+    saveAsActiveDraft,
+    isLoading: isDraftSavedLoading,
+  } = useActiveSavedDraft();
+
+  const isSaved = useMemo(() => {
+    // If another draft is active in this session, this draft is inactive
+    if (activeSavedDraftId && activeSavedDraftId !== draftId) {
+      return false;
+    }
+    if (isDraftSaved(draftId)) {
+      return true;
+    }
+    return Boolean(draft?.isSaved);
+  }, [activeSavedDraftId, draftId, isDraftSaved, draft?.isSaved]);
+
+  const [isActivating, setIsActivating] = useState(false);
+
+  const handleSaveAndUnlockQr = async () => {
+    if (!draft) return;
+    setIsActivating(true);
+    try {
+      const res = await saveAsActiveDraft({ id: draftId, name: draft.name });
+      if (res.success) {
+        toast({
+          title: 'Active QR Menu Saved!',
+          description: `"${decodeHtmlEntities(draft.name)}" is now your active menu. QR Stand unlocked!`,
+        });
+      } else {
+        toast({
+          title: 'Save Failed',
+          description: res.error || 'Could not save draft.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsActivating(false);
+    }
+  };
 
   // Synchronously resolve theme from searchParams (eliminates SSR hydration mismatch)
   const urlTheme = searchParams.get('theme');
@@ -67,11 +117,18 @@ function DraftQrContent() {
     return clientUser?.businessName || draft?.name || 'Our Menu';
   }, [clientUser?.businessName, draft?.name]);
 
-  // Construct the public customer view URL
+  // Table number assignment for table-specific QR stands
+  const [tableNumber, setTableNumber] = useState<string>('');
+
+  // Construct the public customer view URL (dynamically includes table parameter when assigned)
   const customerMenuUrl = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    return `${window.location.origin}/draft/view/${draftId}?theme=${activeTheme.id}&customer=1`;
-  }, [draftId, activeTheme.id]);
+    const origin =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (typeof window !== 'undefined' ? window.location.origin : '');
+    if (!origin) return '';
+    const base = `${origin}/draft/view/${draftId}?theme=${activeTheme.id}&customer=1`;
+    return tableNumber.trim() ? `${base}&table=${encodeURIComponent(tableNumber.trim())}` : base;
+  }, [draftId, activeTheme.id, tableNumber]);
 
   // Fetch draft data
   useEffect(() => {
@@ -89,18 +146,22 @@ function DraftQrContent() {
           } catch (_) {}
         }
 
-        // Fallback to MySQL database
-        if (!found) {
-          const dbRes = await getUserDraftByIdAction(String(draftId));
-          if (dbRes.success && dbRes.draft) {
+        // Always check MySQL to ensure fresh isSaved status and as fallback
+        const dbRes = await getUserDraftByIdAction(String(draftId));
+        if (dbRes.success && dbRes.draft) {
+          const dbDraft = dbRes.draft;
+          if (!found) {
             found = {
-              id: dbRes.draft.draftId,
-              name: dbRes.draft.draftName,
-              createdAt: dbRes.draft.createdAt,
-              itemCount: dbRes.draft.itemCount || dbRes.draft.items.length,
-              primaryTag: dbRes.draft.primaryTag || 'restaurant',
-              items: dbRes.draft.items as any,
+              id: dbDraft.draftId,
+              name: dbDraft.draftName,
+              createdAt: dbDraft.createdAt,
+              itemCount: dbDraft.itemCount || dbDraft.items.length,
+              primaryTag: dbDraft.primaryTag || 'restaurant',
+              items: dbDraft.items as any,
+              isSaved: Boolean(dbDraft.isSaved),
             };
+          } else {
+            found.isSaved = Boolean(dbDraft.isSaved);
           }
         }
 
@@ -160,13 +221,14 @@ function DraftQrContent() {
     const a = document.createElement('a');
     a.href = qrDataUrl;
     const safeName = (businessName || 'menu').replace(/[^a-zA-Z0-9_-]/g, '_');
-    a.download = `menu-qr-${safeName}-${activeTheme.id}.png`;
+    const tableSuffix = tableNumber.trim() ? `-Table_${tableNumber.trim().replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+    a.download = `menu-qr-${safeName}${tableSuffix}-${activeTheme.id}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     toast({
       title: 'QR Code Downloaded',
-      description: `Saved standalone QR code PNG for ${businessName}.`,
+      description: `Saved standalone QR code PNG${tableNumber.trim() ? ` for Table ${tableNumber.trim()}` : ` for ${businessName}`}.`,
     });
   };
 
@@ -185,13 +247,14 @@ function DraftQrContent() {
       const a = document.createElement('a');
       a.href = dataUrl;
       const safeName = (businessName || 'menu').replace(/[^a-zA-Z0-9_-]/g, '_');
-      a.download = `menu-stand-card-${safeName}-${activeTheme.id}.png`;
+      const tableSuffix = tableNumber.trim() ? `-Table_${tableNumber.trim().replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
+      a.download = `menu-stand-card-${safeName}${tableSuffix}-${activeTheme.id}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       toast({
         title: 'Stand Card Image Downloaded!',
-        description: `Saved full stand card graphic as high-resolution PNG.`,
+        description: `Saved stand card graphic${tableNumber.trim() ? ` for Table ${tableNumber.trim()}` : ''} as high-resolution PNG.`,
       });
     } catch (err) {
       console.error('Failed to export stand card image:', err);
@@ -221,6 +284,85 @@ function DraftQrContent() {
         <Button onClick={() => router.back()} variant="outline" size="sm">
           <ArrowLeft className="h-4 w-4 mr-2" /> Back
         </Button>
+      </div>
+    );
+  }
+
+  // Enforcement: Only the single active saved draft can generate and display a QR stand
+  if (!isDraftSavedLoading && !isSaved && draft) {
+    const isReplacing = Boolean(activeSavedDraftName && activeSavedDraftId !== draftId);
+
+    return (
+      <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-10 flex flex-col items-center justify-center">
+        <div className="max-w-md w-full bg-card rounded-2xl border border-border shadow-2xl p-6 sm:p-8 text-center space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-xs">
+            <QrIcon className="w-7 h-7" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-bold border border-amber-500/20">
+              <AlertTriangle className="w-3.5 h-3.5" /> Save Required
+            </div>
+            <h2 className="text-lg sm:text-xl font-black text-foreground tracking-tight">
+              Save Draft to Enable QR Stand
+            </h2>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Customer QR stands are strictly reserved for your <strong>single active saved menu</strong>.
+              <span className="font-semibold text-foreground block mt-1">"{decodeHtmlEntities(draft.name)}" is currently not saved.</span>
+            </p>
+          </div>
+
+          {isReplacing && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-left space-y-2 text-xs">
+              <p className="font-bold text-amber-700 dark:text-amber-300 text-[11px]">
+                Active Menu Replacement Warning:
+              </p>
+              <div className="bg-background/80 rounded-lg p-2 border border-border flex items-center justify-between">
+                <span className="font-medium line-through opacity-70 truncate max-w-[200px]">
+                  {decodeHtmlEntities(activeSavedDraftName || 'Previous Menu')}
+                </span>
+                <span className="text-[10px] font-bold text-destructive bg-destructive/10 px-1.5 py-0.5 rounded">
+                  Will Unsave
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Only one menu draft can be active at a time. Saving this menu will deactivate the previous one.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2 pt-2">
+            <Button
+              onClick={handleSaveAndUnlockQr}
+              disabled={isActivating}
+              className="w-full h-10 font-bold text-xs sm:text-sm rounded-xl gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-500/20"
+            >
+              {isActivating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <BookmarkCheck className="w-4 h-4" />
+              )}
+              <span>
+                {isActivating
+                  ? 'Saving Menu...'
+                  : isReplacing
+                  ? 'Unsave Previous & Activate This QR Stand'
+                  : 'Save This Draft & Enable QR Stand'}
+              </span>
+            </Button>
+
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="w-full h-9 text-xs font-semibold rounded-xl border-border bg-card hover:bg-muted"
+            >
+              <Link href="/draft/">
+                <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back to Saved Drafts
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -325,9 +467,16 @@ function DraftQrContent() {
                 </Link>
                 <div className="h-4 w-px bg-border" />
                 <div>
-                  <h1 className="text-sm font-bold truncate max-w-xs">
-                    {decodeHtmlEntities(businessName)}
-                  </h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-sm font-bold truncate max-w-xs">
+                      {decodeHtmlEntities(businessName)}
+                    </h1>
+                    {isSaved && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <CheckCircle2 className="h-3 w-3" /> Active Saved Menu
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-muted-foreground">Digital Menu QR Stand</p>
                 </div>
               </div>
@@ -364,9 +513,16 @@ function DraftQrContent() {
               {/* Row 2: Title & QR Stand on left, Preview Menu on right */}
               <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-sm font-bold truncate text-foreground">
-                    {decodeHtmlEntities(businessName)}
-                  </h1>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h1 className="text-sm font-bold truncate text-foreground">
+                      {decodeHtmlEntities(businessName)}
+                    </h1>
+                    {isSaved && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <CheckCircle2 className="h-2.5 w-2.5" /> Saved
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[10px] text-muted-foreground">Digital Menu QR Stand</p>
                 </div>
 
@@ -473,9 +629,26 @@ function DraftQrContent() {
                   {decodeHtmlEntities(businessName)}
                 </h2>
 
-                <p className="text-xs sm:text-sm font-semibold opacity-75 mb-5">
-                  Digital Menu & Pricing
-                </p>
+                {/* Table Badge on Stand (if selected) or Subtitle */}
+                {tableNumber.trim() ? (
+                  <div
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full mb-4 mt-1 shadow-xs border"
+                    style={{
+                      backgroundColor: activeTheme.isDark ? '#1F2028' : '#F1F5F9',
+                      borderColor: activeTheme.isDark ? '#2E303E' : '#CBD5E1',
+                      color: activeTheme.accentColor,
+                    }}
+                  >
+                    <UtensilsCrossed className="w-3.5 h-3.5" />
+                    <span className="text-xs font-black tracking-wider uppercase">
+                      Table {tableNumber.replace(/^table\s*/i, '').trim()}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs sm:text-sm font-semibold opacity-75 mb-5">
+                    Digital Menu & Pricing
+                  </p>
+                )}
 
                 {/* The QR Code in a crisp framed container */}
                 <div className="bg-white p-3.5 sm:p-4 rounded-2xl shadow-md border border-slate-200/80 inline-block mx-auto mb-4">
@@ -511,6 +684,81 @@ function DraftQrContent() {
 
             {/* Right Side: Setup Controls & Instructions (Hidden during print) */}
             <div className="no-print lg:col-span-5 space-y-4 lg:sticky lg:top-20">
+              {/* Table Assignment Controller Card */}
+              <div className="bg-card border border-border p-4 sm:p-5 rounded-2xl shadow-xs space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <UtensilsCrossed className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground">Table Assignment</h3>
+                      <p className="text-[11px] text-muted-foreground">Pre-assign a table to this QR stand</p>
+                    </div>
+                  </div>
+                  {tableNumber.trim() && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTableNumber('')}
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      Reset
+                    </Button>
+                  )}
+                </div>
+
+                {/* Quick Table Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                    Quick Table Presets
+                  </span>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].map((num) => {
+                      const isSelected = tableNumber.trim() === num;
+                      return (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setTableNumber(isSelected ? '' : num)}
+                          className={cn(
+                            "h-7 rounded-lg text-xs font-bold transition-all border",
+                            isSelected
+                              ? "bg-primary text-primary-foreground border-primary shadow-xs ring-2 ring-primary/20 scale-105"
+                              : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border-border/80"
+                          )}
+                        >
+                          T-{num}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Input */}
+                <div className="space-y-1 pt-1 border-t border-border/40">
+                  <label className="text-[11px] font-medium text-muted-foreground block">
+                    Custom Table Name / Zone
+                  </label>
+                  <Input
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                    placeholder="e.g. 4B, VIP-1, Terrace 2"
+                    className="h-8 text-xs rounded-lg"
+                  />
+                  <p className="text-[10px] text-muted-foreground leading-tight pt-0.5">
+                    {tableNumber.trim() ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 shrink-0" />
+                        Encoded for Table {tableNumber.trim()} — customers won&apos;t have to enter their table!
+                      </span>
+                    ) : (
+                      'Leave empty for a general stand (customers enter table number at checkout).'
+                    )}
+                  </p>
+                </div>
+              </div>
+
               {/* Action Card */}
               <div className="bg-card border border-border p-5 sm:p-6 rounded-2xl shadow-xs space-y-4">
                 <h3 className="text-sm sm:text-base font-bold flex items-center gap-2">

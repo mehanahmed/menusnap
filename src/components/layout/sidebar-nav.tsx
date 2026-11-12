@@ -19,6 +19,7 @@ import {
   HeartHandshake,
   Sparkles,
   Utensils,
+  UtensilsCrossed,
   Crown,
   Zap,
   ShieldCheck,
@@ -37,10 +38,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { SidebarPreferences } from '@/components/layout/sidebar-preferences';
 import { usePreferences } from '@/context/PreferencesContext';
 
-const mainNavItems: { href: string, label: string, icon: React.ElementType, hasChevron?: boolean }[] = [
+const mainNavItems: { href: string, label: string, icon: React.ElementType, hasChevron?: boolean, isLive?: boolean }[] = [
   { href: '/magictab/', label: 'MagicTab', icon: ListOrdered, hasChevron: true },
   { href: '/templates/', label: 'Templates', icon: Layers, hasChevron: true },
   { href: '/draft/', label: 'Draft', icon: FileEdit, hasChevron: true },
+  { href: '/customer-orders/', label: 'Customer Orders', icon: UtensilsCrossed, hasChevron: true, isLive: true },
   { href: '/magic-calculation/', label: 'Magic Calculation', icon: Calculator, hasChevron: true },
   { href: '/order-history/', label: 'Order History', icon: HistoryIcon, hasChevron: true },
   { href: '/happy-clients/', label: 'Happy Clients', icon: HeartHandshake, hasChevron: true },
@@ -57,6 +59,7 @@ export function SidebarNav() {
       case '/magictab/': return t('magictab', fallback);
       case '/templates/': return t('templates', fallback);
       case '/draft/': return t('draft', fallback);
+      case '/customer-orders/': return 'Customer Orders';
       case '/magic-calculation/': return t('magicCalc', fallback);
       case '/order-history/': return t('orderHistory', fallback);
       case '/happy-clients/': return t('happyClients', fallback);
@@ -179,6 +182,12 @@ export function SidebarNav() {
                       {item.href.includes('/magictab') && !isSubscriber && (
                         <span className="group-data-[collapsible=icon]:hidden text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs mr-1">
                           PRO
+                        </span>
+                      )}
+                      {item.isLive && (
+                        <span className="group-data-[collapsible=icon]:hidden text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 mr-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          LIVE
                         </span>
                       )}
                       {item.hasChevron && <ChevronRight className="h-4 w-4 text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden" />}

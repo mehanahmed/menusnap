@@ -30,6 +30,9 @@ import {
   Share2,
   Camera,
   ShoppingBag,
+  CheckCircle2,
+  BookmarkCheck,
+  Check,
 } from "lucide-react";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
 import { format, formatDistanceToNowStrict, parseISO, isValid } from 'date-fns';
@@ -38,9 +41,18 @@ import { getCategoriesFromMySql } from '@/app/actions/orders';
 import { usePreferences } from '@/context/PreferencesContext';
 import { DraftShareDialog } from '@/components/menu/draft-share-dialog';
 import { MenuScannerDialog } from '@/components/menu/menu-scanner-dialog';
-import { CustomerOrdersTable } from '@/components/menu/customer-orders-table';
 import { useClientAuth } from '@/hooks/use-client-auth';
-import { batchSyncUserDraftsAction, deleteUserDraftAction } from '@/app/actions/user-drafts';
+import { batchSyncUserDraftsAction, deleteUserDraftAction, getUserDraftsAction, saveUserDraftAction } from '@/app/actions/user-drafts';
+import { useActiveSavedDraft } from '@/hooks/use-active-saved-draft';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 
 const STATIC_AVATAR_IMAGE_URL = '/assets/image.svg';
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
@@ -62,6 +74,11 @@ interface DraftSubItem {
   name: string;
   price: number;
   categoryId: string;
+  category?: string;
+  categoryName?: string;
+  description?: string | null;
+  image?: string | null;
+  subItems?: Array<{ id?: string; name: string; price?: number }>;
 }
 
 interface DraftItem {
@@ -73,16 +90,20 @@ interface DraftItem {
   price: number;
   previewAvatars: string[];
   items?: DraftSubItem[];
+  isSaved?: boolean;
+  clientId?: number | null;
 }
 
 interface DraftCardProps {
   draft: DraftItem;
   isExpanded: boolean;
+  isSaved: boolean;
   onRestore: (id: string) => void;
   onDelete: (id: string) => void;
   onToggleExpand: (id: string) => void;
   masterCategoryList: Category[];
   onShare: (draft: DraftItem) => void;
+  onSaveDraft: (draft: DraftItem) => void;
 }
 
 const extractMenuTypeFromTag = (tag: string): string => {
@@ -98,7 +119,7 @@ const extractMenuTypeFromTag = (tag: string): string => {
   return 'Unknown Type';
 };
 
-function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, masterCategoryList, onShare }: DraftCardProps): ReactNode {
+function DraftCard({ draft, isExpanded, isSaved, onRestore, onDelete, onToggleExpand, masterCategoryList, onShare, onSaveDraft }: DraftCardProps): ReactNode {
   const { currencySymbol, t } = usePreferences();
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
@@ -206,6 +227,12 @@ function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, mas
       </CardHeader>
       <CardContent className="px-2 pb-2 pt-0">
         <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          {isSaved && (
+            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold py-0.5 px-2 text-[9px] flex items-center gap-1 shadow-2xs">
+              <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+              Active Saved Menu
+            </Badge>
+          )}
           <Badge variant="default" className="bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-700/20 dark:text-orange-400 dark:border-orange-600 font-normal py-0.5 px-2 text-[9px]">
             <MenuTypeIcon className="h-2.5 w-2.5 mr-1 opacity-80" />
             {menuTypeDisplay}
@@ -286,6 +313,23 @@ function DraftCard({ draft, isExpanded, onRestore, onDelete, onToggleExpand, mas
       <CardFooter className="bg-muted/20 px-2 py-1.5 flex justify-between items-center border-t border-border/50">
         <p className="text-[9px] text-muted-foreground opacity-70">Saved {formattedCreationDate}</p>
         <div className="flex items-center gap-1.5">
+          {isSaved ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              Saved Menu
+            </span>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[10px] font-bold px-2.5 flex items-center gap-1 border-amber-500/40 bg-card text-amber-600 dark:text-amber-400 hover:bg-amber-500/15 hover:text-amber-700 dark:hover:text-amber-300 hover:border-amber-500 shadow-2xs transition-colors"
+              onClick={() => onSaveDraft(draft)}
+              title="Save as active QR menu"
+            >
+              <BookmarkCheck className="h-3 w-3" />
+              Save Draft
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -365,31 +409,64 @@ export default function DraftPage(): ReactNode {
   const { currencySymbol } = usePreferences();
   const { toast } = useToast();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'drafts' | 'orders'>('drafts');
 
+  // Active saved draft management (single active draft rule)
+  const { activeSavedDraftId, activeSavedDraftName, isDraftSaved, saveAsActiveDraft } = useActiveSavedDraft();
+  const [draftToSave, setDraftToSave] = useState<DraftItem | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+
+  const previousSavedDraft = useMemo(() => {
+    if (!activeSavedDraftId) return null;
+    return (
+      drafts.find((d) => d.id === activeSavedDraftId) || {
+        id: activeSavedDraftId,
+        name: activeSavedDraftName || 'Active Menu',
+      }
+    );
+  }, [activeSavedDraftId, activeSavedDraftName, drafts]);
+
+  const isReplacingSavedDraft = Boolean(
+    draftToSave &&
+    previousSavedDraft &&
+    previousSavedDraft.id !== draftToSave.id
+  );
+
+  const handleInitiateSaveDraft = (draft: DraftItem) => {
+    setDraftToSave(draft);
+  };
+
+  const handleConfirmSaveDraft = async () => {
+    if (!draftToSave) return;
+    setIsSavingDraft(true);
+    try {
+      const res = await saveAsActiveDraft(draftToSave);
+      if (res.success) {
+        toast({
+          title: 'Active QR Menu Saved!',
+          description: `"${decodeHtmlEntities(draftToSave.name)}" is now your active saved menu. QR stands are enabled for this menu.`,
+        });
+      } else {
+        toast({
+          title: 'Save Failed',
+          description: res.error || 'Could not save draft as active menu.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsSavingDraft(false);
+      setDraftToSave(null);
+    }
+  };
+
+  // Redirect legacy ?tab=orders links to dedicated Customer QR Orders page
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('tab') === 'orders') {
-        setActiveTab('orders');
+        router.replace('/customer-orders/');
       }
     }
-  }, []);
-
-  const handleTabChange = (tab: 'drafts' | 'orders') => {
-    setActiveTab(tab);
-    if (typeof window !== 'undefined') {
-      try {
-        const url = new URL(window.location.href);
-        if (tab === 'orders') {
-          url.searchParams.set('tab', 'orders');
-        } else {
-          url.searchParams.delete('tab');
-        }
-        window.history.replaceState({}, '', url.toString());
-      } catch {}
-    }
-  };
+  }, [router]);
 
   const handleDraftCreated = (newDraft: DraftItem) => {
     setDrafts(prev => [newDraft, ...prev]);
@@ -426,9 +503,11 @@ export default function DraftPage(): ReactNode {
   }, [toast]);
 
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    let isCancelled = false;
+    async function loadDrafts() {
+      setIsLoading(true);
+      setError(null);
+
       // 1. Commit active draft staged from MagicTab if any
       const activeDraftRaw = localStorage.getItem('magicTabActiveDraft');
       let storedDrafts = localStorage.getItem(DRAFTS_STORAGE_KEY);
@@ -439,6 +518,27 @@ export default function DraftPage(): ReactNode {
         } catch {
           stagedDrafts = [];
         }
+      }
+
+      // Synchronously resolve current logged-in client if auth state is still loading
+      let effectiveClientId = clientUser?.id;
+      let effectiveBusinessName = clientUser?.businessName;
+      let effectiveBusinessType = clientUser?.type;
+      let effectiveWhatsapp = clientUser?.whatsappNumber;
+      let effectiveEmail = clientUser?.email;
+
+      if (!effectiveClientId && typeof window !== 'undefined') {
+        try {
+          const rawClient = localStorage.getItem('colorHutClientUser');
+          if (rawClient) {
+            const u = JSON.parse(rawClient);
+            effectiveClientId = u.id;
+            effectiveBusinessName = u.businessName || u.name;
+            effectiveBusinessType = u.type || u.businessType;
+            effectiveWhatsapp = u.whatsappNumber || u.phone;
+            effectiveEmail = u.email;
+          }
+        } catch {}
       }
 
       if (activeDraftRaw) {
@@ -458,6 +558,7 @@ export default function DraftPage(): ReactNode {
                 ? activeDraft.previewAvatars
                 : activeDraft.items.slice(0, 3).map((i: any) => (i.name ? i.name.charAt(0) : '?')),
               items: activeDraft.items,
+              clientId: effectiveClientId || activeDraft.clientId || undefined,
             };
 
             if (activeDraft.restoredFromId) {
@@ -482,11 +583,23 @@ export default function DraftPage(): ReactNode {
 
             localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(stagedDrafts));
             storedDrafts = JSON.stringify(stagedDrafts);
-            toast({
-              title: "Draft Created!",
-              description: `Draft with ${finalDraft.itemCount} items saved from MagicTab.`,
-              variant: "success",
-            });
+
+            // Immediately persist this new draft to MySQL if client is authenticated
+            if (effectiveClientId || effectiveBusinessName) {
+              saveUserDraftAction({
+                draftId: finalDraft.id,
+                draftName: finalDraft.name,
+                businessName: effectiveBusinessName || (finalDraft.primaryTag === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
+                businessType: effectiveBusinessType || (finalDraft.primaryTag === 'parlour' ? 'parlour' : 'restaurant'),
+                whatsappNumber: effectiveWhatsapp,
+                email: effectiveEmail,
+                clientId: effectiveClientId,
+                primaryTag: finalDraft.primaryTag,
+                items: finalDraft.items || [],
+                itemCount: finalDraft.itemCount,
+                createdAt: finalDraft.createdAt,
+              }).catch((syncErr: any) => console.error('[DraftPage] Error syncing staged draft:', syncErr));
+            }
           }
         } catch (commitErr) {
           console.error("Error committing active draft in DraftPage:", commitErr);
@@ -494,74 +607,160 @@ export default function DraftPage(): ReactNode {
           localStorage.removeItem('magicTabActiveDraft');
         }
       }
-      if (storedDrafts) {
-        const parsedDrafts: any[] = JSON.parse(storedDrafts);
-        const validatedDrafts = parsedDrafts.map(draft => {
-          const validatedItems = Array.isArray(draft.items) ? draft.items.map((item: any) => {
-            const finalCatId = item.categoryId || item.category; // Check for new property, fallback to old
-            return {
-              ...item,
-              categoryId: finalCatId === null || finalCatId === undefined ? 'unknown' : String(finalCatId),
-            };
-          }) : [];
 
-          return {
-            ...draft,
-            items: validatedItems,
-            previewAvatars: Array.isArray(draft.previewAvatars) ? draft.previewAvatars : [],
-          };
-        });
-        setDrafts(validatedDrafts);
-        if (validatedDrafts.length > 0) {
-          let bName = clientUser?.businessName;
-          let bType = clientUser?.type;
-          let wa = clientUser?.whatsappNumber;
-          let em = clientUser?.email;
-          let cid = clientUser?.id;
+      // 2. Authoritative client drafts from MySQL if logged in
+      if (effectiveClientId || effectiveBusinessName) {
+        try {
+          const dbRes = await getUserDraftsAction({
+            clientId: effectiveClientId || undefined,
+            businessName: !effectiveClientId ? (effectiveBusinessName || undefined) : undefined,
+            limit: 100,
+          });
 
-          if (!bName && typeof window !== 'undefined') {
-            try {
-              const u = JSON.parse(localStorage.getItem('colorHutClientUser') || '{}');
-              if (u.businessName || u.name) bName = u.businessName || u.name;
-              if (u.type) bType = u.type;
-              if (u.whatsappNumber || u.phone) wa = u.whatsappNumber || u.phone;
-              if (u.email) em = u.email;
-              if (u.id) cid = u.id;
-            } catch {}
+          if (!isCancelled && dbRes.success) {
+            const serverDrafts: DraftItem[] = dbRes.drafts.map((d) => ({
+              id: d.draftId,
+              name: d.draftName,
+              createdAt: d.createdAt,
+              itemCount: d.itemCount || d.items.length,
+              primaryTag: d.primaryTag || 'restaurant',
+              price: d.items.reduce((s, it) => s + (Number(it.price) || 0), 0),
+              previewAvatars: d.items.slice(0, 3).map((it) => (it.name ? it.name.charAt(0) : '?')),
+              items: d.items.map((it: any) => ({
+                id: it.id ? String(it.id) : `item-${Math.random()}`,
+                name: String(it.name || 'Unnamed Dish'),
+                price: Number(it.price) || 0,
+                categoryId: it.categoryId ? String(it.categoryId) : (it.category ? String(it.category) : 'unknown'),
+                category: it.category ? String(it.category) : undefined,
+                categoryName: it.categoryName ? String(it.categoryName) : undefined,
+                description: it.description || null,
+                image: it.image || null,
+                subItems: Array.isArray(it.subItems) ? it.subItems : [],
+              })),
+              isSaved: Boolean(d.isSaved),
+            }));
+
+            // Merge local staged drafts that belong to this client and are not yet on the server
+            const serverDraftIdSet = new Set(serverDrafts.map((sd) => String(sd.id)));
+            const localUnsyncedDrafts: DraftItem[] = [];
+
+            for (const ld of stagedDrafts) {
+              if (!ld || !ld.id) continue;
+              // Strict tenant isolation: skip drafts that belong to a different client
+              if (effectiveClientId && ld.clientId && Number(ld.clientId) !== Number(effectiveClientId)) {
+                continue;
+              }
+              if (!serverDraftIdSet.has(String(ld.id))) {
+                localUnsyncedDrafts.push({
+                  id: String(ld.id),
+                  name: String(ld.name || 'Saved Draft'),
+                  createdAt: ld.createdAt || new Date().toISOString(),
+                  itemCount: typeof ld.itemCount === 'number' ? ld.itemCount : (Array.isArray(ld.items) ? ld.items.length : 0),
+                  primaryTag: ld.primaryTag || 'restaurant',
+                  price: typeof ld.price === 'number' ? ld.price : (Array.isArray(ld.items) ? ld.items.reduce((s: number, i: any) => s + Number(i.price || 0), 0) : 0),
+                  previewAvatars: Array.isArray(ld.previewAvatars) && ld.previewAvatars.length > 0
+                    ? ld.previewAvatars
+                    : (Array.isArray(ld.items) ? ld.items.slice(0, 3).map((i: any) => (i.name ? i.name.charAt(0) : '?')) : []),
+                  items: Array.isArray(ld.items)
+                    ? ld.items.map((it: any) => ({
+                        id: it.id ? String(it.id) : `item-${Math.random()}`,
+                        name: String(it.name || 'Unnamed Dish'),
+                        price: Number(it.price) || 0,
+                        categoryId: it.categoryId ? String(it.categoryId) : (it.category ? String(it.category) : 'unknown'),
+                        category: it.category ? String(it.category) : undefined,
+                        categoryName: it.categoryName ? String(it.categoryName) : undefined,
+                        description: it.description || null,
+                        image: it.image || null,
+                        subItems: Array.isArray(it.subItems) ? it.subItems : [],
+                      }))
+                    : [],
+                  isSaved: false,
+                });
+              }
+            }
+
+            const combinedDrafts = [...localUnsyncedDrafts, ...serverDrafts];
+
+            setDrafts(combinedDrafts);
+            if (typeof window !== 'undefined') {
+              if (combinedDrafts.length > 0) {
+                localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(combinedDrafts));
+              } else {
+                localStorage.removeItem(DRAFTS_STORAGE_KEY);
+              }
+            }
+
+            // Sync any local un-synced drafts to MySQL in the background
+            if (localUnsyncedDrafts.length > 0 && effectiveClientId) {
+              batchSyncUserDraftsAction(
+                localUnsyncedDrafts.map((d) => ({
+                  draftId: d.id,
+                  draftName: d.name,
+                  businessName: effectiveBusinessName || (d.primaryTag === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
+                  businessType: effectiveBusinessType || (d.primaryTag === 'parlour' ? 'parlour' : 'restaurant'),
+                  whatsappNumber: effectiveWhatsapp,
+                  email: effectiveEmail,
+                  clientId: effectiveClientId,
+                  primaryTag: d.primaryTag,
+                  items: d.items || [],
+                  itemCount: d.itemCount,
+                  createdAt: d.createdAt,
+                }))
+              ).catch((err: any) => console.error('[DraftPage] Background sync of unsynced drafts failed:', err));
+            }
+
+            setIsLoading(false);
+            return;
           }
+        } catch (fetchErr) {
+          console.error('Error fetching client drafts from MySQL:', fetchErr);
+        }
+      }
 
-          batchSyncUserDraftsAction(
-            validatedDrafts.map((d: any) => ({
-              draftId: String(d.id || d.draftId || `draft-${Date.now()}`),
-              draftName: String(d.name || d.draftName || 'Saved Draft'),
-              businessName: bName || (d.primaryTag === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
-              businessType: bType || (d.primaryTag === 'parlour' ? 'parlour' : 'restaurant'),
-              whatsappNumber: wa || undefined,
-              email: em || undefined,
-              clientId: typeof cid === 'number' ? cid : undefined,
-              primaryTag: d.primaryTag || undefined,
-              items: Array.isArray(d.items) ? d.items : [],
-              itemCount: typeof d.itemCount === 'number' ? d.itemCount : (Array.isArray(d.items) ? d.items.length : 0),
-              createdAt: d.createdAt || undefined,
-            }))
-          ).catch((syncErr) => console.error('Draft page sync error:', syncErr));
+      // 3. Fallback to localStorage if guest or offline
+      if (storedDrafts) {
+        try {
+          const parsedDrafts: any[] = JSON.parse(storedDrafts);
+          const validatedDrafts = parsedDrafts
+            .filter((d: any) => {
+              if (effectiveClientId && d.clientId && Number(d.clientId) !== Number(effectiveClientId)) {
+                return false;
+              }
+              return true;
+            })
+            .map((draft) => {
+              const validatedItems = Array.isArray(draft.items)
+                ? draft.items.map((item: any) => ({
+                    ...item,
+                    categoryId: item.categoryId || item.category || 'unknown',
+                    description: item.description || null,
+                    image: item.image || null,
+                    subItems: Array.isArray(item.subItems) ? item.subItems : [],
+                  }))
+                : [];
+              return {
+                ...draft,
+                items: validatedItems,
+                previewAvatars: Array.isArray(draft.previewAvatars) ? draft.previewAvatars : [],
+              };
+            });
+          setDrafts(validatedDrafts);
+        } catch (_) {
+          setDrafts([]);
         }
       } else {
         setDrafts([]);
       }
-    } catch (e: any) {
-      console.error("Error loading drafts from localStorage:", e);
-      setError("Failed to load drafts. They might be corrupted.");
-      setDrafts([]);
-      toast({
-        title: "Error Loading Drafts",
-        description: "Could not retrieve drafts from local storage. Data might be corrupted.",
-        variant: "destructive",
-      });
-    } finally {
+
       setIsLoading(false);
     }
-  }, [toast]);
+
+    loadDrafts();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [clientUser?.id, clientUser?.businessName, toast]);
 
   const handleRestoreDraft = (id: string) => {
     try {
@@ -576,35 +775,6 @@ export default function DraftPage(): ReactNode {
 
   const handleShareDraft = (draft: DraftItem) => {
     setSelectedDraftForShare(draft);
-    if (typeof window !== 'undefined') {
-      const shareUrl = `${window.location.origin}/draft/view/${draft.id}`;
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
-          navigator.clipboard.writeText(shareUrl).then(() => {
-            toast({
-              title: "Draft Link Copied!",
-              description: "Shareable link copied to clipboard. Opening menu sheet...",
-            });
-          }).catch(() => {});
-        } else {
-          const textArea = document.createElement('textarea');
-          textArea.value = shareUrl;
-          textArea.style.position = 'fixed';
-          textArea.style.left = '-999999px';
-          textArea.style.top = '-999999px';
-          textArea.setAttribute('readonly', '');
-          document.body.appendChild(textArea);
-          textArea.focus();
-          textArea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textArea);
-          toast({
-            title: "Draft Link Copied!",
-            description: "Shareable link copied to clipboard. Opening menu sheet...",
-          });
-        }
-      } catch {}
-    }
   };
 
   const handleDeleteDraft = (id: string) => {
@@ -619,6 +789,10 @@ export default function DraftPage(): ReactNode {
         localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(updatedDrafts));
       }
       deleteUserDraftAction(id).catch(() => {});
+      if (id === activeSavedDraftId && typeof window !== 'undefined') {
+        localStorage.removeItem('menusnap_active_saved_draft_id');
+        localStorage.removeItem('menusnap_active_saved_draft_name');
+      }
       setDrafts(prevDrafts => prevDrafts.filter(draft => draft.id !== id));
       setExpandedDrafts(prev => {
         const newExpanded = { ...prev };
@@ -648,131 +822,86 @@ export default function DraftPage(): ReactNode {
   return (
     <div className="w-full min-w-0 max-w-full overflow-x-hidden p-2 sm:p-3 lg:p-4 space-y-4 pb-40 md:pb-12">
 
-      {/* Top Section Tab Switcher: Menu Drafts vs Customer QR Orders */}
-      <div className="flex items-center gap-2 border-b border-border/70 pb-2.5 overflow-x-auto scrollbar-none w-full min-w-0 max-w-full">
-        <button
-          type="button"
-          onClick={() => handleTabChange('drafts')}
-          className={cn(
-            "flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0",
-            activeTab === 'drafts'
-              ? "bg-card text-foreground shadow-xs border border-border"
-              : "text-muted-foreground hover:text-foreground hover:bg-card/40"
-          )}
+      {/* Top Header & Actions */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/60 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-border shadow-sm">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search saved drafts by title, dish, or date..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 h-9 text-xs sm:text-sm bg-background border-border/70 rounded-xl"
+          />
+        </div>
+        <Button
+          onClick={() => setIsScannerOpen(true)}
+          className="h-9 text-xs sm:text-sm font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-sm shrink-0"
         >
-          <FolderOpen className="w-4 h-4 text-primary" />
-          <span>Menu Drafts</span>
-          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
-            {drafts.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleTabChange('orders')}
-          className={cn(
-            "flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0",
-            activeTab === 'orders'
-              ? "bg-card text-foreground shadow-xs border border-border"
-              : "text-muted-foreground hover:text-foreground hover:bg-card/40"
-          )}
-        >
-          <ShoppingBag className="w-4 h-4 text-emerald-500" />
-          <span>Customer QR Orders</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-            Live
-          </span>
-        </button>
+          <Camera className="w-4 h-4" />
+          Scan Menu Photo
+        </Button>
       </div>
 
-      {activeTab === 'orders' ? (
-        <CustomerOrdersTable
-          clientId={clientUser?.id}
-          businessName={clientUser?.businessName}
-          currencySymbol={currencySymbol}
-        />
-      ) : (
-        <>
-          {/* Top Header & Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/60 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-border shadow-sm">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search saved drafts by title, dish, or date..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 h-9 text-xs sm:text-sm bg-background border-border/70 rounded-xl"
-              />
-            </div>
-            <Button
-              onClick={() => setIsScannerOpen(true)}
-              className="h-9 text-xs sm:text-sm font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-sm shrink-0"
-            >
-              <Camera className="w-4 h-4" />
-              Scan Menu Photo
-            </Button>
+      <main className="space-y-6">
+        {isLoading || isLoadingCategories ? (
+          Array.from({ length: 3 }).map((_, index) => <DraftSkeletonCard key={index} />)
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center text-center py-10 bg-card border border-destructive/50 rounded-lg shadow-md">
+            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <h2 className="text-xl font-semibold text-destructive mb-2">Error Loading Drafts</h2>
+            <p className="text-muted-foreground max-w-md">{error}</p>
           </div>
-
-          <main className="space-y-6">
-            {isLoading || isLoadingCategories ? (
-              Array.from({ length: 3 }).map((_, index) => <DraftSkeletonCard key={index} />)
-            ) : error ? (
-              <div className="flex flex-col items-center justify-center text-center py-10 bg-card border border-destructive/50 rounded-lg shadow-md">
-                <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-                <h2 className="text-xl font-semibold text-destructive mb-2">Error Loading Drafts</h2>
-                <p className="text-muted-foreground max-w-md">{error}</p>
+        ) : filteredDrafts.length === 0 ? (
+          <div className="text-center py-12 px-4 bg-card rounded-2xl shadow-sm border border-border space-y-4">
+            <div className="w-16 h-16 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center mx-auto">
+              <Camera className="h-8 w-8" />
+            </div>
+            <div className="space-y-1 max-w-md mx-auto">
+              <p className="text-foreground text-lg font-bold">
+                {searchTerm ? "No drafts match your search." : "No saved drafts yet"}
+              </p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                {searchTerm
+                  ? "Try searching for a different dish name or menu type."
+                  : "Upload a photo of your printed menu or price list to instantly create a digital draft."}
+              </p>
+            </div>
+            {!searchTerm && (
+              <div className="flex flex-wrap justify-center gap-2 pt-2">
+                <Button
+                  onClick={() => setIsScannerOpen(true)}
+                  className="h-9 text-xs font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-md"
+                >
+                  <Camera className="w-4 h-4" />
+                  Scan Menu Photo
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/magictab')}
+                  className="h-9 text-xs font-semibold rounded-xl"
+                >
+                  Browse Item Database
+                </Button>
               </div>
-            ) : filteredDrafts.length === 0 ? (
-              <div className="text-center py-12 px-4 bg-card rounded-2xl shadow-sm border border-border space-y-4">
-                <div className="w-16 h-16 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center mx-auto">
-                  <Camera className="h-8 w-8" />
-                </div>
-                <div className="space-y-1 max-w-md mx-auto">
-                  <p className="text-foreground text-lg font-bold">
-                    {searchTerm ? "No drafts match your search." : "No saved drafts yet"}
-                  </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    {searchTerm
-                      ? "Try searching for a different dish name or menu type."
-                      : "Upload a photo of your printed menu or price list to instantly create a digital draft."}
-                  </p>
-                </div>
-                {!searchTerm && (
-                  <div className="flex flex-wrap justify-center gap-2 pt-2">
-                    <Button
-                      onClick={() => setIsScannerOpen(true)}
-                      className="h-9 text-xs font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-md"
-                    >
-                      <Camera className="w-4 h-4" />
-                      Scan Menu Photo
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push('/magictab')}
-                      className="h-9 text-xs font-semibold rounded-xl"
-                    >
-                      Browse Item Database
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              filteredDrafts.map(draft => (
-                <DraftCard
-                  key={draft.id}
-                  draft={draft}
-                  isExpanded={!!expandedDrafts[draft.id]}
-                  onRestore={handleRestoreDraft}
-                  onDelete={handleDeleteDraft}
-                  onToggleExpand={handleToggleExpand}
-                  masterCategoryList={masterCategoryList}
-                  onShare={handleShareDraft}
-                />
-              ))
             )}
-          </main>
-        </>
-      )}
+          </div>
+        ) : (
+          filteredDrafts.map(draft => (
+            <DraftCard
+              key={draft.id}
+              draft={draft}
+              isExpanded={!!expandedDrafts[draft.id]}
+              isSaved={isDraftSaved(draft.id)}
+              onRestore={handleRestoreDraft}
+              onDelete={handleDeleteDraft}
+              onToggleExpand={handleToggleExpand}
+              masterCategoryList={masterCategoryList}
+              onShare={handleShareDraft}
+              onSaveDraft={handleInitiateSaveDraft}
+            />
+          ))
+        )}
+      </main>
 
       <DraftShareDialog
         isOpen={!!selectedDraftForShare}
@@ -786,6 +915,146 @@ export default function DraftPage(): ReactNode {
         onOpenChange={setIsScannerOpen}
         onDraftCreated={handleDraftCreated}
       />
+
+      {/* Save Draft as Active Menu Confirmation Modal */}
+      <AlertDialog
+        open={Boolean(draftToSave)}
+        onOpenChange={(open) => {
+          if (!open && !isSavingDraft) {
+            setDraftToSave(null);
+            if (typeof document !== 'undefined') {
+              document.body.style.pointerEvents = '';
+              document.body.removeAttribute('data-scroll-locked');
+            }
+          }
+        }}
+      >
+        <AlertDialogContent
+          onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            if (typeof document !== 'undefined') {
+              document.body.style.pointerEvents = '';
+              document.body.removeAttribute('data-scroll-locked');
+            }
+          }}
+          className="max-w-md w-[92vw] rounded-2xl p-5 border border-border shadow-2xl bg-card"
+        >
+          <AlertDialogHeader className="space-y-2 text-left">
+            <div
+              className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center",
+                isReplacingSavedDraft
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              )}
+            >
+              {isReplacingSavedDraft ? (
+                <AlertTriangle className="w-5 h-5" />
+              ) : (
+                <BookmarkCheck className="w-5 h-5" />
+              )}
+            </div>
+
+            <AlertDialogTitle className="text-base font-bold text-foreground">
+              {isReplacingSavedDraft ? "Replace Active Saved Menu?" : "Save as Active QR Menu?"}
+            </AlertDialogTitle>
+
+            <AlertDialogDescription asChild>
+              <div className="text-xs text-muted-foreground space-y-3 pt-1">
+                {isReplacingSavedDraft && previousSavedDraft ? (
+                  <>
+                    <p className="leading-relaxed">
+                      Only <strong>one draft can be saved as your active QR menu</strong> at a time. Saving this menu will automatically <strong>unsave</strong> your previous menu:
+                    </p>
+
+                    <div className="space-y-2 bg-muted/40 p-3 rounded-xl border border-border/60">
+                      {/* Previous saved draft to be unsaved */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                            Currently Saved
+                          </span>
+                          <span className="font-semibold text-foreground text-xs line-through opacity-70 truncate block">
+                            {decodeHtmlEntities(previousSavedDraft.name || 'Previous Draft')}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] font-bold text-destructive border-destructive/30 bg-destructive/10 shrink-0">
+                          Will Unsave
+                        </Badge>
+                      </div>
+
+                      {/* New draft to be saved */}
+                      <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+                            New Active Menu
+                          </span>
+                          <span className="font-bold text-foreground text-xs truncate block">
+                            {draftToSave ? decodeHtmlEntities(draftToSave.name) : 'Selected Draft'}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] font-bold text-emerald-600 border-emerald-500/30 bg-emerald-500/10 shrink-0">
+                          Will Activate
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground leading-normal">
+                      When confirmed, all customer QR stands and table scans will immediately display this new menu.
+                    </p>
+                  </>
+                ) : (
+                  <p className="leading-relaxed">
+                    Set <strong className="text-foreground">"{draftToSave ? decodeHtmlEntities(draftToSave.name) : 'Draft'}"</strong> as your active saved menu. This will enable its live customer QR stand for printing, tabletop acrylic stands, and smartphone scanning.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter className="flex-row items-center justify-end gap-2 pt-3 sm:space-x-0">
+            <AlertDialogCancel
+              disabled={isSavingDraft}
+              onClick={() => {
+                setDraftToSave(null);
+                if (typeof document !== 'undefined') {
+                  document.body.style.pointerEvents = '';
+                  document.body.removeAttribute('data-scroll-locked');
+                }
+              }}
+              className="mt-0 h-9 rounded-xl text-xs font-semibold flex-1 sm:flex-none border-border"
+            >
+              Cancel
+            </AlertDialogCancel>
+
+            <Button
+              disabled={isSavingDraft}
+              onClick={handleConfirmSaveDraft}
+              className={cn(
+                "h-9 rounded-xl text-xs font-bold gap-1.5 flex-1 sm:flex-none shadow-sm text-white",
+                isReplacingSavedDraft
+                  ? "bg-amber-600 hover:bg-amber-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              )}
+            >
+              {isSavingDraft ? (
+                <span className="animate-spin">⏳</span>
+              ) : isReplacingSavedDraft ? (
+                <BookmarkCheck className="w-3.5 h-3.5" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              <span>
+                {isSavingDraft
+                  ? 'Saving...'
+                  : isReplacingSavedDraft
+                  ? 'Unsave & Activate New'
+                  : 'Confirm & Save'}
+              </span>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -34,6 +34,7 @@ export interface UserDraftRecord {
   itemCount: number;
   primaryTag: string | null;
   items: UserDraftItem[];
+  isSaved?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +60,7 @@ export interface SaveUserDraftInput {
   primaryTag?: string;
   items: UserDraftItem[];
   itemCount?: number;
+  isSaved?: boolean;
   createdAt?: string;
 }
 
@@ -80,17 +82,80 @@ async function ensureUserDraftsSchema(): Promise<void> {
         item_count INT DEFAULT 0,
         primary_tag VARCHAR(100) NULL,
         items_json LONGTEXT NOT NULL,
+        is_saved TINYINT(1) DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_draft_id (draft_id),
         INDEX idx_business_name (business_name),
         INDEX idx_whatsapp (whatsapp_number),
-        INDEX idx_created_at (created_at)
+        INDEX idx_created_at (created_at),
+        INDEX idx_is_saved (is_saved)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    // Migration in case table already existed without is_saved column
+    try {
+      await pool.execute(`ALTER TABLE user_drafts ADD COLUMN is_saved TINYINT(1) DEFAULT 0`);
+    } catch (_) {}
   } catch (error) {
     console.error('Failed to ensure user_drafts schema:', error);
   }
+}
+
+/**
+ * Enriches draft items with master variations (subItems) and descriptions from menu_items if missing.
+ */
+async function enrichDraftItemsWithMenuData(items: any[]): Promise<any[]> {
+  if (!Array.isArray(items) || items.length === 0) return items;
+  const needsEnrichment = items.some(it => !it.subItems || it.subItems.length === 0);
+  if (!needsEnrichment) return items;
+
+  try {
+    const itemIds = items.map(it => it.id).filter(Boolean);
+    const itemNames = items.map(it => it.name).filter(Boolean);
+    if (itemIds.length === 0 && itemNames.length === 0) return items;
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (itemIds.length > 0) {
+      conditions.push(`id IN (${itemIds.map(() => '?').join(',')})`);
+      params.push(...itemIds);
+    }
+    if (itemNames.length > 0) {
+      conditions.push(`name IN (${itemNames.map(() => '?').join(',')})`);
+      params.push(...itemNames);
+    }
+
+    const [menuItemRows]: any = await pool.execute(
+      `SELECT id, name, description, price, subItems FROM menu_items WHERE ${conditions.join(' OR ')}`,
+      params
+    );
+
+    if (menuItemRows && menuItemRows.length > 0) {
+      for (const it of items) {
+        if (!it.subItems || it.subItems.length === 0) {
+          const match = menuItemRows.find((m: any) =>
+            (it.id && String(m.id) === String(it.id)) ||
+            (it.name && String(m.name).trim().toLowerCase() === String(it.name).trim().toLowerCase())
+          );
+          if (match && match.subItems) {
+            try {
+              const parsedSub = typeof match.subItems === 'string' ? JSON.parse(match.subItems) : match.subItems;
+              if (Array.isArray(parsedSub) && parsedSub.length > 0) {
+                it.subItems = parsedSub;
+              }
+            } catch {}
+          }
+          if (!it.description && match && match.description) {
+            it.description = match.description;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[enrichDraftItemsWithMenuData] Notice:', err);
+  }
+  return items;
 }
 
 /**
@@ -137,7 +202,8 @@ export async function saveUserDraftAction(input: SaveUserDraftInput): Promise<{ 
       }
     }
 
-    const itemsJson = JSON.stringify(items);
+    const enrichedItems = await enrichDraftItemsWithMenuData(items);
+    const itemsJson = JSON.stringify(enrichedItems);
 
     // Format created_at if provided
     let formattedCreatedAt: string | null = null;
@@ -146,6 +212,19 @@ export async function saveUserDraftAction(input: SaveUserDraftInput): Promise<{ 
         formattedCreatedAt = formatUtcDateTime(input.createdAt);
       } catch {
         formattedCreatedAt = null;
+      }
+    }
+
+    // Anti-hijacking guard: prevent an account or guest from overwriting another client's existing draft
+    const [existingRows]: any = await pool.execute(
+      'SELECT client_id FROM user_drafts WHERE draft_id = ? LIMIT 1',
+      [cleanDraftId]
+    );
+    if (existingRows && existingRows.length > 0) {
+      const existingOwnerId = existingRows[0].client_id;
+      if (existingOwnerId && (!clientId || Number(existingOwnerId) !== Number(clientId))) {
+        console.warn(`[saveUserDraftAction] Blocked draft hijack: draft ${cleanDraftId} belongs to client ${existingOwnerId}, attempted update by client ${clientId}`);
+        return { success: false, error: 'Draft belongs to another client' };
       }
     }
 
@@ -252,6 +331,8 @@ export async function batchSyncUserDraftsAction(
 export async function getUserDraftsAction(params?: {
   search?: string;
   businessType?: string;
+  clientId?: number | null;
+  businessName?: string | null;
   page?: number;
   limit?: number;
 }): Promise<{
@@ -275,6 +356,15 @@ export async function getUserDraftsAction(params?: {
     // Base query conditions
     const whereClauses: string[] = ['1=1'];
     const queryParams: any[] = [];
+
+    // Strict multi-tenant isolation: If clientId is provided, filter strictly by client_id (never match by business_name)
+    if (params?.clientId) {
+      whereClauses.push('client_id = ?');
+      queryParams.push(params.clientId);
+    } else if (params?.businessName) {
+      whereClauses.push('LOWER(business_name) = LOWER(?)');
+      queryParams.push(params.businessName.trim());
+    }
 
     if (businessType) {
       whereClauses.push('business_type = ?');
@@ -309,6 +399,7 @@ export async function getUserDraftsAction(params?: {
         draft_name as draftName,
         item_count as itemCount,
         primary_tag as primaryTag,
+        is_saved as isSaved,
         items_json as itemsJson,
         DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as createdAt,
         DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') as updatedAt
@@ -342,6 +433,7 @@ export async function getUserDraftsAction(params?: {
         draftName: row.draftName,
         itemCount: row.itemCount || items.length,
         primaryTag: row.primaryTag,
+        isSaved: Boolean(row.isSaved),
         items,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -368,9 +460,16 @@ export async function getUserDraftsAction(params?: {
       parlourDrafts: Number(rawStat.parlourDrafts) || 0,
     };
 
+    const enrichedDrafts: UserDraftRecord[] = await Promise.all(
+      drafts.map(async (d) => ({
+        ...d,
+        items: await enrichDraftItemsWithMenuData(d.items),
+      }))
+    );
+
     return {
       success: true,
-      drafts,
+      drafts: enrichedDrafts,
       stats,
       total,
       page,
@@ -419,13 +518,14 @@ export async function getUserDraftByIdAction(draftId: string): Promise<{
         draft_name as draftName,
         item_count as itemCount,
         primary_tag as primaryTag,
+        COALESCE(is_saved, 0) as isSaved,
         items_json as itemsJson,
         DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as createdAt,
         DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') as updatedAt
       FROM user_drafts
-      WHERE draft_id = ?
+      WHERE draft_id = ? OR CAST(id AS CHAR) = ?
       LIMIT 1`,
-      [draftId]
+      [draftId, draftId]
     );
 
     if (!rows || rows.length === 0) {
@@ -439,6 +539,20 @@ export async function getUserDraftByIdAction(draftId: string): Promise<{
     } catch {
       items = [];
     }
+    items = await enrichDraftItemsWithMenuData(items);
+
+    let businessWhatsapp = row.whatsappNumber ? String(row.whatsappNumber).trim() : null;
+    if (!businessWhatsapp && (row.clientId || row.businessName)) {
+      try {
+        const [clientRows]: any = await pool.execute(
+          'SELECT whatsapp_number FROM clients WHERE id = ? OR LOWER(business_name) = LOWER(?) LIMIT 1',
+          [row.clientId || 0, row.businessName ? String(row.businessName).trim() : '']
+        );
+        if (clientRows && clientRows.length > 0 && clientRows[0].whatsapp_number) {
+          businessWhatsapp = String(clientRows[0].whatsapp_number).trim();
+        }
+      } catch (_) {}
+    }
 
     return {
       success: true,
@@ -448,11 +562,12 @@ export async function getUserDraftByIdAction(draftId: string): Promise<{
         clientId: row.clientId,
         businessName: row.businessName,
         businessType: row.businessType,
-        whatsappNumber: row.whatsappNumber,
+        whatsappNumber: businessWhatsapp,
         email: row.email,
         draftName: row.draftName,
         itemCount: row.itemCount,
         primaryTag: row.primaryTag,
+        isSaved: Boolean(row.isSaved),
         items,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -479,5 +594,97 @@ export async function deleteUserDraftAction(draftId: string): Promise<{ success:
   } catch (error: any) {
     console.error('Error deleting user draft:', error);
     return { success: false, error: error.message || 'Failed to delete draft' };
+  }
+}
+
+/**
+ * Sets a single draft as the active saved menu for digital QR stands and customer ordering.
+ * Automatically deactivates/unsaves any previously saved drafts for this account/business.
+ */
+export async function setActiveSavedDraftAction(params: {
+  draftId: string;
+  clientId?: number | null;
+  businessName?: string | null;
+}): Promise<{ success: boolean; activeDraftId?: string; previousDraftId?: string | null; error?: string }> {
+  try {
+    await ensureUserDraftsSchema();
+    const { draftId, clientId, businessName } = params;
+
+    // 1. Identify previous saved draft
+    let prevQuery = `SELECT draft_id FROM user_drafts WHERE is_saved = 1`;
+    const prevParams: any[] = [];
+    if (clientId) {
+      prevQuery += ` AND client_id = ?`;
+      prevParams.push(clientId);
+    } else if (businessName) {
+      prevQuery += ` AND business_name = ?`;
+      prevParams.push(businessName);
+    }
+    const [prevRows]: any = await pool.execute(prevQuery, prevParams);
+    const previousDraftId = prevRows && prevRows.length > 0 ? prevRows[0].draft_id : null;
+
+    // 2. Unsave all drafts for this account or globally
+    if (clientId) {
+      await pool.execute(`UPDATE user_drafts SET is_saved = 0 WHERE client_id = ?`, [clientId]);
+    } else if (businessName) {
+      await pool.execute(`UPDATE user_drafts SET is_saved = 0 WHERE business_name = ?`, [businessName]);
+    } else {
+      await pool.execute(`UPDATE user_drafts SET is_saved = 0`);
+    }
+
+    // 3. Mark the new target draft as saved (is_saved = 1)
+    await pool.execute(`UPDATE user_drafts SET is_saved = 1 WHERE draft_id = ? OR CAST(id AS CHAR) = ?`, [draftId, draftId]);
+
+    return { success: true, activeDraftId: draftId, previousDraftId };
+  } catch (error: any) {
+    console.error('Error in setActiveSavedDraftAction:', error);
+    return { success: false, error: error.message || 'Failed to set active saved draft' };
+  }
+}
+
+/**
+ * Retrieves the currently active saved draft for this client or business.
+ */
+export async function getActiveSavedDraftAction(params?: {
+  clientId?: number | null;
+  businessName?: string | null;
+}): Promise<{ success: boolean; activeDraftId?: string | null; draftName?: string | null; error?: string }> {
+  try {
+    await ensureUserDraftsSchema();
+    const clientId = params?.clientId;
+    const businessName = params?.businessName;
+
+    // Strict multi-tenant check: if no client identification is provided, return empty
+    if (!clientId && !businessName) {
+      return { success: true, activeDraftId: null, draftName: null };
+    }
+
+    let query = `SELECT draft_id, draft_name FROM user_drafts WHERE is_saved = 1`;
+    const queryParams: any[] = [];
+
+    if (clientId) {
+      query += ` AND client_id = ?`;
+      queryParams.push(clientId);
+    } else if (businessName) {
+      query += ` AND business_name = ?`;
+      queryParams.push(businessName);
+    }
+
+    query += ` ORDER BY updated_at DESC LIMIT 1`;
+
+    const [rows]: any = await pool.execute(query, queryParams);
+
+    if (rows && rows.length > 0) {
+      return {
+        success: true,
+        activeDraftId: rows[0].draft_id,
+        draftName: rows[0].draft_name,
+      };
+    }
+
+    return { success: true, activeDraftId: null, draftName: null };
+  } catch (error: any) {
+    console.error('Error in getActiveSavedDraftAction:', error);
+    return { success: false, error: error.message || 'Failed to fetch active saved draft' };
   }
 }

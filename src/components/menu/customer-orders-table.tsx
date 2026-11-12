@@ -119,7 +119,13 @@ export function CustomerOrdersTable({
     if (!isSilent) setIsLoading(true);
 
     try {
-      // 1. Fetch from MySQL
+      if (!clientId && !businessName) {
+        setOrders([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // 1. Fetch from MySQL (scoped strictly to this client)
       const res = await getCustomerOrdersAction({
         clientId: clientId || null,
         businessName: businessName || null,
@@ -127,12 +133,27 @@ export function CustomerOrdersTable({
 
       let serverOrders: CustomerOrderRecord[] = res.success ? res.orders : [];
 
-      // 2. Also check localStorage for local/client orders
+      // 2. Also check localStorage for local/client orders, strictly filtered by current client
       let localOrders: CustomerOrderRecord[] = [];
       try {
         const rawLocal = localStorage.getItem('menusnap_customer_orders');
         if (rawLocal) {
-          localOrders = JSON.parse(rawLocal);
+          const parsed = JSON.parse(rawLocal);
+          if (Array.isArray(parsed)) {
+            localOrders = parsed.filter((ord: any) => {
+              if (clientId) {
+                return ord.clientId && Number(ord.clientId) === Number(clientId);
+              }
+              if (
+                businessName &&
+                ord.businessName &&
+                String(ord.businessName).trim().toLowerCase() === String(businessName).trim().toLowerCase()
+              ) {
+                return true;
+              }
+              return false;
+            });
+          }
         }
       } catch {}
 

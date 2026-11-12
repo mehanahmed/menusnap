@@ -18,14 +18,17 @@ import {
   QrCode,
   Plus,
   Minus,
+  UtensilsCrossed,
+  CheckCircle2,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { decodeHtmlEntities, cn } from '@/lib/utils';
 import { getCategoriesFromMySql } from '@/app/actions/orders';
-import { getUserDraftByIdAction } from '@/app/actions/user-drafts';
+import { getUserDraftByIdAction, getActiveSavedDraftAction } from '@/app/actions/user-drafts';
 import { usePreferences } from '@/context/PreferencesContext';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { useToast } from '@/hooks/use-toast';
+import { useActiveSavedDraft } from '@/hooks/use-active-saved-draft';
 import type { DraftItemData, DraftSubItem, CategoryLookup } from '@/components/menu/draft-share-dialog';
 import { MENU_SHEET_THEMES, getMenuSheetTheme, type MenuSheetTheme, type CustomThemeConfig } from '@/components/menu/menu-sheet-themes';
 import { CustomDesignControls } from '@/components/menu/custom-design-controls';
@@ -43,6 +46,17 @@ function DraftViewContent() {
   const { clientUser } = useClientAuth();
   const { toast } = useToast();
 
+  // Active saved draft verification (only active saved draft can be viewed / ordered from)
+  const {
+    activeSavedDraftId,
+    activeSavedDraftName,
+    isDraftSaved,
+    isLoading: isActiveDraftLoading,
+  } = useActiveSavedDraft();
+
+  // Server-resolved fallback for active draft (when customer is on mobile without localStorage)
+  const [serverActiveDraft, setServerActiveDraft] = useState<{ id: string; name: string } | null>(null);
+
   const [draft, setDraft] = useState<DraftItemData | null>(null);
   const [categories, setCategories] = useState<CategoryLookup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,6 +64,22 @@ function DraftViewContent() {
   const [copied, setCopied] = useState(false);
   const [expandedVariations, setExpandedVariations] = useState<Record<string, boolean>>({});
   const [cart, setCart] = useState<Record<string, CartItem>>({});
+
+  const resolvedActiveDraftId = activeSavedDraftId || serverActiveDraft?.id || null;
+  const resolvedActiveDraftName = activeSavedDraftName || serverActiveDraft?.name || null;
+
+  const isCurrentlyActive = useMemo(() => {
+    // 1. If another draft is active in this session or server, this draft is inactive
+    if (resolvedActiveDraftId && resolvedActiveDraftId !== draftId) {
+      return false;
+    }
+    // 2. If useActiveSavedDraft says this draft is saved
+    if (isDraftSaved(draftId)) {
+      return true;
+    }
+    // 3. If MySQL draft record itself has isSaved: true
+    return Boolean(draft?.isSaved);
+  }, [resolvedActiveDraftId, draftId, isDraftSaved, draft?.isSaved]);
 
   const handleUpdateQuantity = (key: string, delta: number) => {
     setCart((prev) => {
@@ -100,7 +130,8 @@ function DraftViewContent() {
 
   // Resolve search parameters synchronously during SSR & client render (eliminates hydration mismatches)
   const urlTheme = searchParams.get('theme');
-  const isCustomerMode = searchParams.get('customer') === '1' || searchParams.get('mode') === 'customer' || searchParams.get('view') === 'public';
+  const tableNumber = searchParams.get('table')?.trim() || '';
+  const isCustomerMode = searchParams.get('customer') === '1' || searchParams.get('mode') === 'customer' || searchParams.get('view') === 'public' || Boolean(tableNumber);
 
   // Theme selection state, initialized from URL query param or default
   const [selectedThemeId, setSelectedThemeId] = useState<string>(urlTheme || 'sunset');
@@ -217,18 +248,49 @@ function DraftViewContent() {
           } catch (_) {}
         }
 
-        // If not found in localStorage, fetch from MySQL
-        if (!found) {
-          const dbRes = await getUserDraftByIdAction(String(draftId));
-          if (dbRes.success && dbRes.draft) {
+        // Always check MySQL to ensure fresh isSaved status and fallback
+        const dbRes = await getUserDraftByIdAction(String(draftId));
+        if (dbRes.success && dbRes.draft) {
+          const dbDraft = dbRes.draft;
+          if (!found) {
             found = {
-              id: dbRes.draft.draftId,
-              name: dbRes.draft.draftName,
-              createdAt: dbRes.draft.createdAt,
-              itemCount: dbRes.draft.itemCount || dbRes.draft.items.length,
-              primaryTag: dbRes.draft.primaryTag || 'restaurant',
-              items: dbRes.draft.items as any,
+              id: dbDraft.draftId,
+              name: dbDraft.draftName,
+              createdAt: dbDraft.createdAt,
+              itemCount: dbDraft.itemCount || dbDraft.items.length,
+              primaryTag: dbDraft.primaryTag || 'restaurant',
+              items: dbDraft.items as any,
+              isSaved: Boolean(dbDraft.isSaved),
+              whatsappNumber: dbDraft.whatsappNumber || undefined,
+              businessName: dbDraft.businessName || undefined,
+              clientId: dbDraft.clientId || undefined,
             };
+          } else {
+            found = {
+              ...found,
+              items: (dbDraft.items && dbDraft.items.length > 0) ? (dbDraft.items as any) : found.items,
+              isSaved: Boolean(dbDraft.isSaved),
+              whatsappNumber: dbDraft.whatsappNumber || found.whatsappNumber,
+              businessName: dbDraft.businessName || found.businessName,
+              clientId: dbDraft.clientId || found.clientId,
+            };
+          }
+
+          // If this draft is inactive/unsaved, resolve the currently active draft for this business
+          if (!dbDraft.isSaved) {
+            getActiveSavedDraftAction({
+              clientId: dbDraft.clientId,
+              businessName: dbDraft.businessName,
+            })
+              .then((activeRes) => {
+                if (activeRes.success && activeRes.activeDraftId) {
+                  setServerActiveDraft({
+                    id: activeRes.activeDraftId,
+                    name: activeRes.draftName || 'Active Menu',
+                  });
+                }
+              })
+              .catch(() => {});
           }
         }
 
@@ -449,6 +511,83 @@ function DraftViewContent() {
     );
   }
 
+  // Enforcement: Only the single active saved draft can be viewed or ordered from via QR stand / public link
+  if (!isCurrentlyActive) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div className="max-w-md w-full bg-card rounded-2xl border border-border shadow-2xl p-6 sm:p-8 text-center space-y-5 animate-in fade-in-50 duration-200">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-xs">
+            <QrCode className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-bold border border-amber-500/25">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              Menu Inactive / Replaced
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-foreground tracking-tight">
+              This QR Menu is Not Active
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              {isCustomerMode ? (
+                <>
+                  This digital menu is no longer active or has been replaced with an updated menu.
+                  Please scan the current tabletop QR stand or ask your waiter for assistance.
+                </>
+              ) : (
+                <>
+                  &ldquo;{decodeHtmlEntities(draft.name)}&rdquo; is currently not saved as your active live menu.
+                  Customer QR ordering and menu viewing are strictly reserved for your single active saved draft.
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* If an active saved menu is known and different, offer a 1-click link to view the live menu */}
+          {resolvedActiveDraftId && resolvedActiveDraftId !== draftId && (
+            <div className="bg-muted/50 rounded-xl p-3.5 border border-border/80 text-left space-y-2.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                {isCustomerMode ? 'Updated Live Menu Available' : 'Current Active Menu'}
+              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-xs text-foreground truncate">
+                  {decodeHtmlEntities(resolvedActiveDraftName || 'Live Menu')}
+                </span>
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                  Active
+                </span>
+              </div>
+              <Button
+                asChild
+                className="w-full h-9 text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs rounded-xl mt-1"
+              >
+                <Link href={`/draft/view/${resolvedActiveDraftId}${isCustomerMode ? '?customer=1' : ''}`}>
+                  <span>View Updated Live Menu</span>
+                </Link>
+              </Button>
+            </div>
+          )}
+
+          {/* Navigation action for admin */}
+          {!isCustomerMode && (
+            <div className="pt-2 border-t border-border/60">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-full h-9 text-xs font-semibold rounded-xl border-border bg-card hover:bg-muted"
+              >
+                <Link href="/draft">
+                  <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back to Saved Drafts
+                </Link>
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       suppressHydrationWarning
@@ -567,6 +706,21 @@ function DraftViewContent() {
             <p className={cn("text-xl sm:text-2xl transition-colors", activeTheme.businessTitleClass)}>
               For: {decodeHtmlEntities(businessName)}
             </p>
+            {tableNumber && (
+              <div className="flex items-center justify-center sm:justify-end gap-1.5 pt-0.5">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wide border shadow-2xs",
+                    activeTheme.isDark
+                      ? "bg-zinc-800/90 border-zinc-700 text-zinc-100"
+                      : "bg-slate-100 border-slate-200/90 text-slate-800"
+                  )}
+                >
+                  <UtensilsCrossed className="w-3.5 h-3.5" style={{ color: activeTheme.accentColor }} />
+                  <span>Table {tableNumber.replace(/^table\s*/i, '').trim()}</span>
+                </span>
+              </div>
+            )}
             <p className={cn("flex items-center justify-center sm:justify-end gap-2 text-xs sm:text-sm", activeTheme.dateTextClass)}>
               <CalendarDays className={cn("h-4 w-4", activeTheme.dateIconClass)} />
               {formattedDate}
@@ -758,8 +912,10 @@ function DraftViewContent() {
           cart={cart}
           currencySymbol={currencySymbol}
           businessName={businessName}
+          businessPhone={draft?.whatsappNumber || clientUser?.whatsappNumber || undefined}
           draftId={draft?.id || draftId}
-          clientId={clientUser?.id}
+          clientId={clientUser?.id || draft?.clientId || undefined}
+          tableNumber={tableNumber || undefined}
           onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={handleRemoveItem}
           onClearCart={handleClearCart}

@@ -26,6 +26,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { cn, decodeHtmlEntities } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { createCustomerOrderAction } from '@/app/actions/customer-orders';
 
@@ -41,8 +42,10 @@ interface CustomerOrderBarProps {
   cart: Record<string, CartItem>;
   currencySymbol: string;
   businessName: string;
+  businessPhone?: string;
   draftId?: string;
   clientId?: number | null;
+  tableNumber?: string;
   onUpdateQuantity: (key: string, delta: number) => void;
   onRemoveItem: (key: string) => void;
   onClearCart: () => void;
@@ -52,8 +55,10 @@ export function CustomerOrderBar({
   cart,
   currencySymbol,
   businessName,
+  businessPhone,
   draftId,
   clientId,
+  tableNumber: initialTableNumber,
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
@@ -61,7 +66,13 @@ export function CustomerOrderBar({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [tableNumber, setTableNumber] = useState('');
+  const [tableNumber, setTableNumber] = useState(initialTableNumber || '');
+
+  React.useEffect(() => {
+    if (initialTableNumber) {
+      setTableNumber(initialTableNumber);
+    }
+  }, [initialTableNumber]);
   const [specialNote, setSpecialNote] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -75,6 +86,7 @@ export function CustomerOrderBar({
     items: CartItem[];
     total: number;
     placedAt: string;
+    whatsappUrl?: string;
   } | null>(null);
 
   const { toast } = useToast();
@@ -148,6 +160,7 @@ export function CustomerOrderBar({
       return;
     }
 
+    const cleanTable = (initialTableNumber || tableNumber || '').trim();
     // Generate order ID
     const fakeOrderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -158,7 +171,7 @@ export function CustomerOrderBar({
       draftId: draftId || null,
       customerName: cleanName,
       customerPhone: cleanPhone,
-      tableNumber: tableNumber.trim() || undefined,
+      tableNumber: cleanTable || undefined,
       specialNote: specialNote.trim() || undefined,
       items: [...cartItems],
       totalAmount: totalOrderAmount,
@@ -192,15 +205,71 @@ export function CustomerOrderBar({
       }
     } catch {}
 
+    // Format clean WhatsApp recipient phone
+    const rawTargetPhone = businessPhone || '';
+    const cleanDigits = rawTargetPhone.replace(/[^0-9]/g, '');
+    let formattedBusinessWa = cleanDigits;
+    if (cleanDigits.length === 11 && cleanDigits.startsWith('01')) {
+      formattedBusinessWa = `880${cleanDigits.slice(1)}`;
+    } else if (cleanDigits.length === 10 && cleanDigits.startsWith('1')) {
+      formattedBusinessWa = `880${cleanDigits}`;
+    }
+
+    // Build human-friendly WhatsApp order message
+    const itemsSummary = cartItems
+      .map(
+        (item) =>
+          `• ${item.quantity}× ${decodeHtmlEntities(item.name)}${
+            item.variationName ? ` (${decodeHtmlEntities(item.variationName)})` : ''
+          } — ${currencySymbol}${(item.price * item.quantity).toLocaleString()}`
+      )
+      .join('\n');
+
+    const tableLine = cleanTable
+      ? `📍 *Table:* Table ${cleanTable.replace(/^table\s*/i, '').trim()}\n`
+      : '';
+    const noteLine = specialNote.trim()
+      ? `📝 *Special Note:* ${specialNote.trim()}\n`
+      : '';
+
+    const waText = 
+`🍽️ *NEW ORDER - ${decodeHtmlEntities(businessName || 'Restaurant')}*
+━━━━━━━━━━━━━━━━━━━━
+🆔 *Order ID:* #${fakeOrderId}
+${tableLine}👤 *Customer:* ${cleanName} (${cleanPhone})
+
+📋 *Items Ordered:*
+${itemsSummary}
+
+💰 *Total Bill:* ${currencySymbol}${totalOrderAmount.toLocaleString()}
+${noteLine}⏰ *Time:* ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+━━━━━━━━━━━━━━━━━━━━
+_Sent via MenuSnap Digital Menu_`;
+
+    const encodedText = encodeURIComponent(waText);
+    const waUrl = formattedBusinessWa
+      ? `https://api.whatsapp.com/send?phone=${formattedBusinessWa}&text=${encodedText}`
+      : `https://api.whatsapp.com/send?text=${encodedText}`;
+
+    // Automatically trigger WhatsApp in a new window / app
+    if (typeof window !== 'undefined') {
+      try {
+        window.open(waUrl, '_blank');
+      } catch (err) {
+        console.warn('WhatsApp auto-open popup notice:', err);
+      }
+    }
+
     setOrderSuccessData({
       orderId: fakeOrderId,
       name: cleanName,
       phone: cleanPhone,
-      table: tableNumber.trim() || undefined,
+      table: cleanTable || undefined,
       note: specialNote.trim() || undefined,
       items: [...cartItems],
       total: totalOrderAmount,
       placedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      whatsappUrl: waUrl,
     });
 
     onClearCart();
@@ -214,7 +283,7 @@ export function CustomerOrderBar({
     setOrderSuccessData(null);
     setCustomerName('');
     setCustomerPhone('');
-    setTableNumber('');
+    setTableNumber(initialTableNumber || '');
     setSpecialNote('');
     setIsModalOpen(false);
   };
@@ -234,8 +303,13 @@ export function CustomerOrderBar({
                 </span>
               </div>
               <div className="leading-tight">
-                <p className="text-[11px] text-zinc-400 font-medium">
-                  {totalItemsCount} {totalItemsCount === 1 ? 'item' : 'items'} selected
+                <p className="text-[11px] text-zinc-400 font-medium flex items-center gap-1.5">
+                  {tableNumber && (
+                    <span className="text-amber-400 font-bold">
+                      Table {tableNumber.replace(/^table\s*/i, '').trim()} •
+                    </span>
+                  )}
+                  <span>{totalItemsCount} {totalItemsCount === 1 ? 'item' : 'items'} selected</span>
                 </p>
                 <p className="text-base sm:text-lg font-black text-white tracking-tight">
                   {currencySymbol}{totalOrderAmount.toLocaleString()}
@@ -273,10 +347,17 @@ export function CustomerOrderBar({
           {/* Header */}
           <div className="px-5 py-4 border-b border-border bg-muted/40 flex items-center justify-between shrink-0">
             <div>
-              <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                <UtensilsCrossed className="w-4 h-4 text-primary" />
-                {orderSuccessData ? 'Order Confirmation' : 'Review Your Order'}
-              </DialogTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <DialogTitle className="text-base font-bold text-foreground flex items-center gap-1.5">
+                  <UtensilsCrossed className="w-4 h-4 text-primary" />
+                  {orderSuccessData ? 'Order Confirmation' : 'Review Your Order'}
+                </DialogTitle>
+                {tableNumber && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-primary/10 text-primary border border-primary/20">
+                    Table {tableNumber.replace(/^table\s*/i, '').trim()}
+                  </span>
+                )}
+              </div>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 {businessName}
               </DialogDescription>
@@ -366,11 +447,11 @@ export function CustomerOrderBar({
                         <div key={item.key} className="py-1.5 flex justify-between items-start text-xs">
                           <div className="pr-2">
                             <span className="font-semibold text-zinc-900">
-                              {item.quantity}× {item.name}
+                              {item.quantity}× {decodeHtmlEntities(item.name)}
                             </span>
                             {item.variationName && (
                               <span className="block text-[11px] text-zinc-500 font-normal">
-                                ({item.variationName})
+                                ({decodeHtmlEntities(item.variationName)})
                               </span>
                             )}
                           </div>
@@ -397,13 +478,25 @@ export function CustomerOrderBar({
                   </div>
                 </div>
 
-                {/* Actions: Download Receipt Image & Reset */}
+                {/* Actions: Re-open WhatsApp, Download Receipt Image & Reset */}
                 <div className="space-y-2 pt-1">
+                  {orderSuccessData.whatsappUrl && (
+                    <a
+                      href={orderSuccessData.whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center gap-2 h-11 text-xs sm:text-sm font-bold bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl shadow-md transition-transform active:scale-98"
+                    >
+                      <span className="text-base">💬</span>
+                      <span>Send / Re-open WhatsApp Chat</span>
+                    </a>
+                  )}
+
                   <Button
                     type="button"
                     onClick={handleDownloadReceipt}
                     disabled={isDownloading}
-                    className="w-full bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold h-11 rounded-xl gap-2 shadow-md transition-transform active:scale-98"
+                    className="w-full bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold h-10 rounded-xl gap-2 shadow-xs transition-transform active:scale-98"
                   >
                     {isDownloading ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -425,6 +518,25 @@ export function CustomerOrderBar({
             ) : (
               /* Review & Form View */
               <>
+                {/* Seated Table Card at Top of Modal (Non-editable) */}
+                {tableNumber && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <UtensilsCrossed className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-foreground">
+                          Table {tableNumber.replace(/^table\s*/i, '').trim()}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Ordering via Table QR Stand
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* List of items in cart */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -443,11 +555,11 @@ export function CustomerOrderBar({
                       <div key={item.key} className="p-3 flex items-center justify-between gap-3 bg-card">
                         <div className="flex-1 min-w-0">
                           <p className="text-xs sm:text-sm font-bold text-foreground truncate">
-                            {item.name}
+                            {decodeHtmlEntities(item.name)}
                           </p>
                           {item.variationName && (
                             <p className="text-[11px] text-muted-foreground font-medium">
-                              Variant: {item.variationName}
+                              Variant: {decodeHtmlEntities(item.variationName)}
                             </p>
                           )}
                           <p className="text-xs font-bold text-primary">
@@ -530,18 +642,8 @@ export function CustomerOrderBar({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">
-                        Table No. (Optional)
-                      </label>
-                      <Input
-                        value={tableNumber}
-                        onChange={(e) => setTableNumber(e.target.value)}
-                        placeholder="e.g. 4B"
-                        className="h-8 text-xs rounded-lg"
-                      />
-                    </div>
+                  {/* If table is fixed from QR stand, no table input at bottom; only full-width special note */}
+                  {tableNumber ? (
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">
                         Special Note (Optional)
@@ -549,20 +651,48 @@ export function CustomerOrderBar({
                       <Input
                         value={specialNote}
                         onChange={(e) => setSpecialNote(e.target.value)}
-                        placeholder="Less spicy, etc."
-                        className="h-8 text-xs rounded-lg"
+                        placeholder="e.g. Less spicy, extra sauce, etc."
+                        className="h-9 text-xs rounded-xl"
                       />
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Table No. (Optional)
+                        </label>
+                        <Input
+                          value={tableNumber}
+                          onChange={(e) => setTableNumber(e.target.value)}
+                          placeholder="e.g. 4B"
+                          className="h-9 text-xs rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Special Note (Optional)
+                        </label>
+                        <Input
+                          value={specialNote}
+                          onChange={(e) => setSpecialNote(e.target.value)}
+                          placeholder="Less spicy, etc."
+                          className="h-9 text-xs rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <div className="pt-2">
                     <Button
                       type="submit"
-                      className="w-full h-11 text-sm font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-lg gap-2 transition-transform active:scale-98"
+                      className="w-full h-11 text-sm font-bold bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl shadow-lg gap-2 transition-transform active:scale-98"
                     >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Place Order • {currencySymbol}{totalOrderAmount.toLocaleString()}</span>
+                      <span className="text-base">💬</span>
+                      <span>Place Order via WhatsApp • {currencySymbol}{totalOrderAmount.toLocaleString()}</span>
                     </Button>
+                    <p className="text-[10px] text-center text-muted-foreground mt-1.5">
+                      Submits order and opens WhatsApp with pre-filled message for the restaurant
+                    </p>
                   </div>
                 </form>
               </>

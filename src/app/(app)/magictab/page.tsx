@@ -1641,6 +1641,7 @@ export default function MagicTabPage() {
         createdAt: new Date().toISOString(),
         itemCount: itemsToSave.length,
         primaryTag: selectedMenuType,
+        clientId: clientUser?.id || undefined,
         price: itemsToSave.reduce((sum, item) => sum + Number(item.price || 0), 0),
         previewAvatars: itemsToSave.slice(0, 3).map(i => (i.name ? i.name.charAt(0) : '?')),
         items: itemsToSave.map(item => ({
@@ -1684,6 +1685,7 @@ export default function MagicTabPage() {
       createdAt: new Date().toISOString(),
       itemCount: itemsToSave.length,
       primaryTag: selectedMenuType,
+      clientId: clientUser?.id || undefined,
       previewAvatars: itemsToSave.slice(0, 3).map(i => (i.name ? i.name.charAt(0) : '?')),
       price: itemsToSave.reduce((sum, item) => sum + Number(item.price || 0), 0),
       items: itemsToSave.map(item => ({

@@ -45,27 +45,35 @@ export function DraftAutoSyncer() {
           } catch {}
         }
 
-        const payloads = parsedDrafts.map((d: any) => {
-          const draftId = String(d.id || d.draftId || `draft-${Date.now()}`);
-          const draftName = String(d.name || d.draftName || 'Saved Draft');
-          const primaryTag = d.primaryTag ? String(d.primaryTag) : (businessType === 'parlour' ? 'parlour' : 'restaurant');
-          const items = Array.isArray(d.items) ? d.items : [];
-          const itemCount = typeof d.itemCount === 'number' ? d.itemCount : items.length;
+        const payloads = parsedDrafts
+          .filter((d: any) => {
+            // Filter out drafts that belong to a different client
+            if (clientId && d.clientId && Number(d.clientId) !== Number(clientId)) {
+              return false;
+            }
+            return true;
+          })
+          .map((d: any) => {
+            const draftId = String(d.id || d.draftId || `draft-${Date.now()}`);
+            const draftName = String(d.name || d.draftName || 'Saved Draft');
+            const primaryTag = d.primaryTag ? String(d.primaryTag) : (businessType === 'parlour' ? 'parlour' : 'restaurant');
+            const items = Array.isArray(d.items) ? d.items : [];
+            const itemCount = typeof d.itemCount === 'number' ? d.itemCount : items.length;
 
-          return {
-            draftId,
-            draftName,
-            businessName: businessName || (primaryTag === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
-            businessType: businessType || primaryTag,
-            whatsappNumber: whatsappNumber || undefined,
-            email: email || undefined,
-            clientId: typeof clientId === 'number' ? clientId : undefined,
-            primaryTag,
-            items,
-            itemCount,
-            createdAt: d.createdAt || undefined,
-          };
-        });
+            return {
+              draftId,
+              draftName,
+              businessName: businessName || (primaryTag === 'parlour' ? 'Anonymous Parlour' : 'Anonymous Restaurant'),
+              businessType: businessType || primaryTag,
+              whatsappNumber: whatsappNumber || undefined,
+              email: email || undefined,
+              clientId: typeof clientId === 'number' ? clientId : undefined,
+              primaryTag,
+              items,
+              itemCount,
+              createdAt: d.createdAt || undefined,
+            };
+          });
 
         isSyncingRef.current = true;
         await batchSyncUserDraftsAction(payloads);

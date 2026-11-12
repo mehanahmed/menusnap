@@ -86,13 +86,33 @@ export async function createCustomerOrderAction(
     await ensureCustomerOrdersSchema();
 
     const orderId = input.orderId || `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
-    const businessName = (input.businessName || 'Restaurant').trim();
     const customerName = (input.customerName || 'Anonymous').trim();
     const customerPhone = (input.customerPhone || '').trim();
     const tableNumber = input.tableNumber ? String(input.tableNumber).trim() : null;
     const specialNote = input.specialNote ? String(input.specialNote).trim() : null;
     const draftId = input.draftId ? String(input.draftId).trim() : null;
-    const clientId = typeof input.clientId === 'number' ? input.clientId : null;
+    let clientId = typeof input.clientId === 'number' ? input.clientId : null;
+    let businessName = (input.businessName || 'Restaurant').trim();
+
+    // Auto-resolve clientId and businessName from draft if missing (e.g. customer ordered from QR)
+    if (!clientId && draftId) {
+      try {
+        const [draftRows]: any = await pool.execute(
+          'SELECT client_id, business_name FROM user_drafts WHERE draft_id = ? LIMIT 1',
+          [draftId]
+        );
+        if (draftRows && draftRows.length > 0) {
+          if (draftRows[0].client_id) {
+            clientId = Number(draftRows[0].client_id);
+          }
+          if (draftRows[0].business_name && (!input.businessName || input.businessName === 'Restaurant')) {
+            businessName = draftRows[0].business_name;
+          }
+        }
+      } catch (err) {
+        console.warn('[createCustomerOrderAction] Failed to resolve client from draft:', err);
+      }
+    }
     const totalAmount = Number(input.totalAmount) || 0;
     const itemsJson = JSON.stringify(input.items || []);
 
@@ -130,9 +150,15 @@ export async function getCustomerOrdersAction(params: {
   businessName?: string | null;
   status?: string | null;
   search?: string | null;
+  isAdmin?: boolean;
 }): Promise<{ success: boolean; orders: CustomerOrderRecord[]; error?: string }> {
   try {
     await ensureCustomerOrdersSchema();
+
+    // Strict multi-tenant isolation: A non-admin query MUST provide clientId or businessName
+    if (!params.isAdmin && !params.clientId && !params.businessName) {
+      return { success: true, orders: [] };
+    }
 
     let query = `
       SELECT id, order_id, client_id, business_name, draft_id, customer_name, customer_phone, 
@@ -143,15 +169,10 @@ export async function getCustomerOrdersAction(params: {
     `;
     const queryParams: any[] = [];
 
-    // Filter by client ID or business name
+    // Strict multi-tenant isolation: If clientId is provided, it is 100% authoritative (never match by business_name)
     if (params.clientId) {
-      if (params.businessName) {
-        query += ` AND (client_id = ? OR business_name = ?)`;
-        queryParams.push(params.clientId, params.businessName.trim());
-      } else {
-        query += ` AND client_id = ?`;
-        queryParams.push(params.clientId);
-      }
+      query += ` AND client_id = ?`;
+      queryParams.push(params.clientId);
     } else if (params.businessName) {
       query += ` AND business_name = ?`;
       queryParams.push(params.businessName.trim());

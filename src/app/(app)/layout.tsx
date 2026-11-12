@@ -173,7 +173,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             >
               <main className={cn(
                 "flex-grow min-w-0 w-full max-w-full overflow-x-hidden",
-                (pathname === "/dashboard" || pathname === "/dashboard/" || pathname === "/magictab" || pathname === "/magictab/" || pathname === "/templates" || pathname === "/templates/" || pathname === "/draft" || pathname === "/draft/" || pathname === "/ebook" || pathname === "/ebook/" || pathname === "/marketing-consultation" || pathname === "/marketing-consultation/" || pathname.startsWith("/happy-clients") || pathname.startsWith("/magic-calculation") || pathname.startsWith("/magic-calc")) ? "p-0" : "p-3.5 sm:p-5 md:p-6"
+                (pathname === "/dashboard" || pathname === "/dashboard/" || pathname === "/magictab" || pathname === "/magictab/" || pathname === "/templates" || pathname === "/templates/" || pathname === "/draft" || pathname === "/draft/" || pathname.startsWith("/customer-orders") || pathname === "/ebook" || pathname === "/ebook/" || pathname === "/marketing-consultation" || pathname === "/marketing-consultation/" || pathname.startsWith("/happy-clients") || pathname.startsWith("/magic-calculation") || pathname.startsWith("/magic-calc")) ? "p-0" : "p-3.5 sm:p-5 md:p-6"
               )}>
                 {children}
               </main>
@@ -182,7 +182,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <ScrollArea className={cn("h-screen print:h-auto print:overflow-visible print:block", (pathname === "/magictab" || pathname === "/magictab/" || pathname === "/ebook" || pathname === "/ebook/") ? "pb-0" : "pb-16 md:pb-0")}> 
               <main className={cn(
                 "flex-1 min-w-0 w-full max-w-full",
-                (pathname === "/dashboard" || pathname === "/dashboard/" || pathname === "/magictab" || pathname === "/magictab/" || pathname === "/templates" || pathname === "/templates/" || pathname === "/draft" || pathname === "/draft/" || pathname === "/ebook" || pathname === "/ebook/" || pathname === "/marketing-consultation" || pathname === "/marketing-consultation/" || pathname.startsWith("/magic-calculation") || pathname.startsWith("/magic-calc")) ? "p-0" : "p-4 sm:p-6 md:p-8 lg:p-10"
+                (pathname === "/dashboard" || pathname === "/dashboard/" || pathname === "/magictab" || pathname === "/magictab/" || pathname === "/templates" || pathname === "/templates/" || pathname === "/draft" || pathname === "/draft/" || pathname.startsWith("/customer-orders") || pathname === "/ebook" || pathname === "/ebook/" || pathname === "/marketing-consultation" || pathname === "/marketing-consultation/" || pathname.startsWith("/magic-calculation") || pathname.startsWith("/magic-calc")) ? "p-0" : "p-4 sm:p-6 md:p-8 lg:p-10"
               )}>
                 {children}
               </main>
@@ -190,7 +190,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           )}
         </SidebarInset>
 
-        {pathname !== "/dashboard" && pathname !== "/dashboard/" && pathname !== "/magictab" && pathname !== "/magictab/" && pathname !== "/templates" && pathname !== "/templates/" && pathname !== "/draft" && pathname !== "/draft/" && pathname !== "/ebook" && pathname !== "/ebook/" && pathname !== "/order-history" && pathname !== "/order-history/" && !pathname.startsWith("/happy-clients") && !pathname.startsWith("/success") && <div className="print:hidden"><SpeedDialFAB /></div>}
+        {pathname !== "/dashboard" && pathname !== "/dashboard/" && pathname !== "/magictab" && pathname !== "/magictab/" && pathname !== "/templates" && pathname !== "/templates/" && pathname !== "/draft" && pathname !== "/draft/" && !pathname.startsWith("/customer-orders") && pathname !== "/ebook" && pathname !== "/ebook/" && pathname !== "/order-history" && pathname !== "/order-history/" && !pathname.startsWith("/happy-clients") && !pathname.startsWith("/success") && <div className="print:hidden"><SpeedDialFAB /></div>}
         {pathname !== "/ebook" && pathname !== "/ebook/" && <div className="print:hidden"><BottomNavigation /></div>}
 
       </SidebarProvider>

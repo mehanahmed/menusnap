@@ -29,6 +29,7 @@ export function WhatsAppFloat({
                            pathname.startsWith('/magictab') || 
                            pathname.startsWith('/templates') || 
                            pathname.startsWith('/draft') || 
+                           pathname.startsWith('/customer-orders') || 
                            pathname.startsWith('/ebook') || 
                            pathname.startsWith('/order-history') || 
                            pathname.startsWith('/happy-clients') || 
