@@ -309,58 +309,93 @@ function DraftQrContent() {
 
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-foreground transition-colors print-page-root">
         {/* Top Navigation Bar (Hidden during print) */}
-        <header className="no-print sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border shadow-xs px-4 sm:px-8 py-3">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <Link href="/draft">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs gap-1.5 h-8 text-muted-foreground hover:text-foreground"
-                >
-                  <ArrowLeft className="h-4 w-4" /> Back to Draft
-                </Button>
-              </Link>
-              <div className="h-4 w-px bg-border" />
-              <div>
-                <h1 className="text-sm font-bold truncate max-w-[200px] sm:max-w-xs">
-                  {decodeHtmlEntities(businessName)}
-                </h1>
-                <p className="text-[11px] text-muted-foreground">Digital Menu QR Stand</p>
+        <header className="no-print sticky top-0 z-40 bg-card/90 backdrop-blur-md border-b border-border shadow-xs">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3">
+            {/* Desktop View (sm and up) */}
+            <div className="hidden sm:flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Link href="/draft">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs gap-1.5 h-8 text-muted-foreground hover:text-foreground"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Back to Draft
+                  </Button>
+                </Link>
+                <div className="h-4 w-px bg-border" />
+                <div>
+                  <h1 className="text-sm font-bold truncate max-w-xs">
+                    {decodeHtmlEntities(businessName)}
+                  </h1>
+                  <p className="text-[11px] text-muted-foreground">Digital Menu QR Stand</p>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex items-center gap-2">
+                <Link href={customerMenuUrl} target="_blank">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-8 text-xs bg-card hover:bg-muted hover:text-foreground font-medium text-foreground shadow-xs"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 text-primary" /> Preview Menu
+                  </Button>
+                </Link>
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-              <Link href={customerMenuUrl} target="_blank">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8 text-xs bg-card hover:bg-muted font-medium text-foreground shadow-xs"
-                >
-                  <ExternalLink className="h-3.5 w-3.5 text-primary" /> Preview Menu
-                </Button>
-              </Link>
+            {/* Mobile View (below sm) */}
+            <div className="sm:hidden space-y-1.5">
+              {/* Row 1: Back to Draft */}
+              <div className="flex items-center">
+                <Link href="/draft">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs gap-1.5 h-7 px-2 text-muted-foreground hover:text-foreground -ml-1"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" /> Back to Draft
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Row 2: Title & QR Stand on left, Preview Menu on right */}
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-sm font-bold truncate text-foreground">
+                    {decodeHtmlEntities(businessName)}
+                  </h1>
+                  <p className="text-[10px] text-muted-foreground">Digital Menu QR Stand</p>
+                </div>
+
+                <Link href={customerMenuUrl} target="_blank" className="shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-7.5 px-2.5 text-xs bg-card hover:bg-muted hover:text-foreground font-medium text-foreground shadow-xs rounded-lg"
+                  >
+                    <ExternalLink className="h-3 w-3 text-primary" /> Preview Menu
+                  </Button>
+                </Link>
+              </div>
             </div>
           </div>
         </header>
 
         {/* Content Area */}
-        <main className="max-w-6xl mx-auto p-4 sm:p-8 print-main-root">
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 print-main-root">
           {/* Theme Selector (Hidden during print) */}
-          <div className="no-print mb-8 bg-card border border-border p-4 rounded-2xl shadow-xs">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <Palette className="w-4 h-4 text-primary" /> Target Customer Menu Theme
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  When customers scan this QR code, their phone opens the digital menu in this exact style.
-                </p>
+          <div className="no-print mb-6 sm:mb-8 bg-card border border-border/80 p-2.5 sm:p-3 rounded-2xl shadow-xs">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground px-1 shrink-0">
+                <Palette className="w-4 h-4 text-primary" />
+                <span className="text-foreground font-bold">Customer Menu Theme</span>
               </div>
 
               {/* Theme Selector Pills */}
-              <div className="flex items-center gap-1 bg-muted/80 p-1 rounded-xl border border-border/60 overflow-x-auto max-w-full">
+              <div className="flex items-center gap-1 bg-muted/80 p-1 rounded-xl border border-border/60 overflow-x-auto scrollbar-none max-w-full">
                 {MENU_SHEET_THEMES.map((theme) => {
                   const isActive = activeTheme.id === theme.id;
                   return (
@@ -391,13 +426,13 @@ function DraftQrContent() {
           </div>
 
           {/* Grid: Table Stand Mockup (Printable) on left, Setup details on right */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start print-grid-root">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start print-grid-root">
             {/* The Printable Table Stand Card (Takes full width in print) */}
             <div className="lg:col-span-7 flex justify-center print-card-column">
               <div
                 ref={cardRef}
                 className={cn(
-                  "printable-card-wrapper w-full max-w-[440px] rounded-3xl p-6 sm:p-9 text-center relative overflow-hidden transition-all duration-300 shadow-xl border",
+                  "printable-card-wrapper w-full max-w-[390px] sm:max-w-[410px] rounded-3xl p-6 sm:p-8 text-center relative overflow-hidden transition-all duration-300 shadow-xl border",
                   activeTheme.isDark
                     ? "bg-[#121317] text-zinc-100 border-zinc-800"
                     : "bg-white text-slate-900 border-slate-200"
@@ -405,7 +440,7 @@ function DraftQrContent() {
               >
                 {/* Decorative Top Accent Bar */}
                 <div
-                  className="h-1.5 w-24 mx-auto rounded-full mb-6"
+                  className="h-1.5 w-20 mx-auto rounded-full mb-5"
                   style={{ backgroundColor: activeTheme.accentColor }}
                 />
 
@@ -434,41 +469,40 @@ function DraftQrContent() {
                 </div>
 
                 {/* Business Name */}
-                <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1 mb-1">
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight mt-1 mb-0.5">
                   {decodeHtmlEntities(businessName)}
                 </h2>
 
-                <p className="text-xs sm:text-sm font-semibold opacity-75 mb-6">
+                <p className="text-xs sm:text-sm font-semibold opacity-75 mb-5">
                   Digital Menu & Pricing
                 </p>
 
                 {/* The QR Code in a crisp framed container */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-md border border-slate-200/80 inline-block mx-auto mb-5">
+                <div className="bg-white p-3.5 sm:p-4 rounded-2xl shadow-md border border-slate-200/80 inline-block mx-auto mb-4">
                   {qrDataUrl ? (
                     <img
                       src={qrDataUrl}
                       alt={`QR Code for ${businessName}`}
-                      className="w-52 h-52 sm:w-60 sm:h-60 object-contain mx-auto"
+                      className="w-48 h-48 sm:w-56 sm:h-56 object-contain mx-auto"
                     />
                   ) : (
-                    <Skeleton className="w-52 h-52 sm:w-60 sm:h-60" />
+                    <Skeleton className="w-48 h-48 sm:w-56 sm:h-56" />
                   )}
                 </div>
 
                 {/* Scan Instruction */}
-                <div className="space-y-1 mb-6">
-                  <p className="text-sm font-bold flex items-center justify-center gap-1.5">
+                <div className="space-y-1 mb-5">
+                  <p className="text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5">
                     <QrIcon className="w-4 h-4" style={{ color: activeTheme.accentColor }} />
                     <span>Scan with Your Phone Camera</span>
                   </p>
-                  <p className="text-xs opacity-70">
+                  <p className="text-[11px] sm:text-xs opacity-70">
                     No app download needed • Instant live menu
                   </p>
                 </div>
 
-
                 {/* Footer Credits */}
-                <div className="pt-4 border-t border-border/60 text-[11px] opacity-75">
+                <div className="pt-3.5 border-t border-border/60 text-[11px] opacity-75">
                   <p className="font-medium">Powered by MenuSnap</p>
                   <p className="mt-0.5">For inquiries: +8801919760626</p>
                 </div>
@@ -476,17 +510,17 @@ function DraftQrContent() {
             </div>
 
             {/* Right Side: Setup Controls & Instructions (Hidden during print) */}
-            <div className="no-print lg:col-span-5 space-y-5">
+            <div className="no-print lg:col-span-5 space-y-4 lg:sticky lg:top-20">
               {/* Action Card */}
-              <div className="bg-card border border-border p-6 rounded-2xl shadow-xs space-y-4">
-                <h3 className="text-base font-bold flex items-center gap-2">
+              <div className="bg-card border border-border p-5 sm:p-6 rounded-2xl shadow-xs space-y-4">
+                <h3 className="text-sm sm:text-base font-bold flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" /> Ready to Print or Save
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Use this high-resolution QR card on your restaurant tables, salon reception, billing counters, or acrylic stands.
                 </p>
 
-                <div className="space-y-2.5 pt-2">
+                <div className="space-y-2.5 pt-1">
                   <Button
                     onClick={handlePrint}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold gap-2 h-10 text-sm shadow-xs transition-colors"
@@ -520,14 +554,13 @@ function DraftQrContent() {
                 </div>
               </div>
 
-
               {/* Print Guidelines */}
               <div className="bg-muted/50 border border-border/70 p-4 rounded-xl text-xs space-y-2">
                 <p className="font-semibold text-foreground flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 text-primary shrink-0" />
                   <span>How to Save as PDF:</span>
                 </p>
-                <ol className="list-decimal list-inside text-muted-foreground space-y-1 pl-1">
+                <ol className="list-decimal list-inside text-muted-foreground space-y-1.5 pl-1 leading-relaxed">
                   <li>Click <strong>Print Stand Card / Save as PDF</strong> above.</li>
                   <li>In your browser's print preview window, change the <em>Destination</em> to <strong>Save as PDF</strong>.</li>
                   <li>Click <strong>Save</strong> to get a print-ready vector PDF file.</li>

@@ -12,7 +12,8 @@ import {
   ImageIcon, 
   Sun, 
   Moon,
-  Loader2
+  Loader2,
+  ChevronDown
 } from 'lucide-react';
 import { 
   CUSTOM_THEME_SHADES, 
@@ -43,6 +44,7 @@ export function CustomDesignControls({
 
   const hasBgImage = Boolean(customConfig?.bgImageUrl);
   const activeShadeId: CustomShadeId = customConfig?.shadeId || 'charcoal';
+  const activeShade = CUSTOM_THEME_SHADES.find((s) => s.id === activeShadeId) || CUSTOM_THEME_SHADES[0];
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -235,75 +237,113 @@ export function CustomDesignControls({
 
           {/* Typography Shade Picker */}
           <div className="space-y-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-              <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                Content Text Color & Shade
-              </p>
-              <span className="text-[11px] text-muted-foreground">
-                Match text with your background lightness
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {/* Group 1: For Light Backgrounds (Dark text) */}
-              <div className="bg-muted/40 p-2 sm:p-2.5 rounded-xl border border-border/50 space-y-1.5">
-                <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-                  <Sun className="w-3 h-3 text-amber-500" /> For Light Background Images
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                  {lightBgShades.map((shade) => {
-                    const isSelected = activeShadeId === shade.id;
-                    return (
-                      <button
-                        key={shade.id}
-                        type="button"
-                        onClick={() => handleShadeSelect(shade.id)}
-                        className={cn(
-                          'flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left border',
-                          isSelected
-                            ? 'bg-background text-foreground font-bold border-primary shadow-xs ring-1 ring-primary/30'
-                            : 'border-transparent hover:bg-background/60 text-muted-foreground hover:text-foreground'
-                        )}
-                      >
-                        <span
-                          className="w-3 h-3 rounded-full shrink-0 shadow-xs border border-black/10"
-                          style={{ backgroundColor: shade.swatch }}
-                        />
-                        <span className="truncate">{shade.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* Mobile View: Compact Dropdown (< md) */}
+            <div className="md:hidden flex items-center justify-between gap-2.5 bg-muted/50 p-2 rounded-xl border border-border/70">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span
+                  className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs border border-border"
+                  style={{ backgroundColor: activeShade.swatch }}
+                />
+                <span className="text-xs font-bold text-foreground">Text Shade:</span>
               </div>
 
-              {/* Group 2: For Dark Backgrounds (Light text) */}
-              <div className="bg-muted/40 p-2 sm:p-2.5 rounded-xl border border-border/50 space-y-1.5">
-                <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-                  <Moon className="w-3 h-3 text-indigo-400" /> For Dark Background Images
+              <div className="relative flex-1 min-w-0">
+                <select
+                  value={activeShadeId}
+                  onChange={(e) => handleShadeSelect(e.target.value as CustomShadeId)}
+                  className="w-full h-8 text-xs font-semibold rounded-lg bg-card border border-border text-foreground px-2.5 pr-7 focus:outline-none focus:ring-1 focus:ring-primary appearance-none cursor-pointer shadow-xs truncate"
+                >
+                  <optgroup label="For Light Backgrounds (Dark Text)">
+                    {lightBgShades.map((shade) => (
+                      <option key={shade.id} value={shade.id}>
+                        {shade.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="For Dark Backgrounds (Light Text)">
+                    {darkBgShades.map((shade) => (
+                      <option key={shade.id} value={shade.id}>
+                        {shade.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Desktop View: Full Swatch Grid (md and up) */}
+            <div className="hidden md:block space-y-2">
+              <div className="flex flex-row items-center justify-between gap-1">
+                <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  Content Text Color & Shade
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                  {darkBgShades.map((shade) => {
-                    const isSelected = activeShadeId === shade.id;
-                    return (
-                      <button
-                        key={shade.id}
-                        type="button"
-                        onClick={() => handleShadeSelect(shade.id)}
-                        className={cn(
-                          'flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left border',
-                          isSelected
-                            ? 'bg-background text-foreground font-bold border-primary shadow-xs ring-1 ring-primary/30'
-                            : 'border-transparent hover:bg-background/60 text-muted-foreground hover:text-foreground'
-                        )}
-                      >
-                        <span
-                          className="w-3 h-3 rounded-full shrink-0 shadow-xs border border-white/20"
-                          style={{ backgroundColor: shade.swatch }}
-                        />
-                        <span className="truncate">{shade.name}</span>
-                      </button>
-                    );
-                  })}
+                <span className="text-[11px] text-muted-foreground">
+                  Match text with your background lightness
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Group 1: For Light Backgrounds (Dark text) */}
+                <div className="bg-muted/40 p-2 sm:p-2.5 rounded-xl border border-border/50 space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                    <Sun className="w-3 h-3 text-amber-500" /> For Light Background Images
+                  </p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {lightBgShades.map((shade) => {
+                      const isSelected = activeShadeId === shade.id;
+                      return (
+                        <button
+                          key={shade.id}
+                          type="button"
+                          onClick={() => handleShadeSelect(shade.id)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left border',
+                            isSelected
+                              ? 'bg-background text-foreground font-bold border-primary shadow-xs ring-1 ring-primary/30'
+                              : 'border-transparent hover:bg-background/60 text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0 shadow-xs border border-black/10"
+                            style={{ backgroundColor: shade.swatch }}
+                          />
+                          <span className="truncate">{shade.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Group 2: For Dark Backgrounds (Light text) */}
+                <div className="bg-muted/40 p-2 sm:p-2.5 rounded-xl border border-border/50 space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+                    <Moon className="w-3 h-3 text-indigo-400" /> For Dark Background Images
+                  </p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {darkBgShades.map((shade) => {
+                      const isSelected = activeShadeId === shade.id;
+                      return (
+                        <button
+                          key={shade.id}
+                          type="button"
+                          onClick={() => handleShadeSelect(shade.id)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left border',
+                            isSelected
+                              ? 'bg-background text-foreground font-bold border-primary shadow-xs ring-1 ring-primary/30'
+                              : 'border-transparent hover:bg-background/60 text-muted-foreground hover:text-foreground'
+                          )}
+                        >
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0 shadow-xs border border-white/20"
+                            style={{ backgroundColor: shade.swatch }}
+                          />
+                          <span className="truncate">{shade.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>

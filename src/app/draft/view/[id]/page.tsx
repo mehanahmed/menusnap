@@ -16,6 +16,8 @@ import {
   Check,
   Palette,
   QrCode,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { decodeHtmlEntities, cn } from '@/lib/utils';
@@ -27,6 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { DraftItemData, DraftSubItem, CategoryLookup } from '@/components/menu/draft-share-dialog';
 import { MENU_SHEET_THEMES, getMenuSheetTheme, type MenuSheetTheme, type CustomThemeConfig } from '@/components/menu/menu-sheet-themes';
 import { CustomDesignControls } from '@/components/menu/custom-design-controls';
+import { CustomerOrderBar, type CartItem } from '@/components/menu/customer-order-bar';
 import { getClientCustomThemeAction, saveClientCustomThemeAction, deleteClientCustomBackgroundAction } from '@/app/actions/custom-theme';
 
 const DRAFTS_STORAGE_KEY = 'menuBuilderDrafts';
@@ -46,6 +49,54 @@ function DraftViewContent() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [expandedVariations, setExpandedVariations] = useState<Record<string, boolean>>({});
+  const [cart, setCart] = useState<Record<string, CartItem>>({});
+
+  const handleUpdateQuantity = (key: string, delta: number) => {
+    setCart((prev) => {
+      const current = prev[key];
+      if (!current) return prev;
+      const newQty = current.quantity + delta;
+      if (newQty <= 0) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: { ...current, quantity: newQty } };
+    });
+  };
+
+  const handleAddToCart = (item: DraftSubItem, variation?: { name: string; price?: number; id?: string | number }) => {
+    const key = variation
+      ? `var-${item.id || item.name}-${variation.id || variation.name}`
+      : `item-${item.id || item.name}`;
+    const price = variation
+      ? (typeof variation.price === 'number' && variation.price > 0 ? variation.price : item.price)
+      : item.price;
+
+    setCart((prev) => {
+      const existing = prev[key];
+      return {
+        ...prev,
+        [key]: {
+          key,
+          name: item.name,
+          variationName: variation?.name,
+          price: Number(price) || 0,
+          quantity: (existing?.quantity || 0) + 1,
+        },
+      };
+    });
+  };
+
+  const handleRemoveItem = (key: string) => {
+    setCart((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const handleClearCart = () => setCart({});
 
   // Resolve search parameters synchronously during SSR & client render (eliminates hydration mismatches)
   const urlTheme = searchParams.get('theme');
@@ -403,7 +454,7 @@ function DraftViewContent() {
       suppressHydrationWarning
       className={cn(
         "min-h-screen transition-colors duration-200 ease-in-out",
-        isCustomerMode ? "py-4 sm:py-10 px-2 sm:px-6" : "p-2 sm:p-6 lg:p-8",
+        isCustomerMode ? "pt-4 sm:pt-10 pb-28 sm:pb-28 px-2 sm:px-6" : "pt-2 sm:pt-6 pb-12 sm:pb-16 px-2 sm:px-6 lg:px-8",
         activeTheme.sheetWrapperClass
       )}
     >
@@ -537,18 +588,64 @@ function DraftViewContent() {
                     const itemKey = `${item.id || item.name}-${index}`;
                     const isExpanded = !!expandedVariations[itemKey];
                     const hasSubItems = item.subItems && item.subItems.length > 0;
+                    const mainCartKey = `item-${item.id || item.name}`;
+                    const mainCartItem = cart[mainCartKey];
+                    const mainQty = mainCartItem?.quantity || 0;
 
                     return (
                       <div key={itemKey} className="space-y-1">
-                        <div className="flex justify-between items-baseline gap-4">
-                          <h4 className={cn("text-base", activeTheme.itemNameClass)}>
-                            {translateText(decodeHtmlEntities(item.name))}
-                          </h4>
-                          {item.price > 0 && (
-                            <p className={cn("shrink-0", activeTheme.itemPriceClass)}>
-                              {currencySymbol}{item.price.toLocaleString()}
-                            </p>
-                          )}
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <h4 className={cn("text-base", activeTheme.itemNameClass)}>
+                              {translateText(decodeHtmlEntities(item.name))}
+                            </h4>
+                          </div>
+
+                          <div className="flex items-center gap-2.5 shrink-0">
+                            {item.price > 0 && (
+                              <p className={cn("shrink-0 font-bold", activeTheme.itemPriceClass)}>
+                                {currencySymbol}{item.price.toLocaleString()}
+                              </p>
+                            )}
+
+                            {/* Cart Add / Stepper button for items without variations (only in customer QR mode) */}
+                            {isCustomerMode && !hasSubItems && (
+                              <div>
+                                {mainQty > 0 ? (
+                                  <div className="flex items-center gap-1 bg-primary/10 border border-primary/30 rounded-full p-0.5 shadow-xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateQuantity(mainCartKey, -1)}
+                                      className="w-5 h-5 rounded-full flex items-center justify-center bg-card text-foreground hover:bg-primary hover:text-white transition-colors text-xs"
+                                      title="Decrease"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span className="text-xs font-black min-w-4 text-center text-primary px-0.5">
+                                      {mainQty}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateQuantity(mainCartKey, 1)}
+                                      className="w-5 h-5 rounded-full flex items-center justify-center bg-card text-foreground hover:bg-primary hover:text-white transition-colors text-xs"
+                                      title="Increase"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddToCart(item)}
+                                    className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-white transition-all shadow-xs active:scale-95"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>Add</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {item.description && (
@@ -575,19 +672,62 @@ function DraftViewContent() {
 
                         {hasSubItems && isExpanded && (
                           <div className={cn("mt-2 pl-3 p-2.5 rounded-lg space-y-1.5 transition-all", activeTheme.variationBoxClass)}>
-                            {item.subItems!.map((sub, sIdx) => (
-                              <div
-                                key={sub.id || sIdx}
-                                className={cn("flex justify-between items-baseline text-xs p-1.5 rounded-md", activeTheme.variationSubItemClass)}
-                              >
-                                <p className="font-medium">{translateText(decodeHtmlEntities(sub.name))}</p>
-                                {typeof sub.price === 'number' && sub.price > 0 && (
-                                  <p className={activeTheme.variationPriceClass}>
-                                    +{currencySymbol}{sub.price.toLocaleString()}
-                                  </p>
-                                )}
-                              </div>
-                            ))}
+                            {item.subItems!.map((sub, sIdx) => {
+                              const varCartKey = `var-${item.id || item.name}-${sub.id || sub.name}`;
+                              const varCartItem = cart[varCartKey];
+                              const varQty = varCartItem?.quantity || 0;
+
+                              return (
+                                <div
+                                  key={sub.id || sIdx}
+                                  className={cn("flex justify-between items-center text-xs p-1.5 rounded-md gap-2", activeTheme.variationSubItemClass)}
+                                >
+                                  <p className="font-medium flex-1">{translateText(decodeHtmlEntities(sub.name))}</p>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {typeof sub.price === 'number' && sub.price > 0 && (
+                                      <p className={cn("font-bold", activeTheme.variationPriceClass)}>
+                                        +{currencySymbol}{sub.price.toLocaleString()}
+                                      </p>
+                                    )}
+
+                                    {isCustomerMode && (
+                                      varQty > 0 ? (
+                                        <div className="flex items-center gap-1 bg-primary/10 border border-primary/30 rounded-full p-0.5 shadow-xs">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateQuantity(varCartKey, -1)}
+                                            className="w-4 h-4 rounded-full flex items-center justify-center bg-card text-foreground hover:bg-primary hover:text-white transition-colors text-[10px]"
+                                            title="Decrease"
+                                          >
+                                            <Minus className="w-2.5 h-2.5" />
+                                          </button>
+                                          <span className="text-[11px] font-black min-w-3 text-center text-primary px-0.5">
+                                            {varQty}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateQuantity(varCartKey, 1)}
+                                            className="w-4 h-4 rounded-full flex items-center justify-center bg-card text-foreground hover:bg-primary hover:text-white transition-colors text-[10px]"
+                                            title="Increase"
+                                          >
+                                            <Plus className="w-2.5 h-2.5" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAddToCart(item, sub)}
+                                          className="flex items-center gap-0.5 px-2 py-0.5 text-[11px] font-bold rounded-full bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-white transition-all shadow-xs active:scale-95"
+                                        >
+                                          <Plus className="w-2.5 h-2.5" />
+                                          <span>Add</span>
+                                        </button>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -611,6 +751,20 @@ function DraftViewContent() {
           <p className="mt-1 opacity-80">For inquiries, please contact Color Hut at +8801919760626.</p>
         </footer>
       </main>
+
+      {/* Floating Customer Order Bar & Modal (only in customer QR mode) */}
+      {isCustomerMode && (
+        <CustomerOrderBar
+          cart={cart}
+          currencySymbol={currencySymbol}
+          businessName={businessName}
+          draftId={draft?.id || draftId}
+          clientId={clientUser?.id}
+          onUpdateQuantity={handleUpdateQuantity}
+          onRemoveItem={handleRemoveItem}
+          onClearCart={handleClearCart}
+        />
+      )}
     </div>
   );
 }

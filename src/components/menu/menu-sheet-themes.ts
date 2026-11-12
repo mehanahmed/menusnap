@@ -85,7 +85,7 @@ export const MENU_SHEET_THEMES: MenuSheetTheme[] = [
     accentColor: '#881337',
     isDark: false,
     sheetWrapperClass: 'bg-[#EDE4D8]',
-    sheetCardClass: 'bg-[#FDF8ED] text-[#2C1810] border border-[#DFCFC0] shadow-[0_15px_45px_rgba(92,58,33,0.08)] max-w-[820px] aspect-[1566/2430] min-h-[500px] sm:min-h-[1050px] md:min-h-[1240px] flex flex-col justify-between px-4 sm:px-14 md:px-16 py-6 sm:py-14 md:py-16',
+    sheetCardClass: 'bg-[#FDF8ED] text-[#2C1810] border border-[#DFCFC0] shadow-[0_15px_45px_rgba(92,58,33,0.08)] max-w-[820px] min-h-[400px] sm:min-h-[600px] flex flex-col justify-between px-4 sm:px-14 md:px-16 py-6 sm:py-14 md:py-16',
     watermarkStyle: {
       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3e%3ctext x='50%25' y='50%25' font-family='Arial, sans-serif' font-size='24' fill='rgba(136,19,55,0.045)' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30, 150, 100)'%3eCOLOR HUT%3c/text%3e%3c/svg%3e"), url('/templates/royal-vintage-bg.jpeg')`,
       backgroundSize: '300px 200px, 100% 100%',
@@ -441,7 +441,7 @@ export function buildCustomMenuSheetTheme(config?: CustomThemeConfig | null): Me
     ...shadeOverrides,
     sheetWrapperClass: hasBgImage ? 'bg-[#121316]' : 'bg-[#F1F3F7]',
     sheetCardClass: hasBgImage
-      ? 'bg-[#FDF8ED] text-[#0F172A] border border-border/60 shadow-2xl max-w-[820px] aspect-[1566/2430] min-h-[500px] sm:min-h-[1050px] md:min-h-[1240px] flex flex-col justify-between px-4 sm:px-14 md:px-16 py-6 sm:py-14 md:py-16'
+      ? 'bg-[#FDF8ED] text-[#0F172A] border border-border/60 shadow-2xl max-w-[820px] min-h-[400px] sm:min-h-[600px] flex flex-col justify-between px-4 sm:px-14 md:px-16 py-6 sm:py-14 md:py-16'
       : 'bg-white dark:bg-slate-900 text-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 min-h-[350px] sm:min-h-[500px] max-w-[820px] flex flex-col justify-between p-4 sm:p-12 rounded-2xl relative shadow-md',
     watermarkStyle,
   };

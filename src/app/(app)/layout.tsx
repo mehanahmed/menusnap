@@ -161,18 +161,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r border-sidebar-border shadow-md bg-sidebar print:hidden">
           <SidebarNav />
         </Sidebar>
-        <SidebarInset className="bg-background print:bg-white print:p-0 print:m-0 print:w-full print:block">
+        <SidebarInset className="bg-background print:bg-white print:p-0 print:m-0 print:w-full print:block min-w-0 max-w-full overflow-x-hidden">
           {isMobile ? (
             <div 
               className={cn(
-                "h-[100dvh] w-full min-w-0 max-w-full",
+                "h-[100dvh] w-full min-w-0 max-w-full overflow-x-hidden",
                 (pathname === "/magictab" || pathname === "/magictab/" || pathname === "/ebook" || pathname === "/ebook/") 
                   ? "overflow-hidden" 
                   : "overflow-y-auto pb-16"
               )}
             >
               <main className={cn(
-                "flex-grow min-w-0 w-full max-w-full",
+                "flex-grow min-w-0 w-full max-w-full overflow-x-hidden",
                 (pathname === "/dashboard" || pathname === "/dashboard/" || pathname === "/magictab" || pathname === "/magictab/" || pathname === "/templates" || pathname === "/templates/" || pathname === "/draft" || pathname === "/draft/" || pathname === "/ebook" || pathname === "/ebook/" || pathname === "/marketing-consultation" || pathname === "/marketing-consultation/" || pathname.startsWith("/happy-clients") || pathname.startsWith("/magic-calculation") || pathname.startsWith("/magic-calc")) ? "p-0" : "p-3.5 sm:p-5 md:p-6"
               )}>
                 {children}

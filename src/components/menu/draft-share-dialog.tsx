@@ -322,14 +322,14 @@ export function DraftShareDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-[95vw] sm:w-[92vw] max-h-[92vh] p-0 overflow-y-auto bg-muted border border-border shadow-2xl rounded-2xl [&>button.absolute]:hidden">
+      <DialogContent className="w-[95vw] sm:w-full sm:max-w-3xl lg:max-w-4xl max-h-[90vh] p-0 flex flex-col overflow-hidden bg-muted border border-border shadow-2xl rounded-2xl [&>button.absolute]:hidden min-w-0">
         <DialogHeader className="sr-only">
           <DialogTitle>Menu Selection Sheet - {businessName}</DialogTitle>
           <DialogDescription>View draft menu items in selection sheet format</DialogDescription>
         </DialogHeader>
 
         {/* Sticky top action bar */}
-        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-3 sm:px-6 py-2.5 space-y-2">
+        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b border-border px-3 sm:px-6 py-2.5 space-y-2 shrink-0 w-full min-w-0">
           {/* Row 1: Badge on left, Close button (X) on far right */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 shrink-0">
@@ -354,8 +354,8 @@ export function DraftShareDialog({
           </div>
 
           {/* Row 2: Template selector taking full dedicated row (natural scroll on mobile, right-aligned on desktop) */}
-          <div className="flex items-center justify-start sm:justify-end w-full pt-0.5">
-            <div className="flex items-center gap-1 bg-muted/90 p-1 rounded-xl border border-border/70 overflow-x-auto max-w-full sm:ml-auto scrollbar-none">
+          <div className="flex items-center justify-start sm:justify-end w-full min-w-0 pt-0.5 overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-1 bg-muted/90 p-1 rounded-xl border border-border/70 overflow-x-auto max-w-full sm:ml-auto scrollbar-none shrink-0">
               <span className="text-[11px] font-semibold text-muted-foreground px-1.5 hidden md:flex items-center gap-1 shrink-0">
                 <Palette className="w-3.5 h-3.5 text-primary" /> Template:
               </span>
@@ -388,11 +388,11 @@ export function DraftShareDialog({
           </div>
 
           {/* Row 3: Action buttons (Share Text, WhatsApp, Full Page, QR Code) */}
-          <div className="flex items-center gap-1.5 sm:gap-2 pt-1 border-t border-border/40 overflow-x-auto scrollbar-none pb-0.5 sm:pb-0">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1.5 border-t border-border/40 w-full min-w-0">
             <Button
               size="sm"
               onClick={handleShare}
-              className="h-8 gap-1.5 text-xs font-medium border border-border bg-card text-foreground hover:bg-muted hover:text-foreground shadow-xs transition-colors shrink-0"
+              className="h-8 gap-1.5 text-xs font-medium border border-border bg-card text-foreground hover:bg-muted hover:text-foreground shadow-xs transition-colors flex-1 min-w-[calc(50%-6px)] sm:flex-none sm:min-w-0"
             >
               {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Share2 className="h-3.5 w-3.5 text-primary" />}
               {copied ? 'Copied!' : 'Share Text'}
@@ -404,17 +404,17 @@ export function DraftShareDialog({
                 const waText = encodeURIComponent(`Menu Selection for: ${businessName}\nView menu sheet: ${shareUrl}`);
                 window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
               }}
-              className="h-8 gap-1.5 text-xs font-medium border border-green-500/30 bg-card text-green-600 hover:bg-green-600 hover:text-white hover:border-green-600 shadow-xs transition-colors group shrink-0"
+              className="h-8 gap-1.5 text-xs font-medium border border-green-500/30 bg-card text-green-600 hover:bg-green-600 hover:text-white hover:border-green-600 shadow-xs transition-colors group flex-1 min-w-[calc(50%-6px)] sm:flex-none sm:min-w-0"
             >
               <span className="text-sm">💬</span> WhatsApp
             </Button>
-            <Link href={`/draft/view/${draft.id}?theme=${activeTheme.id}`} target="_blank" className="shrink-0">
-              <Button size="sm" className="h-8 gap-1 text-xs font-medium border border-border/80 bg-card text-muted-foreground hover:bg-muted hover:text-foreground shadow-xs transition-colors shrink-0">
+            <Link href={`/draft/view/${draft.id}?theme=${activeTheme.id}`} target="_blank" className="flex-1 min-w-[calc(50%-6px)] sm:flex-none sm:min-w-0">
+              <Button size="sm" className="w-full sm:w-auto h-8 gap-1 text-xs font-medium border border-border/80 bg-card text-muted-foreground hover:bg-muted hover:text-foreground shadow-xs transition-colors">
                 <ExternalLink className="h-3.5 w-3.5" /> Full Page
               </Button>
             </Link>
-            <Link href={`/draft/qr/${draft.id}?theme=${activeTheme.id}`} target="_blank" className="shrink-0">
-              <Button size="sm" className="h-8 gap-1.5 text-xs font-semibold border border-primary/30 bg-card text-primary hover:bg-primary hover:text-white hover:border-primary shadow-xs transition-colors group shrink-0">
+            <Link href={`/draft/qr/${draft.id}?theme=${activeTheme.id}`} target="_blank" className="flex-1 min-w-[calc(50%-6px)] sm:flex-none sm:min-w-0">
+              <Button size="sm" className="w-full sm:w-auto h-8 gap-1.5 text-xs font-semibold border border-primary/30 bg-card text-primary hover:bg-primary hover:text-white hover:border-primary shadow-xs transition-colors group">
                 <QrCode className="h-3.5 w-3.5 text-primary group-hover:text-white transition-colors" /> QR Code
               </Button>
             </Link>
@@ -423,7 +423,7 @@ export function DraftShareDialog({
 
         {/* Custom Design Controls (When Custom Design template is active) */}
         {selectedThemeId === 'custom' && (
-          <div className="p-3 sm:px-6 bg-card border-b border-border shadow-xs">
+          <div className="p-2 sm:p-4 bg-card border-b border-border shadow-xs w-full min-w-0 shrink-0">
             <CustomDesignControls
               customConfig={customConfig}
               onUpdateConfig={handleUpdateCustomConfig}
@@ -433,70 +433,70 @@ export function DraftShareDialog({
         )}
 
         {/* Main Sheet Container styled with activeTheme */}
-        <div className={cn("p-3 sm:p-6 lg:p-8 transition-colors duration-200 ease-in-out", activeTheme.sheetWrapperClass)}>
+        <div className={cn("flex-1 overflow-y-auto overflow-x-hidden min-w-0 w-full p-2.5 sm:p-5 lg:p-6 transition-colors duration-200 ease-in-out", activeTheme.sheetWrapperClass)}>
           <div
             className={cn(
-              "max-w-4xl mx-auto p-5 sm:p-8 lg:p-12 rounded-2xl overflow-hidden relative shadow-lg transition-colors duration-200 ease-in-out",
+              "w-full mx-auto p-4 sm:p-7 lg:p-10 rounded-2xl overflow-hidden relative shadow-lg transition-colors duration-200 ease-in-out min-w-0",
               activeTheme.sheetCardClass
             )}
             style={activeTheme.watermarkStyle}
           >
             {/* Sheet Header: Logo on left, For: Business on right */}
-            <div className={cn("flex flex-col sm:flex-row justify-between items-center sm:items-start pb-5 sm:pb-8 mb-5 sm:mb-8 gap-4 sm:gap-6 transition-colors", activeTheme.headerBorderClass)}>
-              <div className={cn("rounded-lg w-full sm:w-auto px-5 py-2.5 flex items-center justify-center transition-all", activeTheme.logoBoxClass)}>
+            <div className={cn("flex flex-col sm:flex-row justify-between items-center sm:items-start pb-5 sm:pb-8 mb-5 sm:mb-8 gap-4 sm:gap-6 transition-colors w-full min-w-0", activeTheme.headerBorderClass)}>
+              <div className={cn("rounded-lg w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 flex items-center justify-center transition-all shrink-0", activeTheme.logoBoxClass)}>
                 <Image
                   src="/menusnap-logo-white.png"
                   alt="MenuSnap Logo"
                   width={180}
                   height={48}
-                  className="h-9 sm:h-11 w-auto object-contain"
+                  className="h-8 sm:h-11 w-auto object-contain max-w-full"
                   priority
                 />
               </div>
 
-              <div className="text-center sm:text-right text-sm space-y-1">
-                <p className={cn("text-xl sm:text-2xl transition-colors", activeTheme.businessTitleClass)}>
+              <div className="text-center sm:text-right text-sm space-y-1 w-full sm:w-auto min-w-0">
+                <p className={cn("text-lg sm:text-2xl transition-colors truncate max-w-full", activeTheme.businessTitleClass)}>
                   For: {decodeHtmlEntities(businessName)}
                 </p>
-                <p className={cn("flex items-center justify-center sm:justify-end gap-2 text-xs sm:text-sm", activeTheme.dateTextClass)}>
-                  <CalendarDays className={cn("h-4 w-4", activeTheme.dateIconClass)} />
-                  {formattedDate}
+                <p className={cn("flex items-center justify-center sm:justify-end gap-1.5 text-xs sm:text-sm", activeTheme.dateTextClass)}>
+                  <CalendarDays className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0", activeTheme.dateIconClass)} />
+                  <span>{formattedDate}</span>
                 </p>
               </div>
             </div>
 
             {/* Selected Items grouped by category */}
-            <section className="space-y-8 flex-1">
+            <section className="space-y-6 sm:space-y-8 flex-1 w-full min-w-0">
               {Object.keys(groupedItems).length > 0 ? (
                 Object.entries(groupedItems).map(([categoryName, items]) => (
-                  <div key={categoryName}>
+                  <div key={categoryName} className="w-full min-w-0">
                     {/* Themed category header with refined border-bottom */}
-                    <h3 className={cn("text-lg sm:text-xl pb-2.5 mb-5 transition-colors", activeTheme.categoryTitleClass, activeTheme.categoryBorderClass)}>
+                    <h3 className={cn("text-base sm:text-xl pb-2 sm:pb-2.5 mb-4 sm:mb-5 transition-colors", activeTheme.categoryTitleClass, activeTheme.categoryBorderClass)}>
                       {translateText(decodeHtmlEntities(categoryName))}
                     </h3>
 
                     {/* 2-column food items grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 lg:gap-x-12 gap-y-4 sm:gap-y-6 w-full min-w-0">
                       {items.map((item, index) => {
                         const itemKey = `${item.id || item.name}-${index}`;
                         const isExpanded = !!expandedVariations[itemKey];
                         const hasSubItems = item.subItems && item.subItems.length > 0;
 
                         return (
-                          <div key={itemKey} className="space-y-1">
-                            <div className="flex justify-between items-baseline gap-4">
-                              <h4 className={cn("text-base", activeTheme.itemNameClass)}>
+                          <div key={itemKey} className="space-y-1 min-w-0">
+                            <div className="flex justify-between items-start gap-3 min-w-0">
+                              <h4 className={cn("text-sm sm:text-base font-bold flex-1 min-w-0 break-words", activeTheme.itemNameClass)}>
                                 {translateText(decodeHtmlEntities(item.name))}
                               </h4>
                               {item.price > 0 && (
-                                <p className={cn("shrink-0", activeTheme.itemPriceClass)}>
+                                <p className={cn("shrink-0 font-bold text-sm sm:text-base", activeTheme.itemPriceClass)}>
                                   {currencySymbol}{item.price.toLocaleString()}
                                 </p>
                               )}
                             </div>
 
                             {item.description && (
-                              <p className={cn("text-xs sm:text-sm leading-relaxed", activeTheme.itemDescClass)}>
+                              <p className={cn("text-xs sm:text-sm leading-relaxed break-words", activeTheme.itemDescClass)}>
                                 {translateText(decodeHtmlEntities(item.description))}
                               </p>
                             )}
@@ -518,15 +518,15 @@ export function DraftShareDialog({
                             )}
 
                             {hasSubItems && isExpanded && (
-                              <div className={cn("mt-2 pl-3 p-2.5 rounded-lg space-y-1.5 transition-all", activeTheme.variationBoxClass)}>
+                              <div className={cn("mt-2 pl-3 p-2.5 rounded-lg space-y-1.5 transition-all min-w-0", activeTheme.variationBoxClass)}>
                                 {item.subItems!.map((sub, sIdx) => (
                                   <div
                                     key={sub.id || sIdx}
-                                    className={cn("flex justify-between items-baseline text-xs p-1.5 rounded-md", activeTheme.variationSubItemClass)}
+                                    className={cn("flex justify-between items-center text-xs p-1.5 rounded-md gap-2 min-w-0", activeTheme.variationSubItemClass)}
                                   >
-                                    <p className="font-medium">{translateText(decodeHtmlEntities(sub.name))}</p>
+                                    <p className="font-medium flex-1 min-w-0 break-words">{translateText(decodeHtmlEntities(sub.name))}</p>
                                     {typeof sub.price === 'number' && sub.price > 0 && (
-                                      <p className={activeTheme.variationPriceClass}>
+                                      <p className={cn("shrink-0 font-bold", activeTheme.variationPriceClass)}>
                                         +{currencySymbol}{sub.price.toLocaleString()}
                                       </p>
                                     )}
@@ -548,7 +548,7 @@ export function DraftShareDialog({
             </section>
 
             {/* Footer */}
-            <footer className={cn("text-center text-xs mt-12 pt-8 transition-colors duration-200 ease-in-out", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
+            <footer className={cn("text-center text-xs mt-8 sm:mt-12 pt-6 sm:pt-8 transition-colors duration-200 ease-in-out w-full min-w-0", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
               <p className="font-semibold tracking-wide">
                 Powered by <span className="font-bold">MenuSnap</span>
               </p>

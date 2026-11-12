@@ -28,7 +28,8 @@ import {
   Sparkles,
   FolderOpen,
   Share2,
-  Camera
+  Camera,
+  ShoppingBag,
 } from "lucide-react";
 import { cn, decodeHtmlEntities } from "@/lib/utils";
 import { format, formatDistanceToNowStrict, parseISO, isValid } from 'date-fns';
@@ -37,6 +38,7 @@ import { getCategoriesFromMySql } from '@/app/actions/orders';
 import { usePreferences } from '@/context/PreferencesContext';
 import { DraftShareDialog } from '@/components/menu/draft-share-dialog';
 import { MenuScannerDialog } from '@/components/menu/menu-scanner-dialog';
+import { CustomerOrdersTable } from '@/components/menu/customer-orders-table';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { batchSyncUserDraftsAction, deleteUserDraftAction } from '@/app/actions/user-drafts';
 
@@ -360,8 +362,34 @@ export default function DraftPage(): ReactNode {
   const [selectedDraftForShare, setSelectedDraftForShare] = useState<DraftItem | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const { clientUser } = useClientAuth();
+  const { currencySymbol } = usePreferences();
   const { toast } = useToast();
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'drafts' | 'orders'>('drafts');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'orders') {
+        setActiveTab('orders');
+      }
+    }
+  }, []);
+
+  const handleTabChange = (tab: 'drafts' | 'orders') => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        if (tab === 'orders') {
+          url.searchParams.set('tab', 'orders');
+        } else {
+          url.searchParams.delete('tab');
+        }
+        window.history.replaceState({}, '', url.toString());
+      } catch {}
+    }
+  };
 
   const handleDraftCreated = (newDraft: DraftItem) => {
     setDrafts(prev => [newDraft, ...prev]);
@@ -618,86 +646,133 @@ export default function DraftPage(): ReactNode {
   }, [drafts, searchTerm]);
 
   return (
-    <div className="container mx-auto p-2 sm:p-3 lg:p-4 space-y-4 pb-24 md:pb-10">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden p-2 sm:p-3 lg:p-4 space-y-4 pb-40 md:pb-12">
 
-      {/* Top Header & Actions */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/60 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-border shadow-sm">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search saved drafts by title, dish, or date..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-9 text-xs sm:text-sm bg-background border-border/70 rounded-xl"
-          />
-        </div>
-        <Button
-          onClick={() => setIsScannerOpen(true)}
-          className="h-9 text-xs sm:text-sm font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-sm shrink-0"
+      {/* Top Section Tab Switcher: Menu Drafts vs Customer QR Orders */}
+      <div className="flex items-center gap-2 border-b border-border/70 pb-2.5 overflow-x-auto scrollbar-none w-full min-w-0 max-w-full">
+        <button
+          type="button"
+          onClick={() => handleTabChange('drafts')}
+          className={cn(
+            "flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0",
+            activeTab === 'drafts'
+              ? "bg-card text-foreground shadow-xs border border-border"
+              : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+          )}
         >
-          <Camera className="w-4 h-4" />
-          Scan Menu Photo
-        </Button>
+          <FolderOpen className="w-4 h-4 text-primary" />
+          <span>Menu Drafts</span>
+          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+            {drafts.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleTabChange('orders')}
+          className={cn(
+            "flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0",
+            activeTab === 'orders'
+              ? "bg-card text-foreground shadow-xs border border-border"
+              : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+          )}
+        >
+          <ShoppingBag className="w-4 h-4 text-emerald-500" />
+          <span>Customer QR Orders</span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+            Live
+          </span>
+        </button>
       </div>
 
-      <main className="space-y-6">
-        {isLoading || isLoadingCategories ? (
-          Array.from({ length: 3 }).map((_, index) => <DraftSkeletonCard key={index} />)
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center text-center py-10 bg-card border border-destructive/50 rounded-lg shadow-md">
-            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
-            <h2 className="text-xl font-semibold text-destructive mb-2">Error Loading Drafts</h2>
-            <p className="text-muted-foreground max-w-md">{error}</p>
+      {activeTab === 'orders' ? (
+        <CustomerOrdersTable
+          clientId={clientUser?.id}
+          businessName={clientUser?.businessName}
+          currencySymbol={currencySymbol}
+        />
+      ) : (
+        <>
+          {/* Top Header & Actions */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/60 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-border shadow-sm">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search saved drafts by title, dish, or date..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9 text-xs sm:text-sm bg-background border-border/70 rounded-xl"
+              />
+            </div>
+            <Button
+              onClick={() => setIsScannerOpen(true)}
+              className="h-9 text-xs sm:text-sm font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-sm shrink-0"
+            >
+              <Camera className="w-4 h-4" />
+              Scan Menu Photo
+            </Button>
           </div>
-        ) : filteredDrafts.length === 0 ? (
-          <div className="text-center py-12 px-4 bg-card rounded-2xl shadow-sm border border-border space-y-4">
-            <div className="w-16 h-16 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center mx-auto">
-              <Camera className="h-8 w-8" />
-            </div>
-            <div className="space-y-1 max-w-md mx-auto">
-              <p className="text-foreground text-lg font-bold">
-                {searchTerm ? "No drafts match your search." : "No saved drafts yet"}
-              </p>
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                {searchTerm
-                  ? "Try searching for a different dish name or menu type."
-                  : "Upload a photo of your printed menu or price list to instantly create a digital draft."}
-              </p>
-            </div>
-            {!searchTerm && (
-              <div className="flex flex-wrap justify-center gap-2 pt-2">
-                <Button
-                  onClick={() => setIsScannerOpen(true)}
-                  className="h-9 text-xs font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-md"
-                >
-                  <Camera className="w-4 h-4" />
-                  Scan Menu Photo
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => router.push('/magictab')}
-                  className="h-9 text-xs font-semibold rounded-xl"
-                >
-                  Browse Item Database
-                </Button>
+
+          <main className="space-y-6">
+            {isLoading || isLoadingCategories ? (
+              Array.from({ length: 3 }).map((_, index) => <DraftSkeletonCard key={index} />)
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center text-center py-10 bg-card border border-destructive/50 rounded-lg shadow-md">
+                <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+                <h2 className="text-xl font-semibold text-destructive mb-2">Error Loading Drafts</h2>
+                <p className="text-muted-foreground max-w-md">{error}</p>
               </div>
+            ) : filteredDrafts.length === 0 ? (
+              <div className="text-center py-12 px-4 bg-card rounded-2xl shadow-sm border border-border space-y-4">
+                <div className="w-16 h-16 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center mx-auto">
+                  <Camera className="h-8 w-8" />
+                </div>
+                <div className="space-y-1 max-w-md mx-auto">
+                  <p className="text-foreground text-lg font-bold">
+                    {searchTerm ? "No drafts match your search." : "No saved drafts yet"}
+                  </p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    {searchTerm
+                      ? "Try searching for a different dish name or menu type."
+                      : "Upload a photo of your printed menu or price list to instantly create a digital draft."}
+                  </p>
+                </div>
+                {!searchTerm && (
+                  <div className="flex flex-wrap justify-center gap-2 pt-2">
+                    <Button
+                      onClick={() => setIsScannerOpen(true)}
+                      className="h-9 text-xs font-bold gap-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl shadow-md"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Scan Menu Photo
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push('/magictab')}
+                      className="h-9 text-xs font-semibold rounded-xl"
+                    >
+                      Browse Item Database
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              filteredDrafts.map(draft => (
+                <DraftCard
+                  key={draft.id}
+                  draft={draft}
+                  isExpanded={!!expandedDrafts[draft.id]}
+                  onRestore={handleRestoreDraft}
+                  onDelete={handleDeleteDraft}
+                  onToggleExpand={handleToggleExpand}
+                  masterCategoryList={masterCategoryList}
+                  onShare={handleShareDraft}
+                />
+              ))
             )}
-          </div>
-        ) : (
-          filteredDrafts.map(draft => (
-            <DraftCard
-              key={draft.id}
-              draft={draft}
-              isExpanded={!!expandedDrafts[draft.id]}
-              onRestore={handleRestoreDraft}
-              onDelete={handleDeleteDraft}
-              onToggleExpand={handleToggleExpand}
-              masterCategoryList={masterCategoryList}
-              onShare={handleShareDraft}
-            />
-          ))
-        )}
-      </main>
+          </main>
+        </>
+      )}
 
       <DraftShareDialog
         isOpen={!!selectedDraftForShare}
