@@ -705,7 +705,7 @@ export function DraftShareDialog({
             </section>
 
             {/* Footer */}
-            <footer className={cn("text-center text-xs mt-8 sm:mt-12 pt-6 sm:pt-8 transition-colors duration-200 ease-in-out w-full min-w-0", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
+            <footer className={cn("text-center text-xs mt-8 sm:mt-12 pt-6 sm:pt-8 transition-colors duration-200 ease-in-out w-full min-w-0 mt-auto", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
               <p className="font-semibold tracking-wide">
                 Powered by <span className="font-bold">MenuSnap</span>
               </p>

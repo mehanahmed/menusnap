@@ -267,3 +267,60 @@ export async function deleteCustomerOrderAction(
   }
 }
 
+/**
+ * Retrieves a single customer order by orderId for the public verification receipt
+ */
+export async function getCustomerOrderByIdAction(
+  orderId: string
+): Promise<{ success: boolean; order?: CustomerOrderRecord; error?: string }> {
+  try {
+    await ensureCustomerOrdersSchema();
+    const cleanId = String(orderId || '').trim().replace(/\/+$/, '');
+    if (!cleanId) return { success: false, error: 'Order ID is required' };
+
+    const [rows]: any = await pool.execute(
+      `SELECT id, order_id, client_id, business_name, draft_id, customer_name, customer_phone, 
+              table_number, special_note, items_json, total_amount, status,
+              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at
+       FROM customer_orders
+       WHERE order_id = ?
+       LIMIT 1`,
+      [cleanId]
+    );
+
+    if (!rows || rows.length === 0) {
+      return { success: false, error: 'Order not found' };
+    }
+
+    const row = rows[0];
+    let items: CustomerOrderItem[] = [];
+    try {
+      items = typeof row.items_json === 'string' ? JSON.parse(row.items_json) : (row.items_json || []);
+    } catch {
+      items = [];
+    }
+
+    return {
+      success: true,
+      order: {
+        id: row.id,
+        orderId: row.order_id,
+        clientId: row.client_id,
+        businessName: row.business_name,
+        draftId: row.draft_id,
+        customerName: row.customer_name,
+        customerPhone: row.customer_phone,
+        tableNumber: row.table_number,
+        specialNote: row.special_note,
+        items,
+        totalAmount: Number(row.total_amount) || 0,
+        status: (row.status || 'pending').toLowerCase() as any,
+        createdAt: row.created_at,
+      },
+    };
+  } catch (error: any) {
+    console.error('Error in getCustomerOrderByIdAction:', error);
+    return { success: false, error: error.message || 'Failed to fetch order' };
+  }
+}
+

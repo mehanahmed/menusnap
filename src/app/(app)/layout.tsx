@@ -190,7 +190,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           )}
         </SidebarInset>
 
-        {pathname !== "/dashboard" && pathname !== "/dashboard/" && pathname !== "/magictab" && pathname !== "/magictab/" && pathname !== "/templates" && pathname !== "/templates/" && pathname !== "/draft" && pathname !== "/draft/" && !pathname.startsWith("/customer-orders") && pathname !== "/ebook" && pathname !== "/ebook/" && pathname !== "/order-history" && pathname !== "/order-history/" && !pathname.startsWith("/happy-clients") && !pathname.startsWith("/success") && <div className="print:hidden"><SpeedDialFAB /></div>}
+        {pathname !== "/dashboard" && pathname !== "/dashboard/" && pathname !== "/magictab" && pathname !== "/magictab/" && pathname !== "/templates" && pathname !== "/templates/" && pathname !== "/draft" && pathname !== "/draft/" && !pathname.startsWith("/customer-orders") && !pathname.startsWith("/hrm") && pathname !== "/ebook" && pathname !== "/ebook/" && pathname !== "/order-history" && pathname !== "/order-history/" && !pathname.startsWith("/happy-clients") && !pathname.startsWith("/success") && <div className="print:hidden"><SpeedDialFAB /></div>}
         {pathname !== "/ebook" && pathname !== "/ebook/" && <div className="print:hidden"><BottomNavigation /></div>}
 
       </SidebarProvider>

@@ -131,7 +131,9 @@ export function HeroSection({
           transition={{ duration: 0.45, delay: 0.12 }}
           className="text-3xl sm:text-5xl md:text-6xl lg:text-[62px] font-extrabold text-[#111827] font-bengali tracking-tight leading-[1.2] sm:leading-[1.18] mb-5 text-center max-w-4xl mx-auto"
         >
-          আপনার <span className="text-[#FF5A36]">Restaurant</span>-এর Menu বানানো এখন অনেক সহজ।
+          আপনার <span className="text-[#FF5A36]">Menu</span> থেকে Order
+          <br />
+          Management সব এক জায়গায়।
         </motion.h1>
 
         {/* 4. Subtitle */}
@@ -139,9 +141,9 @@ export function HeroSection({
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.18 }}
-          className="text-sm sm:text-base md:text-[17px] text-neutral-600 font-bengali max-w-2xl sm:max-w-3xl mx-auto text-center font-normal leading-relaxed sm:leading-[1.7] mb-8"
+          className="text-sm sm:text-base md:text-[17px] text-neutral-600 font-bengali max-w-3xl lg:max-w-4xl mx-auto text-center font-normal leading-relaxed sm:leading-[1.7] mb-8"
         >
-          বাংলাদেশের 5,000+ Restaurant & Parlor-এর Menu Reference Explore করুন, হাজারো Food Item Search করুন, Price সম্পর্কে ধারণা নিন এবং নিজের Restaurant-এর Complete Menu List তৈরি করুন।
+          ৫০০+ রেস্টুরেন্ট ও পার্লারের মেনু রেফারেন্স থেকে সহজেই তৈরি করুন আপনার প্রতিষ্ঠানের প্রফেশনাল মেনু। প্রতিটি আইটেমের Cost ও Pricing হিসাব করুন, Digital QR Menu-এর মাধ্যমে সরাসরি WhatsApp-এ অর্ডার গ্রহণ করুন। পাশাপাশি দৈনন্দিন Accounts Management, লোকেশনভিত্তিক Staff Attendance এবং প্রতিষ্ঠানের সম্পূর্ণ হিসাব-নিকাশ পরিচালনা করুন সবকিছু এক প্ল্যাটফর্মে।
         </motion.p>
 
         {/* 5. Action Buttons */}

@@ -24,6 +24,7 @@ import {
   Zap,
   ShieldCheck,
   Calculator,
+  Users,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import {
@@ -40,16 +41,15 @@ import { usePreferences } from '@/context/PreferencesContext';
 
 const mainNavItems: { href: string, label: string, icon: React.ElementType, hasChevron?: boolean, isLive?: boolean }[] = [
   { href: '/magictab/', label: 'MagicTab', icon: ListOrdered, hasChevron: true },
-  { href: '/templates/', label: 'Templates', icon: Layers, hasChevron: true },
+  { href: '/templates/', label: 'Template Library', icon: Layers, hasChevron: true },
   { href: '/draft/', label: 'Draft', icon: FileEdit, hasChevron: true },
   { href: '/customer-orders/', label: 'Customer Orders', icon: UtensilsCrossed, hasChevron: true, isLive: true },
+  { href: '/hrm/', label: 'HRM', icon: Users, hasChevron: true },
   { href: '/magic-calculation/', label: 'Magic Calculation', icon: Calculator, hasChevron: true },
   { href: '/order-history/', label: 'Order History', icon: HistoryIcon, hasChevron: true },
   { href: '/happy-clients/', label: 'Happy Clients', icon: HeartHandshake, hasChevron: true },
   { href: 'https://store.colorhutbd.xyz', label: 'Store', icon: ShoppingBag },
-];
-
-export function SidebarNav() {
+];export function SidebarNav() {
   const pathname = usePathname();
   const { clientUser, logout, clientLoading, isSubscriber, currentPackage, isAdmin } = useClientAuth();
   const { t } = usePreferences();
@@ -57,9 +57,10 @@ export function SidebarNav() {
   const getNavLabel = (href: string, fallback: string) => {
     switch (href) {
       case '/magictab/': return t('magictab', fallback);
-      case '/templates/': return t('templates', fallback);
+      case '/templates/': return 'Template Library';
       case '/draft/': return t('draft', fallback);
       case '/customer-orders/': return 'Customer Orders';
+      case '/hrm/': return 'HRM';
       case '/magic-calculation/': return t('magicCalc', fallback);
       case '/order-history/': return t('orderHistory', fallback);
       case '/happy-clients/': return t('happyClients', fallback);

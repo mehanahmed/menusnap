@@ -76,20 +76,20 @@ export const MENU_SHEET_THEMES: MenuSheetTheme[] = [
   },
   {
     id: 'vintage',
-    name: 'Royal Vintage',
-    shortName: 'Royal Vintage',
-    badgeLabel: 'Designer Frame',
-    paperColorName: 'Ornate Filigree Cream',
-    description: 'Authentic warm ivory canvas with designer vintage corner filigrees and royal wine typography.',
-    swatchColor: '#5C3A21',
+    name: 'Royal Wine',
+    shortName: 'Royal Wine',
+    badgeLabel: 'A4 Designer Frame',
+    paperColorName: 'Ornate Filigree Cream (A4)',
+    description: 'Authentic A4 vintage canvas with designer ornate filigree border and royal wine typography.',
+    swatchColor: '#881337',
     accentColor: '#881337',
     isDark: false,
     sheetWrapperClass: 'bg-[#EDE4D8]',
-    sheetCardClass: 'bg-[#FDF8ED] text-[#2C1810] border border-[#DFCFC0] shadow-[0_15px_45px_rgba(92,58,33,0.08)] max-w-[820px] min-h-[400px] sm:min-h-[600px] flex flex-col justify-between px-4 sm:px-14 md:px-16 py-6 sm:py-14 md:py-16',
+    sheetCardClass: 'bg-[#FDF8ED] text-[#2C1810] border border-[#DFCFC0] shadow-[0_15px_45px_rgba(92,58,33,0.1)] w-full max-w-[794px] min-h-[680px] sm:min-h-[1000px] md:min-h-[1123px] flex flex-col justify-start px-6 sm:px-12 md:px-16 pt-8 sm:pt-14 md:pt-16 pb-8 sm:pb-12 rounded-2xl print:w-[210mm] print:min-h-[297mm] print:max-w-none print:shadow-none print:border-none print:m-0',
     watermarkStyle: {
       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3e%3ctext x='50%25' y='50%25' font-family='Arial, sans-serif' font-size='24' fill='rgba(136,19,55,0.045)' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30, 150, 100)'%3eCOLOR HUT%3c/text%3e%3c/svg%3e"), url('/templates/royal-vintage-bg.jpeg')`,
       backgroundSize: '300px 200px, 100% 100%',
-      backgroundPosition: '0 0, center',
+      backgroundPosition: '0 0, center top',
       backgroundRepeat: 'repeat, no-repeat',
     },
     logoBoxClass: 'bg-[#2B0813] shadow-[inset_0_0_20px_rgba(244,63,94,0.15)] border border-[#881337]/40',
@@ -241,14 +241,14 @@ export const MENU_SHEET_THEMES: MenuSheetTheme[] = [
     id: 'custom',
     name: 'Custom Design',
     shortName: 'Custom Design',
-    badgeLabel: 'Your Image',
-    paperColorName: 'Custom Background Canvas',
-    description: 'Upload your own background flyer image and pick matching text shades.',
+    badgeLabel: 'A4 Custom Image',
+    paperColorName: 'Custom Background Canvas (A4)',
+    description: 'Upload your own A4 background flyer image and pick matching text shades.',
     swatchColor: '#6366F1',
     accentColor: '#4F46E5',
     isDark: false,
     sheetWrapperClass: 'bg-[#181920]',
-    sheetCardClass: 'bg-[#FDF8ED] text-[#0F172A] border border-border/60 shadow-2xl max-w-[820px] aspect-[1566/2430] min-h-[750px] sm:min-h-[1050px] md:min-h-[1240px] flex flex-col justify-between px-8 sm:px-14 md:px-16 py-10 sm:py-14 md:py-16',
+    sheetCardClass: 'bg-[#FDF8ED] text-[#0F172A] border border-border/60 shadow-2xl w-full max-w-[794px] min-h-[680px] sm:min-h-[1000px] md:min-h-[1123px] flex flex-col justify-start px-6 sm:px-12 md:px-16 pt-8 sm:pt-14 md:pt-16 pb-8 sm:pb-12 rounded-2xl print:w-[210mm] print:min-h-[297mm] print:max-w-none print:shadow-none print:border-none print:m-0',
     watermarkStyle: {
       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3e%3ctext x='50%25' y='50%25' font-family='Arial, sans-serif' font-size='24' fill='rgba(0,0,0,0.035)' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30, 150, 100)'%3eCOLOR HUT%3c/text%3e%3c/svg%3e")`,
     },
@@ -313,7 +313,7 @@ export function buildCustomMenuSheetTheme(config?: CustomThemeConfig | null): Me
     ? {
         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'%3e%3ctext x='50%25' y='50%25' font-family='Arial, sans-serif' font-size='24' fill='rgba(0,0,0,0.035)' text-anchor='middle' dominant-baseline='middle' transform='rotate(-30, 150, 100)'%3eCOLOR HUT%3c/text%3e%3c/svg%3e"), url('${config!.bgImageUrl}')`,
         backgroundSize: '300px 200px, 100% 100%',
-        backgroundPosition: '0 0, center',
+        backgroundPosition: '0 0, center top',
         backgroundRepeat: 'repeat, no-repeat',
       }
     : {
@@ -441,8 +441,8 @@ export function buildCustomMenuSheetTheme(config?: CustomThemeConfig | null): Me
     ...shadeOverrides,
     sheetWrapperClass: hasBgImage ? 'bg-[#121316]' : 'bg-[#F1F3F7]',
     sheetCardClass: hasBgImage
-      ? 'bg-[#FDF8ED] text-[#0F172A] border border-border/60 shadow-2xl max-w-[820px] min-h-[400px] sm:min-h-[600px] flex flex-col justify-between px-4 sm:px-14 md:px-16 py-6 sm:py-14 md:py-16'
-      : 'bg-white dark:bg-slate-900 text-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 min-h-[350px] sm:min-h-[500px] max-w-[820px] flex flex-col justify-between p-4 sm:p-12 rounded-2xl relative shadow-md',
+      ? 'bg-[#FDF8ED] text-[#0F172A] border border-border/60 shadow-2xl w-full max-w-[794px] min-h-[680px] sm:min-h-[1000px] md:min-h-[1123px] flex flex-col justify-start px-6 sm:px-12 md:px-16 pt-8 sm:pt-14 md:pt-16 pb-8 sm:pb-12 rounded-2xl print:w-[210mm] print:min-h-[297mm] print:max-w-none print:shadow-none print:border-none print:m-0'
+      : 'bg-white dark:bg-slate-900 text-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 w-full max-w-[794px] min-h-[680px] sm:min-h-[1000px] md:min-h-[1123px] flex flex-col justify-start px-6 sm:px-12 md:px-16 pt-8 sm:pt-14 md:pt-16 pb-8 sm:pb-12 rounded-2xl relative shadow-md print:w-[210mm] print:min-h-[297mm] print:max-w-none print:shadow-none print:border-none print:m-0',
     watermarkStyle,
   };
 }

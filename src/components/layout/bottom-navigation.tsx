@@ -96,7 +96,7 @@ export function BottomNavigation() {
   const moreMenuItems = [
     {
       href: '/templates/',
-      label: 'Templates',
+      label: 'Template Library',
       translationKey: 'templates',
       icon: Layers,
       description: 'Explore and switch digital menu designs',

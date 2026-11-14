@@ -2,6 +2,8 @@ import React from "react";
 import { Navbar } from "@/components/landingv2/navbar";
 import { HeroSection } from "@/components/landingv2/hero-section";
 import { StatsStrip } from "@/components/landingv2/stats-strip";
+import { FeatureCarouselSection } from "@/components/landingv2/feature-carousel-section";
+import { ProblemSection } from "@/components/landingv2/problem-section";
 import { HowItWorksSection } from "@/components/landingv2/how-it-works-section";
 import { Pricing } from "@/components/landing/Pricing";
 import { FAQSection } from "@/components/landingv2/faq-section";
@@ -10,10 +12,15 @@ import { Footer } from "@/components/landingv2/footer";
 import { StickyMobileCTA } from "@/components/landingv2/sticky-mobile-cta";
 import { FAQS } from "@/lib/data";
 import { getPublicPricingPackagesAction } from "@/app/actions/packages";
+import { getPublicFeatureSlidesAction } from "@/app/actions/landing-slides";
 
 export default async function HomePage() {
-  const packagesRes = await getPublicPricingPackagesAction();
+  const [packagesRes, slidesRes] = await Promise.all([
+    getPublicPricingPackagesAction(),
+    getPublicFeatureSlidesAction(),
+  ]);
   const packages = packagesRes.success && packagesRes.data ? packagesRes.data : [];
+  const slides = slidesRes.success && slidesRes.data ? slidesRes.data : [];
   const minPrice = packages.length > 0 ? Math.min(...packages.map((p) => p.price)) : 499;
 
   const softwareJsonLd = {
@@ -61,6 +68,12 @@ export default async function HomePage() {
 
         {/* 2. Fast Proof Metrics Strip */}
         <StatsStrip />
+
+        {/* 2.2. Interactive Feature Carousel (Managed from Admin) */}
+        <FeatureCarouselSection initialSlides={slides} />
+
+        {/* 2.5. Problem vs Solution Section */}
+        {/* <ProblemSection /> */}
 
         {/* 3. 3-Step Guided Workflow */}
         <HowItWorksSection />

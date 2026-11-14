@@ -28,6 +28,7 @@ import {
   Users,
   BookOpen,
   BookmarkCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
@@ -71,6 +72,7 @@ const accountNavItems: NavItem[] = [
   { href: '/m-admin/summernote-docs', label: 'Docs Editor', icon: FileText },
   { href: '/m-admin/client-gallery', label: "Client Gallery", icon: ImageIcon },
   { href: '/m-admin/testimonials', label: 'Testimonials', icon: HeartHandshake },
+  { href: '/m-admin/feature-slides', label: 'Feature Slides', icon: SlidersHorizontal },
 ];
 
 export function AdminSidebarNav() {

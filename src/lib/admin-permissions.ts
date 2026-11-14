@@ -25,6 +25,7 @@ export function getPermissionKey(pathname: string): string {
   if (cleanPath.startsWith('/m-admin/menusnap-users')) return 'menusnap-users';
   if (cleanPath.startsWith('/m-admin/free-guides')) return 'free-guides';
   if (cleanPath.startsWith('/m-admin/packages') || cleanPath.startsWith('/m-admin/manage-packages')) return 'packages';
+  if (cleanPath.startsWith('/m-admin/feature-slides')) return 'feature-slides';
   return '';
 }
 
@@ -64,6 +65,7 @@ export function checkClientPermission(
       'magic-docs': ['view', 'create', 'edit', 'delete'],
       'summernote-docs': ['view', 'create', 'edit', 'delete'],
       'testimonials': ['view', 'create', 'edit', 'delete'],
+      'feature-slides': ['view', 'create', 'edit', 'delete'],
       'client-gallery': ['view', 'create', 'edit', 'delete'],
       'settings': [],
       'manage-users': [],

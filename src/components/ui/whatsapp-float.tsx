@@ -36,6 +36,7 @@ export function WhatsAppFloat({
                            pathname.startsWith('/marketing-consultation') || 
                            pathname.startsWith('/store') || 
                            pathname.startsWith('/profile') || 
+                           pathname.startsWith('/hrm') ||
                            pathname.startsWith('/success');
 
   const isHidden = isDashboardOrApp ||
@@ -43,6 +44,7 @@ export function WhatsAppFloat({
                    pathname === '/login/' || 
                    pathname.startsWith('/m-admin') || 
                    pathname.startsWith('/panel') ||
+                   pathname.startsWith('/order-receipt') ||
                    pathname.startsWith('/free-design');
 
   if (isHidden) return null;

@@ -24,9 +24,10 @@ import {
   BookmarkCheck,
   AlertTriangle,
   UtensilsCrossed,
+  Phone,
 } from 'lucide-react';
 import { decodeHtmlEntities, cn } from '@/lib/utils';
-import { getUserDraftByIdAction } from '@/app/actions/user-drafts';
+import { getUserDraftByIdAction, updateDraftWhatsappNumberAction } from '@/app/actions/user-drafts';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useActiveSavedDraft } from '@/hooks/use-active-saved-draft';
@@ -113,22 +114,85 @@ function DraftQrContent() {
     [selectedThemeId]
   );
 
+  // Auto-detect business type from clientUser or draft data
+  const isParlour = useMemo(() => {
+    return (
+      clientUser?.type === 'parlour' ||
+      draft?.primaryTag?.toLowerCase().includes('parlour') ||
+      (draft as any)?.businessType === 'parlour'
+    );
+  }, [clientUser?.type, draft?.primaryTag, (draft as any)?.businessType]);
+
   const businessName = useMemo(() => {
-    return clientUser?.businessName || draft?.name || 'Our Menu';
-  }, [clientUser?.businessName, draft?.name]);
+    if (draft?.businessName && draft.businessName !== 'Anonymous Restaurant') {
+      return draft.businessName;
+    }
+    if (clientUser?.businessName) {
+      return clientUser.businessName;
+    }
+    return draft?.name || (isParlour ? 'Our Parlour' : 'Our Menu');
+  }, [draft?.businessName, clientUser?.businessName, draft?.name, isParlour]);
 
-  // Table number assignment for table-specific QR stands
+  // Table number assignment for table-specific QR stands (restaurant only)
   const [tableNumber, setTableNumber] = useState<string>('');
+  const [whatsappNumber, setWhatsappNumber] = useState<string>('');
+  const [isSavingWhatsapp, setIsSavingWhatsapp] = useState(false);
 
-  // Construct the public customer view URL (dynamically includes table parameter when assigned)
+  useEffect(() => {
+    if (isParlour) {
+      setTableNumber('');
+    }
+  }, [isParlour]);
+
+  // Construct the public customer view URL (dynamically includes table parameter & WhatsApp destination)
   const customerMenuUrl = useMemo(() => {
     const origin =
       process.env.NEXT_PUBLIC_APP_URL ||
       (typeof window !== 'undefined' ? window.location.origin : '');
     if (!origin) return '';
-    const base = `${origin}/draft/view/${draftId}?theme=${activeTheme.id}&customer=1`;
-    return tableNumber.trim() ? `${base}&table=${encodeURIComponent(tableNumber.trim())}` : base;
-  }, [draftId, activeTheme.id, tableNumber]);
+    let url = `${origin}/draft/view/${draftId}?theme=${activeTheme.id}&customer=1`;
+    if (!isParlour && tableNumber.trim()) {
+      url += `&table=${encodeURIComponent(tableNumber.trim())}`;
+    }
+    if (whatsappNumber.trim()) {
+      url += `&wa=${encodeURIComponent(whatsappNumber.trim())}`;
+    }
+    return url;
+  }, [draftId, activeTheme.id, tableNumber, isParlour, whatsappNumber]);
+
+  const handleSaveWhatsappNumber = async () => {
+    const clean = whatsappNumber.replace(/\D/g, '').slice(-11);
+    if (clean.length !== 11 || !clean.startsWith('01')) {
+      toast({
+        title: 'Invalid WhatsApp Number',
+        description: 'Please enter a valid 11-digit mobile number starting with 01 (e.g. 017XXXXXXXX).',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsSavingWhatsapp(true);
+    try {
+      const res = await updateDraftWhatsappNumberAction(draftId, clean);
+      if (res.success) {
+        toast({
+          title: 'WhatsApp Number Saved!',
+          description: `Orders placed from this QR code will now be sent to +88${clean}.`,
+        });
+        setWhatsappNumber(clean);
+        if (draft) {
+          setDraft({ ...draft, whatsappNumber: clean } as any);
+        }
+      } else {
+        toast({
+          title: 'Failed to Save',
+          description: res.error || 'Could not update WhatsApp number.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsSavingWhatsapp(false);
+    }
+  };
 
   // Fetch draft data
   useEffect(() => {
@@ -150,18 +214,29 @@ function DraftQrContent() {
         const dbRes = await getUserDraftByIdAction(String(draftId));
         if (dbRes.success && dbRes.draft) {
           const dbDraft = dbRes.draft;
+          const phone = dbDraft.whatsappNumber || clientUser?.whatsappNumber || '';
+          if (phone) {
+            setWhatsappNumber(phone.replace(/\D/g, '').slice(-11));
+          }
           if (!found) {
             found = {
               id: dbDraft.draftId,
               name: dbDraft.draftName,
               createdAt: dbDraft.createdAt,
               itemCount: dbDraft.itemCount || dbDraft.items.length,
-              primaryTag: dbDraft.primaryTag || 'restaurant',
+              primaryTag: dbDraft.primaryTag || (dbDraft.businessType === 'parlour' ? 'parlour' : 'restaurant'),
               items: dbDraft.items as any,
               isSaved: Boolean(dbDraft.isSaved),
-            };
+              businessType: dbDraft.businessType,
+              whatsappNumber: phone,
+              businessName: dbDraft.businessName || '',
+            } as any;
           } else {
             found.isSaved = Boolean(dbDraft.isSaved);
+            (found as any).businessType = dbDraft.businessType;
+            if (dbDraft.primaryTag) found.primaryTag = dbDraft.primaryTag;
+            (found as any).whatsappNumber = phone;
+            if (dbDraft.businessName) (found as any).businessName = dbDraft.businessName;
           }
         }
 
@@ -542,7 +617,7 @@ function DraftQrContent() {
 
         {/* Content Area */}
         <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 print-main-root">
-          {/* Theme Selector (Hidden during print) */}
+          {/* Customer Menu Theme Selector (Hidden during print) */}
           <div className="no-print mb-6 sm:mb-8 bg-card border border-border/80 p-2.5 sm:p-3 rounded-2xl shadow-xs">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground px-1 shrink-0">
@@ -629,8 +704,8 @@ function DraftQrContent() {
                   {decodeHtmlEntities(businessName)}
                 </h2>
 
-                {/* Table Badge on Stand (if selected) or Subtitle */}
-                {tableNumber.trim() ? (
+                {/* Table Badge on Stand (if selected and restaurant) or Subtitle */}
+                {!isParlour && tableNumber.trim() ? (
                   <div
                     className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full mb-4 mt-1 shadow-xs border"
                     style={{
@@ -646,7 +721,7 @@ function DraftQrContent() {
                   </div>
                 ) : (
                   <p className="text-xs sm:text-sm font-semibold opacity-75 mb-5">
-                    Digital Menu & Pricing
+                    {isParlour ? 'Salon Services & Pricing' : 'Digital Menu & Pricing'}
                   </p>
                 )}
 
@@ -684,80 +759,141 @@ function DraftQrContent() {
 
             {/* Right Side: Setup Controls & Instructions (Hidden during print) */}
             <div className="no-print lg:col-span-5 space-y-4 lg:sticky lg:top-20">
-              {/* Table Assignment Controller Card */}
-              <div className="bg-card border border-border p-4 sm:p-5 rounded-2xl shadow-xs space-y-3.5">
+              {/* Order Receiving WhatsApp Card */}
+              <div className="bg-card border border-border p-4 sm:p-5 rounded-2xl shadow-xs space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <UtensilsCrossed className="w-4 h-4" />
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <Phone className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-foreground">Table Assignment</h3>
-                      <p className="text-[11px] text-muted-foreground">Pre-assign a table to this QR stand</p>
+                      <h3 className="text-sm font-bold text-foreground">Order WhatsApp Number</h3>
+                      <p className="text-[11px] text-muted-foreground">Orders from this QR stand go to this number</p>
                     </div>
                   </div>
-                  {tableNumber.trim() && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setTableNumber('')}
-                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
-                    >
-                      Reset
-                    </Button>
+                  {whatsappNumber.length === 11 && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
+                      Linked
+                    </span>
                   )}
                 </div>
 
-                {/* Quick Table Presets */}
                 <div className="space-y-1.5">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                    Quick Table Presets
-                  </span>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].map((num) => {
-                      const isSelected = tableNumber.trim() === num;
-                      return (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => setTableNumber(isSelected ? '' : num)}
-                          className={cn(
-                            "h-7 rounded-lg text-xs font-bold transition-all border",
-                            isSelected
-                              ? "bg-primary text-primary-foreground border-primary shadow-xs ring-2 ring-primary/20 scale-105"
-                              : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border-border/80"
-                          )}
-                        >
-                          T-{num}
-                        </button>
-                      );
-                    })}
+                  <div className="flex rounded-xl border border-input bg-background focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary overflow-hidden h-9 transition-all">
+                    <span className="inline-flex items-center px-3 bg-muted/70 text-foreground font-mono font-bold text-xs border-r border-input select-none">
+                      +88
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={whatsappNumber}
+                      onChange={(e) => setWhatsappNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      placeholder="01XXXXXXXXX"
+                      maxLength={11}
+                      className="flex-1 bg-transparent px-3 text-xs outline-none font-mono text-foreground placeholder:text-muted-foreground/50 h-full"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveWhatsappNumber}
+                      disabled={isSavingWhatsapp}
+                      className="px-3.5 bg-primary text-primary-foreground font-semibold text-xs hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSavingWhatsapp ? 'Saving...' : 'Save'}
+                    </button>
                   </div>
-                </div>
 
-                {/* Custom Input */}
-                <div className="space-y-1 pt-1 border-t border-border/40">
-                  <label className="text-[11px] font-medium text-muted-foreground block">
-                    Custom Table Name / Zone
-                  </label>
-                  <Input
-                    value={tableNumber}
-                    onChange={(e) => setTableNumber(e.target.value)}
-                    placeholder="e.g. 4B, VIP-1, Terrace 2"
-                    className="h-8 text-xs rounded-lg"
-                  />
-                  <p className="text-[10px] text-muted-foreground leading-tight pt-0.5">
-                    {tableNumber.trim() ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <p className="text-[10px] leading-tight">
+                    {whatsappNumber.length === 11 ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3 shrink-0" />
-                        Encoded for Table {tableNumber.trim()} — customers won&apos;t have to enter their table!
+                        Linked to +88{whatsappNumber}. Scanning this QR sends orders directly here.
                       </span>
                     ) : (
-                      'Leave empty for a general stand (customers enter table number at checkout).'
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        Enter an 11-digit WhatsApp number to receive orders from this QR stand.
+                      </span>
                     )}
                   </p>
                 </div>
               </div>
+
+              {/* Table Assignment Controller Card (Only for Restaurant, hidden for Parlour) */}
+              {!isParlour && (
+                <div className="bg-card border border-border p-4 sm:p-5 rounded-2xl shadow-xs space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <UtensilsCrossed className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-foreground">Table Assignment</h3>
+                        <p className="text-[11px] text-muted-foreground">Pre-assign a table to this QR stand</p>
+                      </div>
+                    </div>
+                    {tableNumber.trim() && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setTableNumber('')}
+                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        Reset
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Quick Table Presets */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                      Quick Table Presets
+                    </span>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].map((num) => {
+                        const isSelected = tableNumber.trim() === num;
+                        return (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => setTableNumber(isSelected ? '' : num)}
+                            className={cn(
+                              "h-7 rounded-lg text-xs font-bold transition-all border",
+                              isSelected
+                                ? "bg-primary text-primary-foreground border-primary shadow-xs ring-2 ring-primary/20 scale-105"
+                                : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border-border/80"
+                            )}
+                          >
+                            T-{num}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom Input */}
+                  <div className="space-y-1 pt-1 border-t border-border/40">
+                    <label className="text-[11px] font-medium text-muted-foreground block">
+                      Custom Table Name / Zone
+                    </label>
+                    <Input
+                      value={tableNumber}
+                      onChange={(e) => setTableNumber(e.target.value)}
+                      placeholder="e.g. 4B, VIP-1, Terrace 2"
+                      className="h-8 text-xs rounded-lg"
+                    />
+                    <p className="text-[10px] text-muted-foreground leading-tight pt-0.5">
+                      {tableNumber.trim() ? (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 shrink-0" />
+                          Encoded for Table {tableNumber.trim()} — customers won&apos;t have to enter their table!
+                        </span>
+                      ) : (
+                        'Leave empty for a general stand (customers enter table number at checkout).'
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Action Card */}
               <div className="bg-card border border-border p-5 sm:p-6 rounded-2xl shadow-xs space-y-4">
@@ -765,7 +901,9 @@ function DraftQrContent() {
                   <Sparkles className="w-4 h-4 text-primary" /> Ready to Print or Save
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Use this high-resolution QR card on your restaurant tables, salon reception, billing counters, or acrylic stands.
+                  {isParlour
+                    ? "Use this high-resolution QR card on your salon reception, service counters, mirror stations, or acrylic stands."
+                    : "Use this high-resolution QR card on your restaurant tables, salon reception, billing counters, or acrylic stands."}
                 </p>
 
                 <div className="space-y-2.5 pt-1">

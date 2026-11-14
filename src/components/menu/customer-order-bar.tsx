@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import Link from 'next/link';
 import { 
   ShoppingBag, 
   ArrowRight, 
@@ -14,6 +15,8 @@ import {
   UtensilsCrossed,
   Download,
   Loader2,
+  Receipt,
+  Sparkles,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
@@ -46,6 +49,7 @@ interface CustomerOrderBarProps {
   draftId?: string;
   clientId?: number | null;
   tableNumber?: string;
+  isParlour?: boolean;
   onUpdateQuantity: (key: string, delta: number) => void;
   onRemoveItem: (key: string) => void;
   onClearCart: () => void;
@@ -59,6 +63,7 @@ export function CustomerOrderBar({
   draftId,
   clientId,
   tableNumber: initialTableNumber,
+  isParlour = false,
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
@@ -67,6 +72,24 @@ export function CustomerOrderBar({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [tableNumber, setTableNumber] = useState(initialTableNumber || '');
+  const [savedProfile, setSavedProfile] = useState<{ name: string; phone: string } | null>(null);
+
+  // Load previously saved customer details from localStorage for 1-tap re-order suggestions
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem('menusnap_customer_profile');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.name && parsed?.phone) {
+          const cleanPhone = String(parsed.phone).replace(/\D/g, '').slice(-11);
+          const profile = { name: String(parsed.name).trim(), phone: cleanPhone };
+          setSavedProfile(profile);
+          setCustomerName((prev) => prev || profile.name);
+          setCustomerPhone((prev) => prev || profile.phone);
+        }
+      }
+    } catch {}
+  }, []);
 
   React.useEffect(() => {
     if (initialTableNumber) {
@@ -136,11 +159,22 @@ export function CustomerOrderBar({
     return null;
   }
 
+  const handlePhoneInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let raw = e.target.value.replace(/[^0-9+]/g, '');
+    if (raw.startsWith('+88')) {
+      raw = raw.slice(3);
+    } else if (raw.startsWith('88')) {
+      raw = raw.slice(2);
+    }
+    const digitsOnly = raw.replace(/\D/g, '').slice(0, 11);
+    setCustomerPhone(digitsOnly);
+  };
+
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
 
     const cleanName = customerName.trim();
-    const cleanPhone = customerPhone.trim();
+    const phoneDigits = customerPhone.replace(/\D/g, '');
 
     if (!cleanName) {
       toast({
@@ -151,14 +185,25 @@ export function CustomerOrderBar({
       return;
     }
 
-    if (!cleanPhone || cleanPhone.length < 6) {
+    if (!phoneDigits) {
       toast({
         title: 'Phone Number Required',
-        description: 'Please enter a valid contact number so we can reach you.',
+        description: 'Please enter your 11-digit mobile number.',
         variant: 'destructive',
       });
       return;
     }
+
+    if (phoneDigits.length !== 11 || !phoneDigits.startsWith('01')) {
+      toast({
+        title: 'Invalid Mobile Number',
+        description: 'Please enter a valid 11-digit Bangladeshi mobile number starting with 01 (e.g. 017XXXXXXXX).',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const cleanPhone = `+88${phoneDigits}`;
 
     const cleanTable = (initialTableNumber || tableNumber || '').trim();
     // Generate order ID
@@ -232,6 +277,9 @@ export function CustomerOrderBar({
       ? `📝 *Special Note:* ${specialNote.trim()}\n`
       : '';
 
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://menusnap.colorhutbd.xyz';
+    const receiptUrl = `${origin}/order-receipt/${fakeOrderId}`;
+
     const waText = 
 `🍽️ *NEW ORDER - ${decodeHtmlEntities(businessName || 'Restaurant')}*
 ━━━━━━━━━━━━━━━━━━━━
@@ -244,7 +292,10 @@ ${itemsSummary}
 💰 *Total Bill:* ${currencySymbol}${totalOrderAmount.toLocaleString()}
 ${noteLine}⏰ *Time:* ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
 ━━━━━━━━━━━━━━━━━━━━
-_Sent via MenuSnap Digital Menu_`;
+🔒 *Official Verified Digital Receipt:*
+👉 ${receiptUrl}
+━━━━━━━━━━━━━━━━━━━━
+_Verified by MenuSnap — Prices & items locked in system_`;
 
     const encodedText = encodeURIComponent(waText);
     const waUrl = formattedBusinessWa
@@ -259,6 +310,13 @@ _Sent via MenuSnap Digital Menu_`;
         console.warn('WhatsApp auto-open popup notice:', err);
       }
     }
+
+    // Save customer details to localStorage for future re-order suggestions
+    try {
+      const profileToSave = { name: cleanName, phone: phoneDigits };
+      localStorage.setItem('menusnap_customer_profile', JSON.stringify(profileToSave));
+      setSavedProfile(profileToSave);
+    } catch {}
 
     setOrderSuccessData({
       orderId: fakeOrderId,
@@ -281,8 +339,13 @@ _Sent via MenuSnap Digital Menu_`;
 
   const handleReset = () => {
     setOrderSuccessData(null);
-    setCustomerName('');
-    setCustomerPhone('');
+    if (savedProfile) {
+      setCustomerName(savedProfile.name);
+      setCustomerPhone(savedProfile.phone);
+    } else {
+      setCustomerName('');
+      setCustomerPhone('');
+    }
     setTableNumber(initialTableNumber || '');
     setSpecialNote('');
     setIsModalOpen(false);
@@ -478,7 +541,7 @@ _Sent via MenuSnap Digital Menu_`;
                   </div>
                 </div>
 
-                {/* Actions: Re-open WhatsApp, Download Receipt Image & Reset */}
+                {/* Actions: Re-open WhatsApp, View Verified Receipt, Download Image & Reset */}
                 <div className="space-y-2 pt-1">
                   {orderSuccessData.whatsappUrl && (
                     <a
@@ -491,6 +554,21 @@ _Sent via MenuSnap Digital Menu_`;
                       <span>Send / Re-open WhatsApp Chat</span>
                     </a>
                   )}
+
+                  <Link
+                    href={`/order-receipt/${orderSuccessData.orderId}`}
+                    target="_blank"
+                    className="w-full block"
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-primary/40 text-primary hover:bg-primary hover:text-white font-bold h-10 rounded-xl gap-2 shadow-xs transition-colors"
+                    >
+                      <Receipt className="w-4 h-4" />
+                      <span>View Official Verified Receipt</span>
+                    </Button>
+                  </Link>
 
                   <Button
                     type="button"
@@ -518,8 +596,8 @@ _Sent via MenuSnap Digital Menu_`;
             ) : (
               /* Review & Form View */
               <>
-                {/* Seated Table Card at Top of Modal (Non-editable) */}
-                {tableNumber && (
+                {/* Seated Table Card at Top of Modal (Non-editable, Restaurant only) */}
+                {tableNumber && !isParlour && (
                   <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -540,7 +618,7 @@ _Sent via MenuSnap Digital Menu_`;
                 {/* List of items in cart */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    <span>Selected Dishes ({totalItemsCount})</span>
+                    <span>Selected {isParlour ? 'Services' : 'Dishes'} ({totalItemsCount})</span>
                     <button
                       type="button"
                       onClick={onClearCart}
@@ -615,12 +693,53 @@ _Sent via MenuSnap Digital Menu_`;
 
                 {/* Customer Details Form */}
                 <form onSubmit={handlePlaceOrder} className="space-y-3 pt-2 border-t border-border/60">
+                  {/* Returning Customer Quick-Fill / Suggestion Pill */}
+                  {savedProfile && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span className="truncate text-foreground">
+                          {customerName === savedProfile.name && customerPhone === savedProfile.phone ? (
+                            <span>Auto-filled for <strong>{savedProfile.name}</strong></span>
+                          ) : (
+                            <span>Saved: <strong>{savedProfile.name}</strong> (+88 {savedProfile.phone})</span>
+                          )}
+                        </span>
+                      </div>
+                      {customerName === savedProfile.name && customerPhone === savedProfile.phone ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerName('');
+                            setCustomerPhone('');
+                          }}
+                          className="text-[11px] font-semibold text-muted-foreground hover:text-destructive underline ml-2 shrink-0 cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerName(savedProfile.name);
+                            setCustomerPhone(savedProfile.phone);
+                          }}
+                          className="text-[11px] font-bold text-primary hover:underline ml-2 shrink-0 cursor-pointer"
+                        >
+                          Fill Saved Info
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-primary" /> Your Name *
                     </label>
                     <Input
                       required
+                      name="name"
+                      autoComplete="name"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       placeholder="e.g. Tanvir Ahmed"
@@ -629,21 +748,47 @@ _Sent via MenuSnap Digital Menu_`;
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <Phone className="w-3.5 h-3.5 text-primary" /> Phone / WhatsApp Number *
-                    </label>
-                    <Input
-                      required
-                      type="tel"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="e.g. 017XXXXXXXX"
-                      className="h-9 text-xs rounded-xl"
-                    />
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-primary" /> Phone / WhatsApp Number *
+                      </label>
+                      <span className={`text-[10px] font-mono ${customerPhone.length === 11 ? 'text-emerald-600 font-bold' : 'text-muted-foreground'}`}>
+                        {customerPhone.length}/11
+                      </span>
+                    </div>
+                    <div className="flex rounded-xl border border-input bg-background focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary overflow-hidden h-9 transition-all">
+                      <span className="inline-flex items-center px-3 bg-muted/70 text-foreground font-mono font-bold text-xs border-r border-input select-none">
+                        +88
+                      </span>
+                      <input
+                        required
+                        type="tel"
+                        name="tel"
+                        autoComplete="tel"
+                        inputMode="numeric"
+                        value={customerPhone}
+                        onChange={handlePhoneInputChange}
+                        placeholder="01XXXXXXXXX"
+                        maxLength={11}
+                        className="flex-1 bg-transparent px-3 text-xs outline-none font-mono text-foreground placeholder:text-muted-foreground/50 h-full"
+                      />
+                    </div>
                   </div>
 
-                  {/* If table is fixed from QR stand, no table input at bottom; only full-width special note */}
-                  {tableNumber ? (
+                  {/* If parlour: only special note (no tables). If restaurant with fixed table: special note. Otherwise: table + special note */}
+                  {isParlour ? (
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        Special Note (Optional)
+                      </label>
+                      <Input
+                        value={specialNote}
+                        onChange={(e) => setSpecialNote(e.target.value)}
+                        placeholder="e.g. Preferred time, beautician, or special request"
+                        className="h-9 text-xs rounded-xl"
+                      />
+                    </div>
+                  ) : tableNumber ? (
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">
                         Special Note (Optional)
@@ -691,7 +836,7 @@ _Sent via MenuSnap Digital Menu_`;
                       <span>Place Order via WhatsApp • {currencySymbol}{totalOrderAmount.toLocaleString()}</span>
                     </Button>
                     <p className="text-[10px] text-center text-muted-foreground mt-1.5">
-                      Submits order and opens WhatsApp with pre-filled message for the restaurant
+                      Submits order and opens WhatsApp with pre-filled message for {isParlour ? 'the parlour' : 'the restaurant'}
                     </p>
                   </div>
                 </form>

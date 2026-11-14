@@ -688,3 +688,37 @@ export async function getActiveSavedDraftAction(params?: {
     return { success: false, error: error.message || 'Failed to fetch active saved draft' };
   }
 }
+
+/**
+ * Updates the order-receiving WhatsApp number for a specific draft.
+ */
+export async function updateDraftWhatsappNumberAction(
+  draftId: string,
+  whatsappNumber: string
+): Promise<{ success: boolean; formattedNumber?: string; error?: string }> {
+  try {
+    await ensureUserDraftsSchema();
+    const cleanDigits = whatsappNumber.replace(/\D/g, '').slice(-11);
+    if (cleanDigits.length !== 11 || !cleanDigits.startsWith('01')) {
+      return {
+        success: false,
+        error: 'Please enter a valid 11-digit Bangladeshi mobile number starting with 01.',
+      };
+    }
+
+    await pool.execute(
+      `UPDATE user_drafts SET whatsapp_number = ?, updated_at = CURRENT_TIMESTAMP WHERE draft_id = ? OR CAST(id AS CHAR) = ?`,
+      [cleanDigits, draftId, draftId]
+    );
+
+    try {
+      revalidatePath(`/draft/qr/${draftId}`);
+      revalidatePath(`/draft/view/${draftId}`);
+    } catch (_) {}
+
+    return { success: true, formattedNumber: cleanDigits };
+  } catch (error: any) {
+    console.error('Error in updateDraftWhatsappNumberAction:', error);
+    return { success: false, error: error.message || 'Failed to update WhatsApp number' };
+  }
+}

@@ -11,54 +11,7 @@ import { ProductDemoLaptop } from "./product-demo-laptop";
 export function HowItWorksSection() {
   return (
     <>
-      {/* Infographic Banner: Menu Research & Solution */}
-      <section id="how-it-works" className="pt-2 sm:pt-6 pb-16 sm:pb-24 px-4 sm:px-6 lg:px-8 bg-white border-t border-neutral-100">
-        <div className="max-w-[1240px] mx-auto text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="relative w-full max-w-[1240px] mx-auto"
-          >
-            <Image
-              src="/section.png"
-              alt="MenuSnap - Restaurant Menu Research & Solution"
-              width={1672}
-              height={941}
-              priority
-              className="w-full h-auto object-contain block"
-            />
-          </motion.div>
-
-          {/* Bottom CTA Button (below section.png) */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className="mt-4 sm:mt-6 flex justify-center"
-          >
-            <Link
-              href="#pricing"
-              onClick={(e) => {
-                trackEvent("hero_cta_clicked", { source: "infographic_bottom_cta" });
-                const el = document.getElementById("pricing");
-                if (el) {
-                  e.preventDefault();
-                  el.scrollIntoView({ behavior: "smooth" });
-                  window.history.pushState(null, "", "#pricing");
-                }
-              }}
-              className="inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl bg-gradient-to-b from-[#e0f2fe] via-[#bae6fd] to-[#7dd3fc] border border-sky-300 text-[#0369a1] font-bold text-sm sm:text-base shadow-[0_4px_16px_rgba(56,189,248,0.25)] hover:shadow-[0_6px_22px_rgba(56,189,248,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <span>Start building</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </motion.div>
-        </div>
-      </section>
-
+      <div id="how-it-works" className="scroll-mt-20" />
       {/* Live Interactive Video Walkthrough in Laptop Mockup with Dark Grid Pattern (100% Match) */}
       <section id="demo" className="relative overflow-hidden bg-night text-white py-16 sm:py-24 px-4 sm:px-6 lg:px-8 border-y border-neutral-800">
         {/* Dark Grid Background Pattern */}

@@ -33,13 +33,15 @@ export function middleware(request: NextRequest) {
     needsRewrite = true;
   }
 
-  // 1. Skip system paths, API endpoints, static assets, admin, and docs routes
+  // 1. Skip system paths, API endpoints, static assets, admin, docs, and receipt routes
   if (
     pathname.startsWith('/_next') || 
     pathname.startsWith('/api') || 
     pathname.startsWith('/m-admin') ||
     pathname.startsWith('/panel') ||
     pathname.startsWith('/docs') ||
+    pathname.startsWith('/order-receipt') ||
+    pathname.startsWith('/hrm') ||
     pathname.includes('.') || // Avoid slashing files like favicon.ico, images, etc.
     pathname === '/'          // Root already has a virtual slash or is fine
   ) {

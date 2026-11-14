@@ -46,6 +46,12 @@ function DraftViewContent() {
   const { clientUser } = useClientAuth();
   const { toast } = useToast();
 
+  // Resolve search parameters synchronously during SSR & client render (eliminates hydration mismatches)
+  const urlTheme = searchParams.get('theme');
+  const tableNumber = searchParams.get('table')?.trim() || '';
+  const urlWa = searchParams.get('wa')?.trim() || '';
+  const isCustomerMode = searchParams.get('customer') === '1' || searchParams.get('mode') === 'customer' || searchParams.get('view') === 'public' || Boolean(tableNumber) || Boolean(urlWa);
+
   // Active saved draft verification (only active saved draft can be viewed / ordered from)
   const {
     activeSavedDraftId,
@@ -68,18 +74,26 @@ function DraftViewContent() {
   const resolvedActiveDraftId = activeSavedDraftId || serverActiveDraft?.id || null;
   const resolvedActiveDraftName = activeSavedDraftName || serverActiveDraft?.name || null;
 
+  // Strict tenant boundary: Check if current logged-in browser session actually owns this draft
+  const isDraftOwner = Boolean(clientUser?.id && draft?.clientId && clientUser.id === draft.clientId);
+
   const isCurrentlyActive = useMemo(() => {
-    // 1. If another draft is active in this session or server, this draft is inactive
-    if (resolvedActiveDraftId && resolvedActiveDraftId !== draftId) {
-      return false;
+    // 1. If viewer is the owner reviewing in internal draft mode, enforce single active draft check
+    if (isDraftOwner && !isCustomerMode) {
+      if (resolvedActiveDraftId && resolvedActiveDraftId !== draftId) {
+        return false;
+      }
+      if (isDraftSaved(draftId)) {
+        return true;
+      }
     }
-    // 2. If useActiveSavedDraft says this draft is saved
-    if (isDraftSaved(draftId)) {
+    // 2. In customer mode (QR code scan or public menu link), check MySQL record isSaved status
+    if (draft?.isSaved) {
       return true;
     }
-    // 3. If MySQL draft record itself has isSaved: true
-    return Boolean(draft?.isSaved);
-  }, [resolvedActiveDraftId, draftId, isDraftSaved, draft?.isSaved]);
+    // 3. Fallback for draft owner or when resolvedActiveDraftId matches
+    return Boolean(resolvedActiveDraftId === draftId || isDraftSaved(draftId));
+  }, [isDraftOwner, isCustomerMode, resolvedActiveDraftId, draftId, isDraftSaved, draft?.isSaved]);
 
   const handleUpdateQuantity = (key: string, delta: number) => {
     setCart((prev) => {
@@ -127,11 +141,6 @@ function DraftViewContent() {
   };
 
   const handleClearCart = () => setCart({});
-
-  // Resolve search parameters synchronously during SSR & client render (eliminates hydration mismatches)
-  const urlTheme = searchParams.get('theme');
-  const tableNumber = searchParams.get('table')?.trim() || '';
-  const isCustomerMode = searchParams.get('customer') === '1' || searchParams.get('mode') === 'customer' || searchParams.get('view') === 'public' || Boolean(tableNumber);
 
   // Theme selection state, initialized from URL query param or default
   const [selectedThemeId, setSelectedThemeId] = useState<string>(urlTheme || 'sunset');
@@ -317,6 +326,21 @@ function DraftViewContent() {
     return type === 'restaurant' || type === 'parlour' ? type : 'restaurant';
   }, [draft?.primaryTag]);
 
+  const isParlour = useMemo(() => {
+    const tag = draft?.primaryTag?.toLowerCase() || '';
+    const type = ((draft as any)?.businessType || '').toLowerCase();
+    if (tag.includes('parlour') || type === 'parlour' || tag.includes('salon')) {
+      return true;
+    }
+    if (tag.includes('restaurant') || type === 'restaurant') {
+      return false;
+    }
+    if (isDraftOwner && clientUser?.type) {
+      return clientUser.type === 'parlour';
+    }
+    return false;
+  }, [draft?.primaryTag, (draft as any)?.businessType, isDraftOwner, clientUser?.type]);
+
   const formattedDate = useMemo(() => {
     if (!draft?.createdAt) return format(new Date(), 'MMMM d, yyyy');
     try {
@@ -330,12 +354,29 @@ function DraftViewContent() {
   }, [draft?.createdAt]);
 
   const businessName = useMemo(() => {
-    if (clientUser?.businessName) {
+    // 1. Prioritize draft's own businessName saved in DB
+    if (draft?.businessName && draft.businessName !== 'Anonymous Restaurant') {
+      return draft.businessName;
+    }
+    // 2. Only if the logged-in user is the verified owner of this draft, fallback to clientUser.businessName
+    if (isDraftOwner && clientUser?.businessName) {
       return clientUser.businessName;
     }
-    if (!draft?.name) return 'Customer Selection';
-    return draft.name.replace(/^Draft\s*-\s*/i, '') || draft.name;
-  }, [clientUser?.businessName, draft?.name]);
+    // 3. Fallback to draft.name cleaned
+    if (draft?.name) {
+      return draft.name.replace(/^Draft\s*-\s*/i, '') || draft.name;
+    }
+    return 'Our Menu';
+  }, [draft?.businessName, isDraftOwner, clientUser?.businessName, draft?.name]);
+
+  const resolvedBusinessPhone = useMemo(() => {
+    if (urlWa) return urlWa;
+    if (draft?.whatsappNumber) return draft.whatsappNumber;
+    if (isDraftOwner && clientUser?.whatsappNumber) {
+      return clientUser.whatsappNumber;
+    }
+    return undefined;
+  }, [urlWa, draft?.whatsappNumber, isDraftOwner, clientUser?.whatsappNumber]);
 
   const groupedItems = useMemo(() => {
     if (!draft?.items || draft.items.length === 0) return {};
@@ -898,7 +939,7 @@ function DraftViewContent() {
         </section>
 
         {/* Footer */}
-        <footer className={cn("text-center text-xs mt-12 pt-8 transition-colors duration-200 ease-in-out", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
+        <footer className={cn("text-center text-xs mt-12 pt-8 transition-colors duration-200 ease-in-out mt-auto", activeTheme.footerBorderClass, activeTheme.footerTextClass)}>
           <p className="font-semibold tracking-wide">
             Powered by <span className="font-bold">MenuSnap</span>
           </p>
@@ -912,10 +953,11 @@ function DraftViewContent() {
           cart={cart}
           currencySymbol={currencySymbol}
           businessName={businessName}
-          businessPhone={draft?.whatsappNumber || clientUser?.whatsappNumber || undefined}
+          businessPhone={resolvedBusinessPhone}
           draftId={draft?.id || draftId}
-          clientId={clientUser?.id || draft?.clientId || undefined}
+          clientId={draft?.clientId || (isDraftOwner ? clientUser?.id : undefined)}
           tableNumber={tableNumber || undefined}
+          isParlour={isParlour}
           onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={handleRemoveItem}
           onClearCart={handleClearCart}

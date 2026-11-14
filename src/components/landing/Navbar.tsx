@@ -130,6 +130,7 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
 
   const loggedIn = mounted && !clientLoading && (isClientLoggedIn || isAdminLoggedIn);
   const dashboardHref = isClientLoggedIn ? "/dashboard/" : "/m-admin/";
+  const mobileDashboardHref = isClientLoggedIn ? "/magictab" : "/m-admin/";
 
   /**
    * Resolves href so anchor links work correctly and stay in the respective landing version:
@@ -337,7 +338,7 @@ export function Navbar({ dark = false, theme = "light", landingSource }: NavbarP
               )}
               {loggedIn ? (
                 <Link
-                  href={dashboardHref}
+                  href={mobileDashboardHref}
                   onClick={() => setMobileMenuOpen(false)}
                   className="w-full flex items-center justify-center gap-2 bg-[#FF5A36] text-white text-[14px] font-semibold py-3 rounded-xl shadow-md transition-all active:scale-[0.98]"
                 >

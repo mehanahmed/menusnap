@@ -23,6 +23,7 @@ import {
   AlertCircle,
   MoreHorizontal,
   MoreVertical,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,6 +73,7 @@ interface CustomerOrdersTableProps {
   clientId?: number | null;
   businessName?: string | null;
   currencySymbol?: string;
+  isParlour?: boolean;
 }
 
 const ITEMS_PER_PAGE = 8;
@@ -80,6 +82,7 @@ export function CustomerOrdersTable({
   clientId,
   businessName,
   currencySymbol = '৳',
+  isParlour = false,
 }: CustomerOrdersTableProps) {
   const [orders, setOrders] = useState<CustomerOrderRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -459,7 +462,8 @@ export function CustomerOrdersTable({
       case 'preparing':
         return (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
-            <ChefHat className="w-3.5 h-3.5 shrink-0" /> Preparing
+            {isParlour ? <Sparkles className="w-3.5 h-3.5 shrink-0 text-pink-500" /> : <ChefHat className="w-3.5 h-3.5 shrink-0" />}
+            {isParlour ? 'In Service' : 'Preparing'}
           </span>
         );
       case 'completed':
@@ -516,8 +520,8 @@ export function CustomerOrdersTable({
 
         <div className="bg-card p-2 sm:p-3 rounded-xl border border-border shadow-xs min-w-0 overflow-hidden">
           <p className="text-[10px] sm:text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-between">
-            <span className="truncate">In Kitchen</span>
-            <ChefHat className="w-3.5 h-3.5 shrink-0 ml-1" />
+            <span className="truncate">{isParlour ? 'In Service' : 'In Kitchen'}</span>
+            {isParlour ? <Sparkles className="w-3.5 h-3.5 shrink-0 ml-1 text-pink-500" /> : <ChefHat className="w-3.5 h-3.5 shrink-0 ml-1" />}
           </p>
           <p className="text-lg sm:text-2xl font-black text-blue-600 dark:text-blue-400 mt-0.5 sm:mt-1 truncate">
             {stats.preparing}
@@ -527,7 +531,7 @@ export function CustomerOrdersTable({
         <div className="bg-card p-2 sm:p-3 rounded-xl border border-border shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
           <p className="text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
             <span className="truncate">Revenue</span>
-            <UtensilsCrossed className="w-3.5 h-3.5 shrink-0 ml-1" />
+            {isParlour ? <Sparkles className="w-3.5 h-3.5 shrink-0 ml-1 text-emerald-500" /> : <UtensilsCrossed className="w-3.5 h-3.5 shrink-0 ml-1" />}
           </p>
           <div className="mt-0.5 sm:mt-1 min-w-0">
             <p className="text-lg sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 truncate">
@@ -548,7 +552,7 @@ export function CustomerOrdersTable({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search customer, phone, table..."
+            placeholder={isParlour ? "Search customer, phone, service, note..." : "Search customer, phone, table..."}
             className="pl-9 h-9 text-xs sm:text-sm rounded-xl bg-background border-border/80 w-full"
           />
         </div>
@@ -572,7 +576,7 @@ export function CustomerOrdersTable({
                     : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <span>{st}</span>
+                <span>{st === 'preparing' ? (isParlour ? 'In Service' : 'Preparing') : st}</span>
                 <span className={cn(
                   "text-[10px] font-mono px-1 rounded-full",
                   statusFilter === st ? "bg-white/25 text-white" : "bg-background/80 text-muted-foreground"
@@ -625,7 +629,9 @@ export function CustomerOrdersTable({
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
               {searchQuery || statusFilter !== 'all'
                 ? 'Try clearing your search term or selecting "All" statuses.'
-                : 'When guests scan your digital QR menu and place an order, they will appear here in real time.'}
+                : isParlour
+                  ? 'When clients scan your digital QR card and request services, they will appear here in real time.'
+                  : 'When guests scan your digital QR menu and place an order, they will appear here in real time.'}
             </p>
           </div>
         </div>
@@ -639,8 +645,8 @@ export function CustomerOrdersTable({
                   <tr className="bg-muted/40 border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     <th className="py-3 px-4">Order ID / Time</th>
                     <th className="py-3 px-4">Customer</th>
-                    <th className="py-3 px-4">Table</th>
-                    <th className="py-3 px-4">Dishes</th>
+                    <th className="py-3 px-4">{isParlour ? 'Special Request / Note' : 'Table'}</th>
+                    <th className="py-3 px-4">{isParlour ? 'Services' : 'Dishes'}</th>
                     <th className="py-3 px-4 text-right">Bill</th>
                     <th className="py-3 px-4 text-center">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
@@ -680,9 +686,17 @@ export function CustomerOrdersTable({
                           </a>
                         </td>
 
-                        {/* Table No. */}
-                        <td className="py-3 px-4">
-                          {order.tableNumber ? (
+                        {/* Table No. or Parlour Special Request */}
+                        <td className="py-3 px-4 max-w-[170px]">
+                          {isParlour ? (
+                            order.specialNote ? (
+                              <p className="text-[11px] font-medium text-foreground truncate" title={order.specialNote}>
+                                {decodeHtmlEntities(order.specialNote)}
+                              </p>
+                            ) : (
+                              <span className="text-muted-foreground italic text-[11px]">Standard Booking</span>
+                            )
+                          ) : order.tableNumber ? (
                             <Badge variant="outline" className="font-bold text-[11px] border-border">
                               Table {order.tableNumber}
                             </Badge>
@@ -691,14 +705,14 @@ export function CustomerOrdersTable({
                           )}
                         </td>
 
-                        {/* Dishes Ordered */}
+                        {/* Dishes or Services Ordered */}
                         <td className="py-3 px-4 max-w-xs">
                           <p className="font-medium text-foreground truncate" title={firstItems + remaining}>
-                            {firstItems || 'Items'}
+                            {firstItems || (isParlour ? 'Services' : 'Items')}
                             <span className="text-muted-foreground">{remaining}</span>
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {itemCount} {itemCount === 1 ? 'item' : 'items'} total
+                            {itemCount} {isParlour ? (itemCount === 1 ? 'service' : 'services') : (itemCount === 1 ? 'item' : 'items')} total
                           </p>
                         </td>
 
@@ -724,7 +738,7 @@ export function CustomerOrdersTable({
                                   ⏳ Pending
                                 </SelectItem>
                                 <SelectItem value="preparing" className="text-xs font-semibold">
-                                  🍳 Preparing
+                                  {isParlour ? '✨ In Service' : '🍳 Preparing'}
                                 </SelectItem>
                                 <SelectItem value="completed" className="text-xs font-semibold">
                                   ✅ Completed
@@ -834,7 +848,7 @@ export function CustomerOrdersTable({
                           ⏳ Pending
                         </SelectItem>
                         <SelectItem value="preparing" className="text-xs font-semibold">
-                          🍳 Preparing
+                          {isParlour ? '✨ In Service' : '🍳 Preparing'}
                         </SelectItem>
                         <SelectItem value="completed" className="text-xs font-semibold">
                           ✅ Completed
@@ -861,8 +875,16 @@ export function CustomerOrdersTable({
                       </a>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      {order.tableNumber ? (
+                    <div className="text-right shrink-0 max-w-[130px]">
+                      {isParlour ? (
+                        order.specialNote ? (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium truncate block max-w-[120px]">
+                            {decodeHtmlEntities(order.specialNote)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground italic text-[10px]">Standard</span>
+                        )
+                      ) : order.tableNumber ? (
                         <Badge variant="outline" className="font-bold text-[10px] border-border bg-muted/40 px-2 py-0.5">
                           Table {order.tableNumber}
                         </Badge>
@@ -876,7 +898,7 @@ export function CustomerOrdersTable({
                   <div className="bg-muted/40 p-2.5 rounded-xl border border-border/50 text-xs space-y-1 w-full min-w-0 overflow-hidden">
                     <div className="flex justify-between items-baseline gap-2">
                       <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider shrink-0">
-                        Dishes ({itemCount}):
+                        {isParlour ? 'Services' : 'Dishes'} ({itemCount}):
                       </span>
                       <span className="font-black text-sm text-foreground shrink-0">
                         {currencySymbol}{Number(order.totalAmount || 0).toLocaleString()}
@@ -993,8 +1015,12 @@ export function CustomerOrdersTable({
               <div className="px-5 py-3.5 border-b border-border bg-muted/40 flex items-center justify-between shrink-0">
                 <div>
                   <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                    <UtensilsCrossed className="w-4 h-4 text-primary" />
-                    Order #{selectedOrder.orderId}
+                    {isParlour ? (
+                      <Sparkles className="w-4 h-4 text-pink-500 shrink-0" />
+                    ) : (
+                      <UtensilsCrossed className="w-4 h-4 text-primary shrink-0" />
+                    )}
+                    {isParlour ? 'Booking' : 'Order'} #{selectedOrder.orderId}
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground">
                     {formatOrderDate(selectedOrder.createdAt)}
@@ -1012,10 +1038,10 @@ export function CustomerOrdersTable({
                   {/* Top Business & Order Header */}
                   <div className="text-center pb-3 border-b border-dashed border-zinc-300 space-y-0.5">
                     <p className="font-black text-sm sm:text-base tracking-tight text-zinc-950 uppercase">
-                      {selectedOrder.businessName || businessName || 'Menu Order'}
+                      {selectedOrder.businessName || businessName || (isParlour ? 'Salon Service Booking' : 'Menu Order')}
                     </p>
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                      Customer Receipt
+                      {isParlour ? 'Service Booking Receipt' : 'Customer Receipt'}
                     </p>
                     <div className="flex items-center justify-center gap-2 pt-1 text-[11px]">
                       <span className="font-mono font-bold bg-zinc-100 text-zinc-800 px-2 py-0.5 rounded border border-zinc-200">
@@ -1037,7 +1063,7 @@ export function CustomerOrdersTable({
                       <span className="text-zinc-500 font-medium">Phone:</span>
                       <span className="font-semibold text-zinc-900 font-mono">{selectedOrder.customerPhone}</span>
                     </div>
-                    {selectedOrder.tableNumber && (
+                    {!isParlour && selectedOrder.tableNumber && (
                       <div className="flex justify-between items-center">
                         <span className="text-zinc-500 font-medium">Table No:</span>
                         <span className="font-bold text-zinc-900">{selectedOrder.tableNumber}</span>
@@ -1045,7 +1071,9 @@ export function CustomerOrdersTable({
                     )}
                     {selectedOrder.specialNote && (
                       <div className="flex justify-between items-start gap-2 pt-0.5">
-                        <span className="text-zinc-500 font-medium shrink-0">Note:</span>
+                        <span className="text-zinc-500 font-medium shrink-0">
+                          {isParlour ? 'Preference / Note:' : 'Note:'}
+                        </span>
                         <span className="font-medium text-zinc-800 text-right italic text-[11px]">
                           {decodeHtmlEntities(selectedOrder.specialNote)}
                         </span>
@@ -1056,7 +1084,7 @@ export function CustomerOrdersTable({
                   {/* Ordered Items List */}
                   <div className="space-y-1.5 py-1">
                     <p className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">
-                      Items Ordered ({selectedOrder.items.reduce((s, it) => s + (it.quantity || 1), 0)}):
+                      {isParlour ? 'Services Booked' : 'Items Ordered'} ({selectedOrder.items.reduce((s, it) => s + (it.quantity || 1), 0)}):
                     </p>
                     <div className="divide-y divide-zinc-100">
                       {selectedOrder.items.map((item) => (
@@ -1089,7 +1117,9 @@ export function CustomerOrdersTable({
 
                   {/* Receipt Bottom Branding */}
                   <div className="pt-2 border-t border-dashed border-zinc-300 text-center text-[10px] text-zinc-400">
-                    <p className="font-medium">Thank you for dining with us!</p>
+                    <p className="font-medium">
+                      {isParlour ? 'Thank you for visiting us!' : 'Thank you for dining with us!'}
+                    </p>
                     <p className="mt-0.5 font-semibold text-zinc-500">Powered by MenuSnap</p>
                   </div>
                 </div>
