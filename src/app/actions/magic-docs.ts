@@ -141,6 +141,7 @@ export async function getMagicDocsFromMySql(options?: GetMagicDocsOptions) {
 export async function getMagicDocByIdFromMySql(id: string) {
   try {
     await initMagicDocsTable();
+    const cleanId = String(id || '').trim().replace(/\/+$/, '');
     const [rows]: any = await pool.execute(
       `SELECT m.*, 
        DATE_FORMAT(m.last_updated, '%Y-%m-%d %H:%i:%s') as last_updated,
@@ -153,7 +154,7 @@ export async function getMagicDocByIdFromMySql(id: string) {
        FROM magic_docs m
        LEFT JOIN admins a ON (m.created_by_user_id = a.id OR (m.created_by_user_id IS NULL AND (m.created_by = a.email OR m.created_by = a.name)))
        WHERE m.id = ? AND m.is_deleted = 0`,
-      [id]
+      [cleanId]
     );
 
     if (rows.length === 0) return { success: false, message: 'Document not found' };
@@ -168,6 +169,7 @@ export async function upsertMagicDocToMySql(doc: any) {
   try {
     await initMagicDocsTable();
     const { id, title, content, createdBy, created_by, createdByUserId, created_by_user_id, isDeleted, deletedAt } = doc;
+    const cleanId = String(id || '').trim().replace(/\/+$/, '');
     const author = createdBy || created_by || 'Admin';
     const authorUserId = createdByUserId !== undefined ? createdByUserId : (created_by_user_id !== undefined ? created_by_user_id : null);
     const now = formatUtcDateTime();
@@ -181,11 +183,14 @@ export async function upsertMagicDocToMySql(doc: any) {
        created_by_user_id = COALESCE(VALUES(created_by_user_id), created_by_user_id),
        created_by = VALUES(created_by), last_updated = VALUES(last_updated),
        is_deleted = VALUES(is_deleted), deleted_at = VALUES(deleted_at)`,
-      [id, title, content, authorUserId, author, now, now, isDeleted ? 1 : 0, finalDeletedAt]
+      [cleanId, title, content, authorUserId, author, now, now, isDeleted ? 1 : 0, finalDeletedAt]
     );
 
     revalidatePath('/m-admin/magic-docs');
     revalidatePath('/m-admin/magic-docs/');
+    revalidatePath(`/m-admin/magic-docs/${cleanId}`);
+    revalidatePath(`/docs/edit/${cleanId}`);
+    revalidatePath(`/docs/view/${cleanId}`);
     return { success: true };
   } catch (error: any) {
     console.error('MySQL Magic Doc Upsert Error:', error);
@@ -196,10 +201,14 @@ export async function upsertMagicDocToMySql(doc: any) {
 export async function deleteMagicDocFromMySql(id: string) {
   try {
     await initMagicDocsTable();
+    const cleanId = String(id || '').trim().replace(/\/+$/, '');
     const now = formatUtcDateTime();
-    await pool.execute('UPDATE magic_docs SET is_deleted = 1, deleted_at = ? WHERE id = ?', [now, id]);
+    await pool.execute('UPDATE magic_docs SET is_deleted = 1, deleted_at = ? WHERE id = ?', [now, cleanId]);
     revalidatePath('/m-admin/magic-docs');
     revalidatePath('/m-admin/magic-docs/');
+    revalidatePath(`/m-admin/magic-docs/${cleanId}`);
+    revalidatePath(`/docs/edit/${cleanId}`);
+    revalidatePath(`/docs/view/${cleanId}`);
     return { success: true };
   } catch (error: any) {
     console.error('MySQL Magic Doc Delete Error:', error);
@@ -210,9 +219,13 @@ export async function deleteMagicDocFromMySql(id: string) {
 export async function permanentDeleteMagicDocFromMySql(id: string) {
   try {
     await initMagicDocsTable();
-    await pool.execute('DELETE FROM magic_docs WHERE id = ?', [id]);
+    const cleanId = String(id || '').trim().replace(/\/+$/, '');
+    await pool.execute('DELETE FROM magic_docs WHERE id = ?', [cleanId]);
     revalidatePath('/m-admin/magic-docs');
     revalidatePath('/m-admin/magic-docs/');
+    revalidatePath(`/m-admin/magic-docs/${cleanId}`);
+    revalidatePath(`/docs/edit/${cleanId}`);
+    revalidatePath(`/docs/view/${cleanId}`);
     return { success: true };
   } catch (error: any) {
     console.error('MySQL Magic Doc Permanent Delete Error:', error);

@@ -2,7 +2,7 @@
 
 import pool from '@/lib/mysql';
 import { revalidatePath } from 'next/cache';
-import { formatUtcDateTime } from '@/lib/dateUtils';
+import { formatLocalDateTime } from '@/lib/dateUtils';
 
 export interface UserDraftItem {
   id: string;
@@ -209,7 +209,7 @@ export async function saveUserDraftAction(input: SaveUserDraftInput): Promise<{ 
     let formattedCreatedAt: string | null = null;
     if (input.createdAt) {
       try {
-        formattedCreatedAt = formatUtcDateTime(input.createdAt);
+        formattedCreatedAt = formatLocalDateTime(input.createdAt);
       } catch {
         formattedCreatedAt = null;
       }

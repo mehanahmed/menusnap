@@ -10,9 +10,12 @@ export function formatLocalDateTime(dateInput: Date | string | number | null | u
   } else if (dateInput instanceof Date) {
     date = dateInput;
   } else if (typeof dateInput === 'string') {
-    // Safely parse MySQL-style datetime strings (YYYY-MM-DD HH:mm:ss) as LOCAL time.
-    // Browsers (Firefox, Safari) treat "YYYY-MM-DD HH:mm:ss" as UTC unless we use slashes.
-    date = parseMySqlDateAsLocal(dateInput);
+    // If it is an ISO string with timezone or UTC (contains 'Z' or '+/-HH:mm'), parse natively so local offset is preserved
+    if (dateInput.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(dateInput)) {
+      date = new Date(dateInput);
+    } else {
+      date = parseMySqlDateAsLocal(dateInput);
+    }
   } else {
     date = new Date(dateInput);
   }
@@ -68,6 +71,9 @@ export function formatUtcDateTime(dateInput: Date | string | number | null | und
  */
 export function parseMySqlDateAsLocal(dateString: string): Date {
   if (!dateString) return new Date(NaN);
+  if (dateString.includes('Z') || /[+-]\d{2}:?\d{2}$/.test(dateString)) {
+    return new Date(dateString);
+  }
   const cleaned = dateString
     .replace('T', ' ')
     .replace(/\.\d+/, '')   

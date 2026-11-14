@@ -126,7 +126,17 @@ function DraftCard({ draft, isExpanded, isSaved, onRestore, onDelete, onToggleEx
     setHasMounted(true);
   }, []);
 
-  const createdAtDate = parseISO(draft.createdAt);
+  const createdAtDate = useMemo(() => {
+    if (!draft.createdAt) return new Date();
+    try {
+      const parsed = parseISO(draft.createdAt);
+      if (isValid(parsed)) return parsed;
+      const fallback = new Date(draft.createdAt.replace(/-/g, '/'));
+      return isValid(fallback) ? fallback : new Date();
+    } catch {
+      return new Date();
+    }
+  }, [draft.createdAt]);
   const isValidDate = isValid(createdAtDate);
 
   const formattedTitleDate = isValidDate ? format(createdAtDate, 'dd/MM/yyyy') : 'Invalid Date';

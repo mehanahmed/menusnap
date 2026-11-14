@@ -33,12 +33,13 @@ export function middleware(request: NextRequest) {
     needsRewrite = true;
   }
 
-  // 1. Skip system paths, API endpoints, static assets, and admin routes
+  // 1. Skip system paths, API endpoints, static assets, admin, and docs routes
   if (
     pathname.startsWith('/_next') || 
     pathname.startsWith('/api') || 
     pathname.startsWith('/m-admin') ||
     pathname.startsWith('/panel') ||
+    pathname.startsWith('/docs') ||
     pathname.includes('.') || // Avoid slashing files like favicon.ico, images, etc.
     pathname === '/'          // Root already has a virtual slash or is fine
   ) {
@@ -59,9 +60,11 @@ export function middleware(request: NextRequest) {
 
   // 2. Enforce trailing slash for client pages (GET requests only, ignore RSC/internal fetches)
   if (request.method === 'GET' && !pathname.endsWith('/') && !request.nextUrl.searchParams.has('_rsc')) {
-    const url = request.nextUrl.clone();
-    url.pathname = pathname + '/';
-    const res = NextResponse.redirect(url, 301); // Permanent redirect for SEO
+    const targetUrl = new URL(request.url);
+    if (!targetUrl.pathname.endsWith('/')) {
+      targetUrl.pathname += '/';
+    }
+    const res = NextResponse.redirect(targetUrl, 301); // Permanent redirect for SEO
     res.headers.set('X-Robots-Tag', 'index, follow');
     return res;
   }
