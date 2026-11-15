@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,8 +14,6 @@ interface FeatureCarouselSectionProps {
 export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSectionProps) {
   const slides = initialSlides.filter((s) => s.is_active);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const total = slides.length;
 
@@ -29,14 +27,14 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
     setCurrentIndex((prev) => (prev - 1 + total) % total);
   }, [total]);
 
-  // Auto-play interval (6 seconds), pauses on hover
+  // Auto-play interval: 5 seconds for both desktop & mobile, auto-resets on slide change
   useEffect(() => {
-    if (isPaused || total <= 1) return;
-    timerRef.current = setInterval(nextSlide, 6000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPaused, nextSlide, total]);
+    if (total <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % total);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [currentIndex, total]);
 
   if (total === 0) return null;
 
@@ -46,8 +44,6 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
     <section
       id="features"
       className="py-16 sm:py-24 bg-gradient-to-b from-white via-orange-50/20 to-white relative overflow-hidden border-b border-gray-100"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
     >
       {/* Subtle ambient blur circle */}
       <div
@@ -74,9 +70,9 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
           </p>
         </div>
 
-        {/* Feature Selector Tabs (Interactive Navigation Pills) */}
+        {/* Feature Selector Tabs (Interactive Navigation Pills) - Hidden on mobile, visible on desktop */}
         {total > 1 && (
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 mb-8 sm:mb-12 px-1 max-w-7xl mx-auto">
+          <div className="hidden md:flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 mb-8 sm:mb-12 px-1 max-w-7xl mx-auto">
             {slides.map((slide, idx) => {
               const isActive = idx === currentIndex;
               return (
@@ -103,6 +99,28 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
 
         {/* Main 2-Column Split Feature Card */}
         <div className="bg-white rounded-3xl border border-gray-200/90 shadow-[0_10px_35px_rgba(0,0,0,0.04),0_1px_3px_rgba(0,0,0,0.02)] p-6 sm:p-10 lg:p-12 relative">
+          {/* Side Navigation Arrow Buttons */}
+          {total > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={prevSlide}
+                aria-label="Previous slide"
+                className="absolute -left-3 sm:-left-5 lg:-left-6 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/95 backdrop-blur-md border border-gray-200 shadow-md sm:shadow-lg flex items-center justify-center text-gray-700 hover:text-[#FF5A36] hover:border-orange-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={nextSlide}
+                aria-label="Next slide"
+                className="absolute -right-3 sm:-right-5 lg:-right-6 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/95 backdrop-blur-md border border-gray-200 shadow-md sm:shadow-lg flex items-center justify-center text-gray-700 hover:text-[#FF5A36] hover:border-orange-200 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              >
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </>
+          )}
+
           <AnimatePresence mode="wait">
             <motion.div
               key={currentSlide.id}
@@ -193,31 +211,17 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
                     key={dotIdx}
                     onClick={() => setCurrentIndex(dotIdx)}
                     aria-label={`Go to slide ${dotIdx + 1}`}
-                    className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${dotIdx === currentIndex
+                    className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                      dotIdx === currentIndex
                         ? "w-7 bg-[#FF5A36]"
                         : "w-2 bg-gray-200 hover:bg-gray-300"
-                      }`}
+                    }`}
                   />
                 ))}
               </div>
 
-              {/* Prev / Next Arrow Buttons */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={prevSlide}
-                  aria-label="Previous slide"
-                  className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-700 flex items-center justify-center transition-all shadow-2xs active:scale-95 cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={nextSlide}
-                  aria-label="Next slide"
-                  className="w-8 h-8 rounded-full border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-700 flex items-center justify-center transition-all shadow-2xs active:scale-95 cursor-pointer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              {/* Spacer on right for symmetry with counter */}
+              <div className="w-10 sm:w-12" aria-hidden="true" />
             </div>
           )}
         </div>

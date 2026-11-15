@@ -57,10 +57,10 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
   const getNavLabel = (href: string, fallback: string) => {
     switch (href) {
       case '/magictab/': return t('magictab', fallback);
-      case '/templates/': return 'Template Library';
+      case '/templates/': return t('templateLibrary', fallback);
       case '/draft/': return t('draft', fallback);
-      case '/customer-orders/': return 'Customer Orders';
-      case '/hrm/': return 'HRM';
+      case '/customer-orders/': return t('customerOrders', fallback);
+      case '/hrm/': return t('hrm', fallback);
       case '/magic-calculation/': return t('magicCalc', fallback);
       case '/order-history/': return t('orderHistory', fallback);
       case '/happy-clients/': return t('happyClients', fallback);

@@ -659,7 +659,7 @@ function DraftQrContent() {
           {/* Grid: Table Stand Mockup (Printable) on left, Setup details on right */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start print-grid-root">
             {/* The Printable Table Stand Card (Takes full width in print) */}
-            <div className="lg:col-span-7 flex justify-center print-card-column">
+            <div className="order-2 lg:order-1 lg:col-span-7 flex justify-center print-card-column">
               <div
                 ref={cardRef}
                 className={cn(
@@ -758,8 +758,10 @@ function DraftQrContent() {
             </div>
 
             {/* Right Side: Setup Controls & Instructions (Hidden during print) */}
-            <div className="no-print lg:col-span-5 space-y-4 lg:sticky lg:top-20">
-              {/* Order Receiving WhatsApp Card */}
+            <div className="no-print contents lg:block lg:order-2 lg:col-span-5 lg:space-y-4 lg:sticky lg:top-20">
+              {/* Configuration Cards: WhatsApp Number & Table Assignment (Appears before QR stand on mobile) */}
+              <div className="order-1 lg:order-none space-y-4">
+                {/* Order Receiving WhatsApp Card */}
               <div className="bg-card border border-border p-4 sm:p-5 rounded-2xl shadow-xs space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -895,7 +897,11 @@ function DraftQrContent() {
                 </div>
               )}
 
-              {/* Action Card */}
+              </div>
+
+              {/* Action Cards: Print/Download & Guidelines (Appears after QR stand on mobile) */}
+              <div className="order-3 lg:order-none space-y-4">
+                {/* Action Card */}
               <div className="bg-card border border-border p-5 sm:p-6 rounded-2xl shadow-xs space-y-4">
                 <h3 className="text-sm sm:text-base font-bold flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" /> Ready to Print or Save
@@ -953,6 +959,7 @@ function DraftQrContent() {
                 </ol>
               </div>
             </div>
+          </div>
           </div>
         </main>
       </div>

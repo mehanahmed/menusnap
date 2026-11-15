@@ -203,7 +203,9 @@ export function BottomNavigation() {
                       )}
                     </div>
                     <span className="rd-navbar_link_text whitespace-nowrap tracking-tight text-[9px] sm:text-[10px]">
-                      {t(item.href.replace(/\//g, ''), item.label)}
+                      {item.href.includes('customer-orders')
+                        ? t('customerOrders', item.label)
+                        : t(item.href.replace(/\//g, ''), item.label)}
                     </span>
                   </motion.div>
                 </Link>

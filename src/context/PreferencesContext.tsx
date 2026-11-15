@@ -68,6 +68,9 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     noItemsFound: 'No items found',
     filterCategories: 'Filter Categories',
     myBusiness: 'My Business',
+    templateLibrary: 'Template Library',
+    customerOrders: 'Customer Orders',
+    hrm: 'HRM',
   },
   bn: {
     magictab: 'ম্যাজিকট্যাব',
@@ -99,6 +102,9 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     noItemsFound: 'কোনো আইটেম পাওয়া যায়নি',
     filterCategories: 'ক্যাটাগরি ফিল্টার',
     myBusiness: 'আমার ব্যবসা',
+    templateLibrary: 'টেমপ্লেট লাইব্রেরি',
+    customerOrders: 'কাস্টমার অর্ডার',
+    hrm: 'এইচআরএম',
   },
   ar: {
     magictab: 'ماجيك تاب',
@@ -130,6 +136,9 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     noItemsFound: 'لم يتم العثور على عناصر',
     filterCategories: 'تصفية الفئات',
     myBusiness: 'نشاطي التجاري',
+    templateLibrary: 'مكتبة القوالب',
+    customerOrders: 'طلبات العملاء',
+    hrm: 'الموارد البشرية',
   },
   es: {
     magictab: 'MagicTab',
@@ -160,7 +169,10 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     generateMenu: 'Generar menú',
     noItemsFound: 'No se encontraron artículos',
     filterCategories: 'Filtrar categorías',
-    myBusiness: 'Mi negocio',
+    myBusiness: 'Mi Negocio',
+    templateLibrary: 'Biblioteca de Plantillas',
+    customerOrders: 'Pedidos de Clientes',
+    hrm: 'RRHH',
   },
 };
 

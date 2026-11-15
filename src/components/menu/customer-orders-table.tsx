@@ -68,6 +68,7 @@ import {
 import { toPng } from 'html-to-image';
 import { format, parseISO, isValid } from 'date-fns';
 import { cn, decodeHtmlEntities } from '@/lib/utils';
+import { usePreferences } from '@/context/PreferencesContext';
 
 interface CustomerOrdersTableProps {
   clientId?: number | null;
@@ -75,6 +76,89 @@ interface CustomerOrdersTableProps {
   currencySymbol?: string;
   isParlour?: boolean;
 }
+
+type Lang = 'en' | 'bn' | 'ar' | 'es';
+
+const TABLE_I18N = {
+  totalOrders: { en: 'Total Orders', bn: 'মোট অর্ডার', ar: 'إجمالي الطلبات', es: 'Total de Pedidos' },
+  pendingAction: { en: 'Pending Action', bn: 'পেন্ডিং অর্ডার', ar: 'طلبات معلقة', es: 'Pendiente de Acción' },
+  inKitchen: { en: 'In Kitchen', bn: 'রান্নাঘরে', ar: 'في المطبخ', es: 'En Cocina' },
+  inService: { en: 'In Service', bn: 'সার্ভিস চলছে', ar: 'قيد الخدمة', es: 'En Servicio' },
+  revenue: { en: 'Revenue', bn: 'মোট আয়', ar: 'الإيرادات', es: 'Ingresos' },
+  completedShort: { en: 'completed', bn: 'সম্পন্ন', ar: 'مكتمل', es: 'completados' },
+  pendingShort: { en: 'pend.', bn: 'পেন্ডিং', ar: 'معلق', es: 'pend.' },
+
+  searchRestaurant: { en: 'Search customer, phone, table...', bn: 'কাস্টমার, ফোন বা টেবিল খুঁজুন...', ar: 'البحث عن العميل، الهاتف، الطاولة...', es: 'Buscar cliente, teléfono, mesa...' },
+  searchParlour: { en: 'Search customer, phone, service, note...', bn: 'কাস্টমার, ফোন, সার্ভিস বা নোট খুঁজুন...', ar: 'البحث عن العميل، الهاتف، الخدمة، الملاحظة...', es: 'Buscar cliente, teléfono, servicio, nota...' },
+
+  statusAll: { en: 'All', bn: 'সব', ar: 'الكل', es: 'Todos' },
+  statusPending: { en: 'Pending', bn: 'পেন্ডিং', ar: 'معلق', es: 'Pendiente' },
+  statusPreparing: { en: 'Preparing', bn: 'রান্না হচ্ছে', ar: 'قيد التحضير', es: 'Preparando' },
+  statusInService: { en: 'In Service', bn: 'সার্ভিস চলছে', ar: 'قيد الخدمة', es: 'En Servicio' },
+  statusCompleted: { en: 'Completed', bn: 'সম্পন্ন', ar: 'مكتمل', es: 'Completado' },
+  statusCancelled: { en: 'Cancelled', bn: 'বাতিল', ar: 'ملغي', es: 'Cancelado' },
+
+  liveSync: { en: 'Live Sync', bn: 'লাইভ সিঙ্ক', ar: 'مزامنة مباشرة', es: 'Sincronización en vivo' },
+  syncTooltip: { en: 'Real-time live order sync is active', bn: 'লাইভ অর্ডার সিঙ্ক সক্রিয় রয়েছে', ar: 'مزامنة الطلبات المباشرة نشطة', es: 'Sincronización de pedidos en tiempo real activa' },
+  refreshTooltip: { en: 'Manual refresh orders', bn: 'অর্ডার রিফ্রেশ করুন', ar: 'تحديث الطلبات يدوياً', es: 'Actualizar pedidos manualmente' },
+
+  loading: { en: 'Loading customer orders...', bn: 'কাস্টমার অর্ডার লোড হচ্ছে...', ar: 'جارٍ تحميل طلبات العملاء...', es: 'Cargando pedidos de clientes...' },
+  noOrdersMatch: { en: 'No orders match your filter', bn: 'কোনো অর্ডার মেলেনি', ar: 'لا توجد طلبات تطابق الفلتر', es: 'Ningún pedido coincide con su filtro' },
+  noOrdersYet: { en: 'No customer orders yet', bn: 'এখনও কোনো কাস্টমার অর্ডার নেই', ar: 'لا توجد طلبات عملاء حتى الآن', es: 'Aún no hay pedidos de clientes' },
+  clearFilterHint: { en: 'Try clearing your search term or selecting "All" statuses.', bn: 'অন্য কোনো নাম, ফোন বা ফিল্টার দিয়ে চেষ্টা করুন।', ar: 'جرب مسح مصطلح البحث أو تحديد جميع الحالات.', es: 'Pruebe a borrar su término de búsqueda o seleccione "Todos".' },
+  firstOrdersRestaurant: { en: 'When guests scan your digital QR menu and place an order, they will appear here in real time.', bn: 'কাস্টমাররা ডিজিটাল কিউআর মেনু স্ক্যান করে অর্ডার করলে তা রিয়েল-টাইমে এখানে দেখা যাবে।', ar: 'عندما يمسح العملاء رمز QR الرقمي ويقدمون طلباً، سيظهر هنا بشكل مباشر.', es: 'Cuando los clientes escaneen su menú digital QR y realicen un pedido, aparecerán aquí en tiempo real.' },
+  firstOrdersParlour: { en: 'When clients scan your digital QR card and request services, they will appear here in real time.', bn: 'কাস্টমাররা ডিজিটাল কিউআর কার্ড স্ক্যান করে সার্ভিস বুক করলে তা রিয়েল-টাইমে এখানে দেখা যাবে।', ar: 'عندما يمسح العملاء بطاقة QR الرقمية ويطلبون خدمات، ستظهر هنا فورياً.', es: 'Cuando los clientes escaneen su tarjeta QR digital y soliciten servicios, aparecerán aquí en tiempo real.' },
+
+  thOrderIdTime: { en: 'Order ID / Time', bn: 'অর্ডার আইডি / সময়', ar: 'رقم الطلب / الوقت', es: 'ID del Pedido / Hora' },
+  thCustomer: { en: 'Customer', bn: 'কাস্টমার', ar: 'العميل', es: 'Cliente' },
+  thTable: { en: 'Table', bn: 'টেবিল', ar: 'الطاولة', es: 'Mesa' },
+  thSpecialRequest: { en: 'Special Request / Note', bn: 'বিশেষ অনুরোধ / নোট', ar: 'طلب خاص / ملاحظة', es: 'Petición Especial / Nota' },
+  thDishes: { en: 'Dishes', bn: 'খাবারসমূহ', ar: 'الأطباق', es: 'Platos' },
+  thServices: { en: 'Services', bn: 'সার্ভিসসমূহ', ar: 'الخدمات', es: 'Servicios' },
+  thBill: { en: 'Bill', bn: 'বিল', ar: 'الفاتورة', es: 'Total' },
+  thStatus: { en: 'Status', bn: 'স্ট্যাটাস', ar: 'الحالة', es: 'Estado' },
+  thActions: { en: 'Actions', bn: 'অ্যাকশন', ar: 'الإجراءات', es: 'Acciones' },
+
+  tableLabel: { en: 'Table', bn: 'টেবিল', ar: 'طاولة', es: 'Mesa' },
+  dineIn: { en: 'Dine-in', bn: 'ডাইন-ইন', ar: 'تناول بالداخل', es: 'Para comer aquí' },
+  standardBooking: { en: 'Standard Booking', bn: 'স্ট্যান্ডার্ড বুকিং', ar: 'حجز عادي', es: 'Reserva estándar' },
+  standardShort: { en: 'Standard', bn: 'স্ট্যান্ডার্ড', ar: 'عادي', es: 'Estándar' },
+
+  viewReceiptImage: { en: 'View Receipt Image', bn: 'রিসিট ছবি দেখুন', ar: 'عرض إيصال الدفع', es: 'Ver Imagen de Recibo' },
+  whatsappCustomer: { en: 'WhatsApp Customer', bn: 'হোয়াটসঅ্যাপ করুন', ar: 'مراسلة عبر واتساب', es: 'Contactar por WhatsApp' },
+  deleteOrder: { en: 'Delete Order', bn: 'অর্ডার মুছুন', ar: 'حذف الطلب', es: 'Eliminar Pedido' },
+  orderActions: { en: 'Order actions', bn: 'অর্ডার অপশন', ar: 'إجراءات الطلب', es: 'Acciones de pedido' },
+  viewReceipt: { en: 'View Receipt', bn: 'রিসিট দেখুন', ar: 'عرض الإيصال', es: 'Ver Recibo' },
+  noteLabel: { en: 'Note', bn: 'নোট', ar: 'ملاحظة', es: 'Nota' },
+
+  prev: { en: 'Prev', bn: 'আগের', ar: 'السابق', es: 'Ant.' },
+  next: { en: 'Next', bn: 'পরের', ar: 'التالي', es: 'Sig.' },
+  receiptCustomer: { en: 'Customer Receipt', bn: 'কাস্টমার রিসিট', ar: 'إيصال العميل', es: 'Recibo del Cliente' },
+  receiptService: { en: 'Service Booking Receipt', bn: 'সার্ভিস বুকিং রিসিট', ar: 'إيصال حجز الخدمة', es: 'Recibo de Reserva de Servicio' },
+  bookingPrefix: { en: 'Booking', bn: 'বুকিং', ar: 'حجز', es: 'Reserva' },
+  orderPrefix: { en: 'Order', bn: 'অর্ডার', ar: 'طلب', es: 'Pedido' },
+  customerReceiptLabel: { en: 'Customer:', bn: 'কাস্টমার:', ar: 'العميل:', es: 'Cliente:' },
+  phoneReceiptLabel: { en: 'Phone:', bn: 'ফোন:', ar: 'الهاتف:', es: 'Teléfono:' },
+  tableNoReceiptLabel: { en: 'Table No:', bn: 'টেবিল নং:', ar: 'رقم الطاولة:', es: 'Nº de Mesa:' },
+  specialNoteReceiptLabel: { en: 'Preference / Note:', bn: 'অনুরোধ / নোট:', ar: 'الملاحظة / التفضيل:', es: 'Preferencia / Nota:' },
+  noteReceiptLabel: { en: 'Note:', bn: 'নোট:', ar: 'ملاحظة:', es: 'Nota:' },
+  itemsOrderedReceipt: { en: 'Items Ordered', bn: 'অর্ডারকৃত খাবার', ar: 'الأطباق المطلوبة', es: 'Artículos Pedidos' },
+  servicesBookedReceipt: { en: 'Services Booked', bn: 'বুক করা সার্ভিস', ar: 'الخدمات المحجوزة', es: 'Servicios Reservados' },
+  totalAmountReceipt: { en: 'Total Amount:', bn: 'মোট বিল:', ar: 'المبلغ الإجمالي:', es: 'Monto Total:' },
+  thankYouDining: { en: 'Thank you for dining with us!', bn: 'আমাদের সাথে ডাইন করার জন্য ধন্যবাদ!', ar: 'شكراً لتناولكم الطعام معنا!', es: '¡Gracias por comer con nosotros!' },
+  thankYouVisiting: { en: 'Thank you for visiting us!', bn: 'আমাদের সাথে থাকার জন্য ধন্যবাদ!', ar: 'شكراً لزيارتكم لنا!', es: '¡Gracias por visitarnos!' },
+  downloadReceiptPng: { en: 'Download Receipt (PNG)', bn: 'রিসিট ডাউনলোড করুন (PNG)', ar: 'تحميل الإيصال (PNG)', es: 'Descargar Recibo (PNG)' },
+  generatingImage: { en: 'Generating Image...', bn: 'ছবি তৈরি হচ্ছে...', ar: 'جارٍ إنشاء الصورة...', es: 'Generando imagen...' },
+  close: { en: 'Close', bn: 'বন্ধ করুন', ar: 'إغلاق', es: 'Cerrar' },
+
+  totalItemsCount: { en: 'items total', bn: 'টি খাবার মোট', ar: 'أطباق إجمالاً', es: 'artículos en total' },
+  totalServicesCount: { en: 'services total', bn: 'টি সার্ভিস মোট', ar: 'خدمات إجمالاً', es: 'servicios en total' },
+  deleteConfirmTitle: { en: 'Delete Order', bn: 'অর্ডার মুছবেন?', ar: 'حذف الطلب', es: 'Eliminar Pedido' },
+  deleteConfirmDescPrefix: { en: 'Are you sure you want to remove this order for', bn: 'আপনি কি নিশ্চিত যে এই অর্ডারটি মুছে ফেলতে চান -', ar: 'هل أنت متأكد من رغبتك في حذف هذا الطلب لـ', es: '¿Está seguro de que desea eliminar este pedido de' },
+  deleteConfirmDescSuffix: { en: '? This action cannot be undone.', bn: '? এই কাজটি আর ফিরিয়ে আনা যাবে না।', ar: '؟ لا يمكن التراجع عن هذا الإجراء.', es: '? Esta acción no se puede deshacer.' },
+  cancel: { en: 'Cancel', bn: 'বাতিল', ar: 'إلغاء', es: 'Cancelar' },
+  deleting: { en: 'Deleting...', bn: 'মুছে ফেলা হচ্ছে...', ar: 'جارٍ الحذف...', es: 'Eliminando...' },
+};
 
 const ITEMS_PER_PAGE = 8;
 
@@ -84,6 +168,9 @@ export function CustomerOrdersTable({
   currencySymbol = '৳',
   isParlour = false,
 }: CustomerOrdersTableProps) {
+  const { language } = usePreferences();
+  const langKey = (language || 'en') as Lang;
+  const txt = (key: keyof typeof TABLE_I18N) => TABLE_I18N[key][langKey] || TABLE_I18N[key].en;
   const [orders, setOrders] = useState<CustomerOrderRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -456,26 +543,26 @@ export function CustomerOrdersTable({
       case 'pending':
         return (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
-            <Clock className="w-3.5 h-3.5 shrink-0" /> Pending
+            <Clock className="w-3.5 h-3.5 shrink-0" /> {txt('statusPending')}
           </span>
         );
       case 'preparing':
         return (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
             {isParlour ? <Sparkles className="w-3.5 h-3.5 shrink-0 text-pink-500" /> : <ChefHat className="w-3.5 h-3.5 shrink-0" />}
-            {isParlour ? 'In Service' : 'Preparing'}
+            {isParlour ? txt('statusInService') : txt('statusPreparing')}
           </span>
         );
       case 'completed':
         return (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Completed
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> {txt('statusCompleted')}
           </span>
         );
       case 'cancelled':
         return (
           <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-600 dark:text-rose-400">
-            <XCircle className="w-3.5 h-3.5 shrink-0" /> Cancelled
+            <XCircle className="w-3.5 h-3.5 shrink-0" /> {txt('statusCancelled')}
           </span>
         );
       default:
@@ -500,7 +587,7 @@ export function CustomerOrdersTable({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 w-full min-w-0 max-w-full">
         <div className="bg-card p-2 sm:p-3 rounded-xl border border-border shadow-xs min-w-0 overflow-hidden">
           <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground flex items-center justify-between">
-            <span className="truncate">Total Orders</span>
+            <span className="truncate">{txt('totalOrders')}</span>
             <ShoppingBag className="w-3.5 h-3.5 text-primary shrink-0 ml-1" />
           </p>
           <p className="text-lg sm:text-2xl font-black text-foreground mt-0.5 sm:mt-1 truncate">
@@ -510,7 +597,7 @@ export function CustomerOrdersTable({
 
         <div className="bg-card p-2 sm:p-3 rounded-xl border border-border shadow-xs min-w-0 overflow-hidden">
           <p className="text-[10px] sm:text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center justify-between">
-            <span className="truncate">Pending Action</span>
+            <span className="truncate">{txt('pendingAction')}</span>
             <Clock className="w-3.5 h-3.5 shrink-0 ml-1" />
           </p>
           <p className="text-lg sm:text-2xl font-black text-amber-600 dark:text-amber-400 mt-0.5 sm:mt-1 truncate">
@@ -520,7 +607,9 @@ export function CustomerOrdersTable({
 
         <div className="bg-card p-2 sm:p-3 rounded-xl border border-border shadow-xs min-w-0 overflow-hidden">
           <p className="text-[10px] sm:text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-between">
-            <span className="truncate">{isParlour ? 'In Service' : 'In Kitchen'}</span>
+            <span className="truncate">
+              {isParlour ? txt('inService') : txt('inKitchen')}
+            </span>
             {isParlour ? <Sparkles className="w-3.5 h-3.5 shrink-0 ml-1 text-pink-500" /> : <ChefHat className="w-3.5 h-3.5 shrink-0 ml-1" />}
           </p>
           <p className="text-lg sm:text-2xl font-black text-blue-600 dark:text-blue-400 mt-0.5 sm:mt-1 truncate">
@@ -530,7 +619,7 @@ export function CustomerOrdersTable({
 
         <div className="bg-card p-2 sm:p-3 rounded-xl border border-border shadow-xs min-w-0 overflow-hidden flex flex-col justify-between">
           <p className="text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
-            <span className="truncate">Revenue</span>
+            <span className="truncate">{txt('revenue')}</span>
             {isParlour ? <Sparkles className="w-3.5 h-3.5 shrink-0 ml-1 text-emerald-500" /> : <UtensilsCrossed className="w-3.5 h-3.5 shrink-0 ml-1" />}
           </p>
           <div className="mt-0.5 sm:mt-1 min-w-0">
@@ -538,7 +627,7 @@ export function CustomerOrdersTable({
               {currencySymbol}{stats.totalRevenue.toLocaleString()}
             </p>
             <p className="text-[9.5px] sm:text-[10px] text-muted-foreground mt-0.5 truncate">
-              {stats.completedCount} completed {stats.inProgressRevenue > 0 && `(+৳${stats.inProgressRevenue.toLocaleString()} pend.)`}
+              {stats.completedCount} {txt('completedShort')} {stats.inProgressRevenue > 0 && `(+৳${stats.inProgressRevenue.toLocaleString()} ${txt('pendingShort')})`}
             </p>
           </div>
         </div>
@@ -552,7 +641,7 @@ export function CustomerOrdersTable({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={isParlour ? "Search customer, phone, service, note..." : "Search customer, phone, table..."}
+            placeholder={isParlour ? txt('searchParlour') : txt('searchRestaurant')}
             className="pl-9 h-9 text-xs sm:text-sm rounded-xl bg-background border-border/80 w-full"
           />
         </div>
@@ -563,6 +652,16 @@ export function CustomerOrdersTable({
             const count = st === 'all'
               ? orders.length
               : orders.filter((o) => o.status === st).length;
+
+            const getFilterLabel = () => {
+              switch (st) {
+                case 'all': return txt('statusAll');
+                case 'pending': return txt('statusPending');
+                case 'preparing': return isParlour ? txt('statusInService') : txt('statusPreparing');
+                case 'completed': return txt('statusCompleted');
+                case 'cancelled': return txt('statusCancelled');
+              }
+            };
 
             return (
               <button
@@ -576,7 +675,7 @@ export function CustomerOrdersTable({
                     : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <span>{st === 'preparing' ? (isParlour ? 'In Service' : 'Preparing') : st}</span>
+                <span>{getFilterLabel()}</span>
                 <span className={cn(
                   "text-[10px] font-mono px-1 rounded-full",
                   statusFilter === st ? "bg-white/25 text-white" : "bg-background/80 text-muted-foreground"
@@ -591,10 +690,10 @@ export function CustomerOrdersTable({
           <div className="flex items-center gap-1.5 ml-auto shrink-0">
             <div
               className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold shadow-2xs select-none"
-              title="Real-time live order sync is active"
+              title={txt('syncTooltip')}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Live Sync</span>
+              <span>{txt('liveSync')}</span>
             </div>
 
             <Button
@@ -603,7 +702,7 @@ export function CustomerOrdersTable({
               onClick={() => loadOrders({ silent: false })}
               disabled={isLoading}
               className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
-              title="Manual refresh orders"
+              title={txt('refreshTooltip')}
             >
               <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
             </Button>
@@ -615,7 +714,9 @@ export function CustomerOrdersTable({
       {isLoading ? (
         <div className="bg-card rounded-2xl border border-border shadow-xs p-12 text-center space-y-3">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-          <p className="text-xs text-muted-foreground font-medium">Loading customer orders...</p>
+          <p className="text-xs text-muted-foreground font-medium">
+            {txt('loading')}
+          </p>
         </div>
       ) : filteredOrders.length === 0 ? (
         <div className="bg-card rounded-2xl border border-border shadow-xs p-12 text-center space-y-3">
@@ -624,14 +725,12 @@ export function CustomerOrdersTable({
           </div>
           <div className="space-y-1">
             <p className="text-base font-bold text-foreground">
-              {searchQuery || statusFilter !== 'all' ? 'No orders match your filter' : 'No customer orders yet'}
+              {searchQuery || statusFilter !== 'all' ? txt('noOrdersMatch') : txt('noOrdersYet')}
             </p>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
               {searchQuery || statusFilter !== 'all'
-                ? 'Try clearing your search term or selecting "All" statuses.'
-                : isParlour
-                  ? 'When clients scan your digital QR card and request services, they will appear here in real time.'
-                  : 'When guests scan your digital QR menu and place an order, they will appear here in real time.'}
+                ? txt('clearFilterHint')
+                : (isParlour ? txt('firstOrdersParlour') : txt('firstOrdersRestaurant'))}
             </p>
           </div>
         </div>
@@ -643,13 +742,13 @@ export function CustomerOrdersTable({
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-muted/40 border-b border-border text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    <th className="py-3 px-4">Order ID / Time</th>
-                    <th className="py-3 px-4">Customer</th>
-                    <th className="py-3 px-4">{isParlour ? 'Special Request / Note' : 'Table'}</th>
-                    <th className="py-3 px-4">{isParlour ? 'Services' : 'Dishes'}</th>
-                    <th className="py-3 px-4 text-right">Bill</th>
-                    <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4">{txt('thOrderIdTime')}</th>
+                    <th className="py-3 px-4">{txt('thCustomer')}</th>
+                    <th className="py-3 px-4">{isParlour ? txt('thSpecialRequest') : txt('thTable')}</th>
+                    <th className="py-3 px-4">{isParlour ? txt('thServices') : txt('thDishes')}</th>
+                    <th className="py-3 px-4 text-right">{txt('thBill')}</th>
+                    <th className="py-3 px-4 text-center">{txt('thStatus')}</th>
+                    <th className="py-3 px-4 text-right">{txt('thActions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -694,25 +793,29 @@ export function CustomerOrdersTable({
                                 {decodeHtmlEntities(order.specialNote)}
                               </p>
                             ) : (
-                              <span className="text-muted-foreground italic text-[11px]">Standard Booking</span>
+                              <span className="text-muted-foreground italic text-[11px]">
+                                {txt('standardBooking')}
+                              </span>
                             )
                           ) : order.tableNumber ? (
                             <Badge variant="outline" className="font-bold text-[11px] border-border">
-                              Table {order.tableNumber}
+                              {`${txt('tableLabel')} ${order.tableNumber}`}
                             </Badge>
                           ) : (
-                            <span className="text-muted-foreground italic text-[11px]">Dine-in</span>
+                            <span className="text-muted-foreground italic text-[11px]">
+                              {txt('dineIn')}
+                            </span>
                           )}
                         </td>
 
                         {/* Dishes or Services Ordered */}
                         <td className="py-3 px-4 max-w-xs">
                           <p className="font-medium text-foreground truncate" title={firstItems + remaining}>
-                            {firstItems || (isParlour ? 'Services' : 'Items')}
+                            {firstItems || (isParlour ? txt('thServices') : txt('thDishes'))}
                             <span className="text-muted-foreground">{remaining}</span>
                           </p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {itemCount} {isParlour ? (itemCount === 1 ? 'service' : 'services') : (itemCount === 1 ? 'item' : 'items')} total
+                            {itemCount} {isParlour ? txt('totalServicesCount') : txt('totalItemsCount')}
                           </p>
                         </td>
 
@@ -735,16 +838,16 @@ export function CustomerOrdersTable({
                               </SelectTrigger>
                               <SelectContent align="center">
                                 <SelectItem value="pending" className="text-xs font-semibold">
-                                  ⏳ Pending
+                                  ⏳ {txt('statusPending')}
                                 </SelectItem>
                                 <SelectItem value="preparing" className="text-xs font-semibold">
-                                  {isParlour ? '✨ In Service' : '🍳 Preparing'}
+                                  {isParlour ? `✨ ${txt('statusInService')}` : `🍳 ${txt('statusPreparing')}`}
                                 </SelectItem>
                                 <SelectItem value="completed" className="text-xs font-semibold">
-                                  ✅ Completed
+                                  ✅ {txt('statusCompleted')}
                                 </SelectItem>
                                 <SelectItem value="cancelled" className="text-xs font-semibold text-destructive">
-                                  ❌ Cancelled
+                                  ❌ {txt('statusCancelled')}
                                 </SelectItem>
                               </SelectContent>
                             </Select>
@@ -759,7 +862,7 @@ export function CustomerOrdersTable({
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
-                                title="Order actions"
+                                title={txt('orderActions')}
                               >
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
@@ -773,7 +876,7 @@ export function CustomerOrdersTable({
                                 className="cursor-pointer gap-2 py-2 text-xs font-semibold rounded-lg"
                               >
                                 <Eye className="w-4 h-4 text-primary" />
-                                <span>View Receipt Image</span>
+                                <span>{txt('viewReceiptImage')}</span>
                               </DropdownMenuItem>
 
                               <DropdownMenuItem
@@ -785,7 +888,7 @@ export function CustomerOrdersTable({
                                 className="cursor-pointer gap-2 py-2 text-xs font-semibold text-emerald-600 focus:text-emerald-600 focus:bg-emerald-500/10 rounded-lg"
                               >
                                 <Phone className="w-4 h-4 text-emerald-600" />
-                                <span>WhatsApp Customer</span>
+                                <span>{txt('whatsappCustomer')}</span>
                               </DropdownMenuItem>
 
                               <DropdownMenuSeparator className="my-1" />
@@ -798,7 +901,7 @@ export function CustomerOrdersTable({
                                 className="cursor-pointer gap-2 py-2 text-xs font-semibold text-destructive focus:text-destructive focus:bg-destructive/10 rounded-lg"
                               >
                                 <Trash2 className="w-4 h-4 text-destructive" />
-                                <span>Delete Order</span>
+                                <span>{txt('deleteOrder')}</span>
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -845,16 +948,16 @@ export function CustomerOrdersTable({
                       </SelectTrigger>
                       <SelectContent align="end">
                         <SelectItem value="pending" className="text-xs font-semibold">
-                          ⏳ Pending
+                          ⏳ {txt('statusPending')}
                         </SelectItem>
                         <SelectItem value="preparing" className="text-xs font-semibold">
-                          {isParlour ? '✨ In Service' : '🍳 Preparing'}
+                          {isParlour ? `✨ ${txt('statusInService')}` : `🍳 ${txt('statusPreparing')}`}
                         </SelectItem>
                         <SelectItem value="completed" className="text-xs font-semibold">
-                          ✅ Completed
+                          ✅ {txt('statusCompleted')}
                         </SelectItem>
                         <SelectItem value="cancelled" className="text-xs font-semibold text-destructive">
-                          ❌ Cancelled
+                          ❌ {txt('statusCancelled')}
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -882,14 +985,18 @@ export function CustomerOrdersTable({
                             {decodeHtmlEntities(order.specialNote)}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground italic text-[10px]">Standard</span>
+                          <span className="text-muted-foreground italic text-[10px]">
+                            {txt('standardShort')}
+                          </span>
                         )
                       ) : order.tableNumber ? (
                         <Badge variant="outline" className="font-bold text-[10px] border-border bg-muted/40 px-2 py-0.5">
-                          Table {order.tableNumber}
+                          {`${txt('tableLabel')} ${order.tableNumber}`}
                         </Badge>
                       ) : (
-                        <span className="text-muted-foreground italic text-[11px]">Dine-in</span>
+                        <span className="text-muted-foreground italic text-[11px]">
+                          {txt('dineIn')}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -898,7 +1005,7 @@ export function CustomerOrdersTable({
                   <div className="bg-muted/40 p-2.5 rounded-xl border border-border/50 text-xs space-y-1 w-full min-w-0 overflow-hidden">
                     <div className="flex justify-between items-baseline gap-2">
                       <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider shrink-0">
-                        {isParlour ? 'Services' : 'Dishes'} ({itemCount}):
+                        {`${isParlour ? txt('thServices') : txt('thDishes')} (${itemCount}):`}
                       </span>
                       <span className="font-black text-sm text-foreground shrink-0">
                         {currencySymbol}{Number(order.totalAmount || 0).toLocaleString()}
@@ -909,7 +1016,7 @@ export function CustomerOrdersTable({
                     </p>
                     {order.specialNote && (
                       <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium italic pt-1 border-t border-border/40 mt-1 line-clamp-1 truncate">
-                        Note: {decodeHtmlEntities(order.specialNote)}
+                        {txt('noteLabel')}: {decodeHtmlEntities(order.specialNote)}
                       </p>
                     )}
                   </div>
@@ -923,7 +1030,7 @@ export function CustomerOrdersTable({
                       className="flex-1 h-8 text-xs font-bold rounded-xl gap-1.5 border-border bg-card hover:bg-muted min-w-0"
                     >
                       <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
-                      <span className="truncate">View Receipt</span>
+                      <span className="truncate">{txt('viewReceipt')}</span>
                     </Button>
 
                     <Button
@@ -931,7 +1038,7 @@ export function CustomerOrdersTable({
                       size="icon"
                       onClick={() => setOrderToDelete(order)}
                       className="h-8 w-8 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 transition-colors"
-                      title="Delete Order"
+                      title={txt('deleteOrder')}
                     >
                       <Trash2 className="w-4 h-4 text-destructive/80 hover:text-destructive" />
                     </Button>
@@ -945,15 +1052,54 @@ export function CustomerOrdersTable({
           {filteredOrders.length > 0 && (
             <div className="bg-card rounded-2xl border border-border shadow-xs px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-muted-foreground w-full min-w-0 max-w-full overflow-hidden">
               <p className="text-[11px] sm:text-xs">
-                Showing{' '}
-                <span className="font-bold text-foreground">
-                  {(currentPage - 1) * ITEMS_PER_PAGE + 1}
-                </span>{' '}
-                to{' '}
-                <span className="font-bold text-foreground">
-                  {Math.min(currentPage * ITEMS_PER_PAGE, filteredOrders.length)}
-                </span>{' '}
-                of <span className="font-bold text-foreground">{filteredOrders.length}</span> orders
+                {langKey === 'bn' ? (
+                  <>
+                    <span className="font-bold text-foreground">
+                      {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+                    </span>{' '}
+                    থেকে{' '}
+                    <span className="font-bold text-foreground">
+                      {Math.min(currentPage * ITEMS_PER_PAGE, filteredOrders.length)}
+                    </span>{' '}
+                    (মোট <span className="font-bold text-foreground">{filteredOrders.length}</span> টি অর্ডার)
+                  </>
+                ) : langKey === 'ar' ? (
+                  <>
+                    عرض{' '}
+                    <span className="font-bold text-foreground">
+                      {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+                    </span>{' '}
+                    إلى{' '}
+                    <span className="font-bold text-foreground">
+                      {Math.min(currentPage * ITEMS_PER_PAGE, filteredOrders.length)}
+                    </span>{' '}
+                    من أصل <span className="font-bold text-foreground">{filteredOrders.length}</span> طلب
+                  </>
+                ) : langKey === 'es' ? (
+                  <>
+                    Mostrando{' '}
+                    <span className="font-bold text-foreground">
+                      {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+                    </span>{' '}
+                    a{' '}
+                    <span className="font-bold text-foreground">
+                      {Math.min(currentPage * ITEMS_PER_PAGE, filteredOrders.length)}
+                    </span>{' '}
+                    de <span className="font-bold text-foreground">{filteredOrders.length}</span> pedidos
+                  </>
+                ) : (
+                  <>
+                    Showing{' '}
+                    <span className="font-bold text-foreground">
+                      {(currentPage - 1) * ITEMS_PER_PAGE + 1}
+                    </span>{' '}
+                    to{' '}
+                    <span className="font-bold text-foreground">
+                      {Math.min(currentPage * ITEMS_PER_PAGE, filteredOrders.length)}
+                    </span>{' '}
+                    of <span className="font-bold text-foreground">{filteredOrders.length}</span> orders
+                  </>
+                )}
               </p>
 
               <div className="flex items-center gap-1.5">
@@ -964,7 +1110,7 @@ export function CustomerOrdersTable({
                   disabled={currentPage === 1}
                   className="h-8 px-2.5 text-xs rounded-lg"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Prev
+                  <ChevronLeft className="w-3.5 h-3.5 mr-1" /> {txt('prev')}
                 </Button>
 
                 <span className="px-2 font-bold text-foreground text-xs">
@@ -978,7 +1124,7 @@ export function CustomerOrdersTable({
                   disabled={currentPage === totalPages}
                   className="h-8 px-2.5 text-xs rounded-lg"
                 >
-                  Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  {txt('next')} <ChevronRight className="w-3.5 h-3.5 ml-1" />
                 </Button>
               </div>
             </div>
@@ -1020,7 +1166,7 @@ export function CustomerOrdersTable({
                     ) : (
                       <UtensilsCrossed className="w-4 h-4 text-primary shrink-0" />
                     )}
-                    {isParlour ? 'Booking' : 'Order'} #{selectedOrder.orderId}
+                    {isParlour ? txt('bookingPrefix') : txt('orderPrefix')} #{selectedOrder.orderId}
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground">
                     {formatOrderDate(selectedOrder.createdAt)}
@@ -1041,7 +1187,7 @@ export function CustomerOrdersTable({
                       {selectedOrder.businessName || businessName || (isParlour ? 'Salon Service Booking' : 'Menu Order')}
                     </p>
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                      {isParlour ? 'Service Booking Receipt' : 'Customer Receipt'}
+                      {isParlour ? txt('receiptService') : txt('receiptCustomer')}
                     </p>
                     <div className="flex items-center justify-center gap-2 pt-1 text-[11px]">
                       <span className="font-mono font-bold bg-zinc-100 text-zinc-800 px-2 py-0.5 rounded border border-zinc-200">
@@ -1056,23 +1202,23 @@ export function CustomerOrdersTable({
                   {/* Customer Information */}
                   <div className="text-xs space-y-1 py-1.5 border-b border-dashed border-zinc-300 text-zinc-700">
                     <div className="flex justify-between items-center">
-                      <span className="text-zinc-500 font-medium">Customer:</span>
+                      <span className="text-zinc-500 font-medium">{txt('customerReceiptLabel')}</span>
                       <span className="font-bold text-zinc-900">{decodeHtmlEntities(selectedOrder.customerName)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-zinc-500 font-medium">Phone:</span>
+                      <span className="text-zinc-500 font-medium">{txt('phoneReceiptLabel')}</span>
                       <span className="font-semibold text-zinc-900 font-mono">{selectedOrder.customerPhone}</span>
                     </div>
                     {!isParlour && selectedOrder.tableNumber && (
                       <div className="flex justify-between items-center">
-                        <span className="text-zinc-500 font-medium">Table No:</span>
+                        <span className="text-zinc-500 font-medium">{txt('tableNoReceiptLabel')}</span>
                         <span className="font-bold text-zinc-900">{selectedOrder.tableNumber}</span>
                       </div>
                     )}
                     {selectedOrder.specialNote && (
                       <div className="flex justify-between items-start gap-2 pt-0.5">
                         <span className="text-zinc-500 font-medium shrink-0">
-                          {isParlour ? 'Preference / Note:' : 'Note:'}
+                          {isParlour ? txt('specialNoteReceiptLabel') : txt('noteReceiptLabel')}
                         </span>
                         <span className="font-medium text-zinc-800 text-right italic text-[11px]">
                           {decodeHtmlEntities(selectedOrder.specialNote)}
@@ -1084,7 +1230,7 @@ export function CustomerOrdersTable({
                   {/* Ordered Items List */}
                   <div className="space-y-1.5 py-1">
                     <p className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">
-                      {isParlour ? 'Services Booked' : 'Items Ordered'} ({selectedOrder.items.reduce((s, it) => s + (it.quantity || 1), 0)}):
+                      {isParlour ? txt('servicesBookedReceipt') : txt('itemsOrderedReceipt')} ({selectedOrder.items.reduce((s, it) => s + (it.quantity || 1), 0)}):
                     </p>
                     <div className="divide-y divide-zinc-100">
                       {selectedOrder.items.map((item) => (
@@ -1109,7 +1255,7 @@ export function CustomerOrdersTable({
 
                   {/* Total Bill */}
                   <div className="pt-2.5 border-t-2 border-zinc-900 flex justify-between items-center text-sm font-extrabold text-zinc-950">
-                    <span>Total Amount:</span>
+                    <span>{txt('totalAmountReceipt')}</span>
                     <span className="text-base font-black text-zinc-950">
                       {currencySymbol}{Number(selectedOrder.totalAmount).toLocaleString()}
                     </span>
@@ -1118,7 +1264,7 @@ export function CustomerOrdersTable({
                   {/* Receipt Bottom Branding */}
                   <div className="pt-2 border-t border-dashed border-zinc-300 text-center text-[10px] text-zinc-400">
                     <p className="font-medium">
-                      {isParlour ? 'Thank you for visiting us!' : 'Thank you for dining with us!'}
+                      {isParlour ? txt('thankYouVisiting') : txt('thankYouDining')}
                     </p>
                     <p className="mt-0.5 font-semibold text-zinc-500">Powered by MenuSnap</p>
                   </div>
@@ -1137,7 +1283,7 @@ export function CustomerOrdersTable({
                     ) : (
                       <Download className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
                     )}
-                    <span>{isDownloading ? 'Generating Image...' : 'Download Receipt (PNG)'}</span>
+                    <span>{isDownloading ? txt('generatingImage') : txt('downloadReceiptPng')}</span>
                   </Button>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -1151,7 +1297,7 @@ export function CustomerOrdersTable({
                       }}
                       className="text-xs font-semibold gap-1.5 h-9 rounded-xl border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
                     >
-                      <Phone className="w-3.5 h-3.5" /> WhatsApp Customer
+                      <Phone className="w-3.5 h-3.5" /> {txt('whatsappCustomer')}
                     </Button>
 
                     <Button
@@ -1159,7 +1305,7 @@ export function CustomerOrdersTable({
                       onClick={() => setSelectedOrder(null)}
                       className="text-xs font-semibold h-9 rounded-xl"
                     >
-                      Close
+                      {txt('close')}
                     </Button>
                   </div>
                 </div>
@@ -1197,14 +1343,14 @@ export function CustomerOrdersTable({
               <Trash2 className="w-5 h-5" />
             </div>
             <AlertDialogTitle className="text-base font-bold text-foreground">
-              Delete Order #{orderToDelete?.orderId}?
+              {txt('deleteConfirmTitle')} #{orderToDelete?.orderId}?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
-              Are you sure you want to remove this order for{' '}
+              {txt('deleteConfirmDescPrefix')}{' '}
               <span className="font-bold text-foreground">
                 {orderToDelete ? decodeHtmlEntities(orderToDelete.customerName) : 'Customer'}
               </span>{' '}
-              ({currencySymbol}{Number(orderToDelete?.totalAmount || 0).toLocaleString()})? This action cannot be undone.
+              ({currencySymbol}{Number(orderToDelete?.totalAmount || 0).toLocaleString()}){txt('deleteConfirmDescSuffix')}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -1220,7 +1366,7 @@ export function CustomerOrdersTable({
               }}
               className="mt-0 h-9 rounded-xl text-xs font-semibold flex-1 sm:flex-none border-border"
             >
-              Cancel
+              {txt('cancel')}
             </AlertDialogCancel>
             <Button
               variant="destructive"
@@ -1233,7 +1379,7 @@ export function CustomerOrdersTable({
               ) : (
                 <Trash2 className="w-3.5 h-3.5" />
               )}
-              <span>{isDeleting ? 'Deleting...' : 'Delete Order'}</span>
+              <span>{isDeleting ? txt('deleting') : txt('deleteOrder')}</span>
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
