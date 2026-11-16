@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { X, MessageCircle } from 'lucide-react';
 import { usePreferences } from '@/context/PreferencesContext';
@@ -11,38 +11,9 @@ interface SpeedDialFABProps {
   phoneNumber?: string;
 }
 
-export function SpeedDialFAB({ phoneNumber = "8801805561176" }: SpeedDialFABProps = {}): ReactNode {
+export function SpeedDialFAB({ phoneNumber = "8801805561178" }: SpeedDialFABProps = {}): ReactNode {
   const [showBubble, setShowBubble] = useState(true);
   const { language } = usePreferences();
-  const fabControls = useAnimation();
-  const fabIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    const animateFAB = async () => {
-      await fabControls.start({
-        scale: [1, 1.04, 1],
-        y: [0, -3, 0],
-        transition: {
-          scale: { duration: 2.2, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" },
-          y: { duration: 2.2, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" },
-        },
-      });
-    };
-    animateFAB();
-
-    if (fabIntervalRef.current) clearInterval(fabIntervalRef.current);
-    fabIntervalRef.current = setInterval(async () => {
-      await fabControls.start({
-        scale: [1, 1.1, 1],
-        transition: { duration: 0.5, ease: "easeInOut" },
-      });
-    }, 12000);
-
-    return () => {
-      if (fabIntervalRef.current) clearInterval(fabIntervalRef.current);
-      fabControls.stop();
-    };
-  }, [fabControls]);
 
   const handleOpenWhatsApp = () => {
     const message = encodeURIComponent("Hello MenuSnap, I need assistance with my digital menu.");
@@ -99,7 +70,16 @@ export function SpeedDialFAB({ phoneNumber = "8801805561176" }: SpeedDialFABProp
           onClick={handleOpenWhatsApp}
           className="relative rounded-full h-12 w-12 md:h-14 md:w-14 shadow-2xl flex items-center justify-center overflow-hidden border-2 border-white dark:border-slate-800 ring-2 ring-emerald-500/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-transform duration-200 bg-background cursor-pointer"
           aria-label="Chat with Support on WhatsApp"
-          animate={fabControls}
+          animate={{
+            scale: [1, 1.04, 1],
+            y: [0, -3, 0],
+          }}
+          transition={{
+            duration: 2.2,
+            ease: "easeInOut",
+            repeat: Infinity,
+            repeatType: "mirror",
+          }}
           whileHover={{ scale: 1.06 }}
           whileTap={{ scale: 0.94 }}
         >

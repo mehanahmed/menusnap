@@ -4,6 +4,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  serverExternalPackages: ['genkit', '@genkit-ai/googleai', '@genkit-ai/core', 'dotprompt', 'handlebars'],
   allowedDevOrigins: ['192.168.10.139', '192.168.10.115', 'localhost:9002', 'menusnap.colorhutbd.xyz'],
   experimental: {
     serverActions: {

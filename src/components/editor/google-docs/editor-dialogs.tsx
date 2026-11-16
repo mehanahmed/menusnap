@@ -435,6 +435,7 @@ export function CommandSearchDialog({
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-md bg-white p-4 rounded-2xl shadow-2xl border border-gray-100">
+                <DialogTitle className="sr-only">Search Menus</DialogTitle>
                 <div className="flex items-center gap-2 px-2 py-1 border-b border-gray-100">
                     <Search className="w-4 h-4 text-gray-400" />
                     <Input

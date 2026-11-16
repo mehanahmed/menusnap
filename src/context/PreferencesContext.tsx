@@ -71,6 +71,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     templateLibrary: 'Template Library',
     customerOrders: 'Customer Orders',
     hrm: 'HRM',
+    accounts: 'Accounts',
   },
   bn: {
     magictab: 'ম্যাজিকট্যাব',
@@ -105,6 +106,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     templateLibrary: 'টেমপ্লেট লাইব্রেরি',
     customerOrders: 'কাস্টমার অর্ডার',
     hrm: 'এইচআরএম',
+    accounts: 'অ্যাকাউন্টস',
   },
   ar: {
     magictab: 'ماجيك تاب',
@@ -139,6 +141,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     templateLibrary: 'مكتبة القوالب',
     customerOrders: 'طلبات العملاء',
     hrm: 'الموارد البشرية',
+    accounts: 'الحسابات',
   },
   es: {
     magictab: 'MagicTab',
@@ -173,6 +176,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     templateLibrary: 'Biblioteca de Plantillas',
     customerOrders: 'Pedidos de Clientes',
     hrm: 'RRHH',
+    accounts: 'Cuentas',
   },
 };
 

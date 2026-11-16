@@ -13,7 +13,7 @@ interface WhatsAppFloatProps {
 
 export function WhatsAppFloat({ 
   className, 
-  phoneNumber = "8801805561176",
+  phoneNumber = "8801805561178",
   message = "Hello! I'm interested in your services."
 }: WhatsAppFloatProps) {
   const pathname = usePathname();
@@ -30,6 +30,7 @@ export function WhatsAppFloat({
                            pathname.startsWith('/templates') || 
                            pathname.startsWith('/draft') || 
                            pathname.startsWith('/customer-orders') || 
+                           pathname.startsWith('/accounts') || 
                            pathname.startsWith('/ebook') || 
                            pathname.startsWith('/order-history') || 
                            pathname.startsWith('/happy-clients') || 

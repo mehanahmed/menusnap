@@ -22,6 +22,8 @@ import {
   Sparkles,
   ChevronRight,
   ExternalLink,
+  Wallet,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -37,14 +39,14 @@ import {
 
 const navItemsLeft = [
   { href: '/magictab/', label: 'MagicTab', icon: ListOrdered },
-  { href: '/customer-orders/', label: 'Customer Orders', icon: UtensilsCrossed, isLive: true },
+  { href: '/draft/', label: 'Draft', icon: FileEdit },
 ];
 
 const centerNavItem = { href: '/happy-clients/', label: 'Happy Clients', icon: HeartHandshake };
 
-const draftNavItem = { href: '/draft/', label: 'Draft', icon: FileEdit };
+const magicCalcNavItem = { href: '/magic-calculation/', label: 'Magic Calc', icon: Calculator };
 
-const allNavItems = [...navItemsLeft, centerNavItem, draftNavItem];
+const allNavItems = [...navItemsLeft, centerNavItem, magicCalcNavItem];
 
 export function BottomNavigation() {
   const pathname = usePathname();
@@ -72,7 +74,8 @@ export function BottomNavigation() {
       if (
         cleanPathname === cleanItemHref ||
         pathname.startsWith(item.href) ||
-        pathname.startsWith(cleanItemHref + '/')
+        pathname.startsWith(cleanItemHref + '/') ||
+        (item.href.includes('magic-calculation') && pathname.startsWith('/magic-calc'))
       ) {
         activeItemHref = item.href;
         break;
@@ -85,9 +88,10 @@ export function BottomNavigation() {
 
   const isMoreActive = useMemo(() => {
     const moreRoutes = [
+      '/customer-orders',
+      '/hrm',
+      '/accounts',
       '/templates',
-      '/magic-calculation',
-      '/magic-calc',
       '/order-history',
     ];
     return moreRoutes.some((route) => pathname.startsWith(route));
@@ -95,18 +99,33 @@ export function BottomNavigation() {
 
   const moreMenuItems = [
     {
+      href: '/customer-orders/',
+      label: 'Customer Orders',
+      translationKey: 'customerOrders',
+      icon: UtensilsCrossed,
+      description: 'Live dine-in & takeaway food orders',
+      isLive: true,
+    },
+    {
+      href: '/hrm/',
+      label: 'HRM',
+      translationKey: 'hrm',
+      icon: Users,
+      description: 'Employee duties, attendance & shifts',
+    },
+    {
+      href: '/accounts/',
+      label: 'Accounts',
+      translationKey: 'accounts',
+      icon: Wallet,
+      description: 'Manage expenses, vendor bills & staff payroll',
+    },
+    {
       href: '/templates/',
       label: 'Template Library',
       translationKey: 'templates',
       icon: Layers,
       description: 'Explore and switch digital menu designs',
-    },
-    {
-      href: '/magic-calculation/',
-      label: 'Magic Calculation',
-      translationKey: 'magicCalc',
-      icon: Calculator,
-      description: 'Calculate food costs, margins & sales',
     },
     {
       href: '/order-history/',
@@ -203,8 +222,8 @@ export function BottomNavigation() {
                       )}
                     </div>
                     <span className="rd-navbar_link_text whitespace-nowrap tracking-tight text-[9px] sm:text-[10px]">
-                      {item.href.includes('customer-orders')
-                        ? t('customerOrders', item.label)
+                      {item.href.includes('draft')
+                        ? t('draft', item.label)
                         : t(item.href.replace(/\//g, ''), item.label)}
                     </span>
                   </motion.div>
@@ -215,22 +234,25 @@ export function BottomNavigation() {
             {/* Center Notch Spacer */}
             <div className="w-[80px] h-full" />
 
-            {/* Right Nav Item 1: Draft (Replaced Templates) */}
+            {/* Right Nav Item 1: Magic Calculation (Replaced Draft) */}
             <Link
-              href={draftNavItem.href}
-              className={cn("rd-navbar_link group", activeItem.href === draftNavItem.href && "is-active")}
+              href={magicCalcNavItem.href}
+              className={cn(
+                "rd-navbar_link group",
+                (activeItem.href === magicCalcNavItem.href || pathname.startsWith('/magic-calc')) && "is-active"
+              )}
             >
               <motion.div whileTap={{ scale: 0.9 }} className="flex flex-col items-center">
                 <div className="relative flex items-center justify-center">
-                  <draftNavItem.icon
+                  <magicCalcNavItem.icon
                     className={cn(
                       "rd-navbar_link_icon transition-transform",
-                      activeItem.href === draftNavItem.href && "scale-110"
+                      (activeItem.href === magicCalcNavItem.href || pathname.startsWith('/magic-calc')) && "scale-110"
                     )}
                   />
                 </div>
                 <span className="rd-navbar_link_text whitespace-nowrap tracking-tight text-[9px] sm:text-[10px]">
-                  {t('draft', draftNavItem.label)}
+                  {t('magicCalc', magicCalcNavItem.label)}
                 </span>
               </motion.div>
             </Link>
@@ -353,16 +375,29 @@ export function BottomNavigation() {
                   <div className="flex items-center gap-3 min-w-0">
                     <div
                       className={cn(
-                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+                        "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 relative",
                         isActive ? "bg-primary text-white" : "bg-white/[0.08] text-zinc-300"
                       )}
                     >
                       <Icon className="w-4 h-4" />
+                      {(item as any).isLive && (
+                        <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
+                      )}
                     </div>
                     <div className="min-w-0">
-                      <span className="text-sm font-semibold block leading-tight">
-                        {t(item.translationKey, item.label)}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold block leading-tight">
+                          {t(item.translationKey, item.label)}
+                        </span>
+                        {(item as any).isLive && (
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 leading-none">
+                            LIVE
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[11px] text-zinc-400 font-normal truncate block mt-0.5">
                         {item.description}
                       </span>

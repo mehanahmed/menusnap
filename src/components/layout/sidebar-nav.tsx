@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Calculator,
   Users,
+  Wallet,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import {
@@ -45,6 +46,7 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
   { href: '/draft/', label: 'Draft', icon: FileEdit, hasChevron: true },
   { href: '/customer-orders/', label: 'Customer Orders', icon: UtensilsCrossed, hasChevron: true, isLive: true },
   { href: '/hrm/', label: 'HRM', icon: Users, hasChevron: true },
+  { href: '/accounts/', label: 'Accounts', icon: Wallet, hasChevron: true },
   { href: '/magic-calculation/', label: 'Magic Calculation', icon: Calculator, hasChevron: true },
   { href: '/order-history/', label: 'Order History', icon: HistoryIcon, hasChevron: true },
   { href: '/happy-clients/', label: 'Happy Clients', icon: HeartHandshake, hasChevron: true },
@@ -61,6 +63,7 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
       case '/draft/': return t('draft', fallback);
       case '/customer-orders/': return t('customerOrders', fallback);
       case '/hrm/': return t('hrm', fallback);
+      case '/accounts/': return t('accounts', fallback);
       case '/magic-calculation/': return t('magicCalc', fallback);
       case '/order-history/': return t('orderHistory', fallback);
       case '/happy-clients/': return t('happyClients', fallback);
@@ -180,7 +183,7 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
                     >
                       <item.icon className="h-5 w-5" />
                       <span className="group-data-[collapsible=icon]:hidden flex-1">{getNavLabel(item.href, item.label)}</span>
-                      {item.href.includes('/magictab') && !isSubscriber && (
+                      {(item.href.includes('/magictab') || item.href.includes('/accounts')) && !isSubscriber && (
                         <span className="group-data-[collapsible=icon]:hidden text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs mr-1">
                           PRO
                         </span>

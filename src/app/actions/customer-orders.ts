@@ -228,7 +228,7 @@ export async function getCustomerOrdersAction(params: {
 }
 
 /**
- * Updates the status of an existing customer order
+ * Updates the status of an existing customer order and syncs with accounts incomes
  */
 export async function updateCustomerOrderStatusAction(
   orderId: string,
@@ -241,6 +241,94 @@ export async function updateCustomerOrderStatusAction(
       `UPDATE customer_orders SET status = ? WHERE order_id = ?`,
       [newStatus.toLowerCase(), orderId]
     );
+
+    // Auto-sync with Accounts Incomes
+    try {
+      if (newStatus.toLowerCase() === 'completed') {
+        const [orderRows]: any = await pool.execute(
+          `SELECT order_id, client_id, business_name, customer_name, customer_phone, table_number, special_note, total_amount, created_at
+           FROM customer_orders
+           WHERE order_id = ?
+           LIMIT 1`,
+          [orderId]
+        );
+
+        if (orderRows && orderRows.length > 0) {
+          const ord = orderRows[0];
+          let restaurantId = ord.client_id ? String(ord.client_id) : '';
+          if (!restaurantId && ord.business_name) {
+            const [clientRows]: any = await pool.execute(
+              `SELECT id FROM clients WHERE business_name = ? LIMIT 1`,
+              [ord.business_name]
+            );
+            if (clientRows && clientRows.length > 0) {
+              restaurantId = String(clientRows[0].id);
+            }
+          }
+          if (!restaurantId) {
+            restaurantId = ord.business_name || '1';
+          }
+
+          const orderDate = ord.created_at
+            ? new Date(ord.created_at).toISOString().slice(0, 10)
+            : new Date().toISOString().slice(0, 10);
+          const tableInfo = ord.table_number ? ` (Table ${ord.table_number})` : '';
+          const custName = ((ord.customer_name || 'Customer') + tableInfo).slice(0, 150);
+          const custPhone = ord.customer_phone ? String(ord.customer_phone).trim() : null;
+          const noteText = ord.special_note ? String(ord.special_note).trim() : null;
+
+          // Check if an income row already exists for this order
+          const [existingRows]: any = await pool.execute(
+            `SELECT id, deleted_at FROM incomes WHERE order_id = ? LIMIT 1`,
+            [ord.order_id]
+          );
+
+          if (existingRows && existingRows.length > 0) {
+            // Restore if soft-deleted, and update amount, date, phone
+            await pool.execute(
+              `UPDATE incomes 
+               SET deleted_at = NULL, amount = ?, date = ?, customer_name = ?, customer_phone = ?, note = ?, updated_at = NOW() 
+               WHERE id = ?`,
+              [Number(ord.total_amount) || 0, orderDate, custName, custPhone, noteText, existingRows[0].id]
+            );
+          } else {
+            // Insert new income row with dedicated customer_phone
+            await pool.execute(
+              `INSERT INTO incomes (
+                restaurant_id,
+                date,
+                amount,
+                payment_method_id,
+                customer_name,
+                customer_phone,
+                order_id,
+                created_by,
+                note
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                restaurantId,
+                orderDate,
+                Number(ord.total_amount) || 0,
+                1, // 1 = Cash
+                custName,
+                custPhone,
+                ord.order_id,
+                'QR Order',
+                noteText
+              ]
+            );
+          }
+        }
+      } else {
+        // If status changed away from completed (e.g. cancelled, pending, preparing), soft-delete linked income
+        await pool.execute(
+          `UPDATE incomes SET deleted_at = NOW() WHERE order_id = ? AND deleted_at IS NULL`,
+          [orderId]
+        );
+      }
+    } catch (syncErr) {
+      console.warn('Completed order sync to accounts incomes error:', syncErr);
+    }
 
     return { success: true };
   } catch (error: any) {
@@ -259,6 +347,10 @@ export async function deleteCustomerOrderAction(
     await ensureCustomerOrdersSchema();
 
     await pool.execute(`DELETE FROM customer_orders WHERE order_id = ?`, [orderId]);
+
+    try {
+      await pool.execute(`UPDATE incomes SET deleted_at = NOW() WHERE order_id = ? AND deleted_at IS NULL`, [orderId]);
+    } catch {}
 
     return { success: true };
   } catch (error: any) {
@@ -288,36 +380,91 @@ export async function getCustomerOrderByIdAction(
       [cleanId]
     );
 
-    if (!rows || rows.length === 0) {
-      return { success: false, error: 'Order not found' };
+    if (rows && rows.length > 0) {
+      const row = rows[0];
+      let items: CustomerOrderItem[] = [];
+      try {
+        items = typeof row.items_json === 'string' ? JSON.parse(row.items_json) : (row.items_json || []);
+      } catch {
+        items = [];
+      }
+
+      return {
+        success: true,
+        order: {
+          id: row.id,
+          orderId: row.order_id,
+          clientId: row.client_id,
+          businessName: row.business_name,
+          draftId: row.draft_id,
+          customerName: row.customer_name,
+          customerPhone: row.customer_phone,
+          tableNumber: row.table_number,
+          specialNote: row.special_note,
+          items,
+          totalAmount: Number(row.total_amount) || 0,
+          status: (row.status || 'pending').toLowerCase() as any,
+          createdAt: row.created_at,
+        },
+      };
     }
 
-    const row = rows[0];
-    let items: CustomerOrderItem[] = [];
-    try {
-      items = typeof row.items_json === 'string' ? JSON.parse(row.items_json) : (row.items_json || []);
-    } catch {
-      items = [];
+    // 2. Fallback: Check incomes table for manual orders or direct receipts (e.g. ORD-M-XXXX)
+    const [incRows]: any = await pool.execute(
+      `SELECT i.id, i.restaurant_id, i.order_id, i.customer_name, i.customer_phone, 
+              i.amount, i.note, i.created_by,
+              DATE_FORMAT(i.created_at, '%Y-%m-%d %H:%i:%s') as created_at,
+              c.business_name,
+              s.name as service_name
+       FROM incomes i
+       LEFT JOIN clients c ON i.restaurant_id = c.id
+       LEFT JOIN services s ON i.service_id = s.id
+       WHERE (i.order_id = ? OR i.id = ?) AND i.deleted_at IS NULL
+       LIMIT 1`,
+      [cleanId, Number(cleanId) || -1]
+    );
+
+    if (incRows && incRows.length > 0) {
+      const inc = incRows[0];
+
+      let custName = inc.customer_name || 'Walk-in Customer';
+      let tableNum: string | null = null;
+      const tableMatch = String(custName).match(/\(Table\s+([^)]+)\)/i);
+      if (tableMatch) {
+        tableNum = tableMatch[1].trim();
+        custName = custName.replace(/\(Table\s+[^)]+\)/i, '').trim();
+      }
+
+      const itemName = inc.service_name || inc.note || 'Food & Beverage Order';
+
+      return {
+        success: true,
+        order: {
+          id: inc.id,
+          orderId: inc.order_id || `REC-${inc.id}`,
+          clientId: Number(inc.restaurant_id) || null,
+          businessName: inc.business_name || 'Restaurant',
+          draftId: null,
+          customerName: custName,
+          customerPhone: inc.customer_phone || null,
+          tableNumber: tableNum,
+          specialNote: inc.note || null,
+          items: [
+            {
+              key: 'item-1',
+              name: itemName,
+              quantity: 1,
+              price: Number(inc.amount) || 0,
+            },
+          ],
+          totalAmount: Number(inc.amount) || 0,
+          status: 'completed',
+          createdAt: inc.created_at,
+        },
+      };
     }
 
-    return {
-      success: true,
-      order: {
-        id: row.id,
-        orderId: row.order_id,
-        clientId: row.client_id,
-        businessName: row.business_name,
-        draftId: row.draft_id,
-        customerName: row.customer_name,
-        customerPhone: row.customer_phone,
-        tableNumber: row.table_number,
-        specialNote: row.special_note,
-        items,
-        totalAmount: Number(row.total_amount) || 0,
-        status: (row.status || 'pending').toLowerCase() as any,
-        createdAt: row.created_at,
-      },
-    };
+    return { success: false, error: 'Order not found' };
   } catch (error: any) {
     console.error('Error in getCustomerOrderByIdAction:', error);
     return { success: false, error: error.message || 'Failed to fetch order' };

@@ -161,7 +161,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r border-sidebar-border shadow-md bg-sidebar print:hidden">
           <SidebarNav />
         </Sidebar>
-        <SidebarInset className="bg-background print:bg-white print:p-0 print:m-0 print:w-full print:block min-w-0 max-w-full overflow-x-hidden">
+        <SidebarInset className="bg-background print:bg-white print:p-0 print:m-0 print:w-full print:block min-w-0 max-w-full overflow-x-hidden print:overflow-visible">
           {isMobile ? (
             <div 
               className={cn(
@@ -179,9 +179,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </main>
             </div>
           ) : (
-            <ScrollArea className={cn("h-screen print:h-auto print:overflow-visible print:block", (pathname === "/magictab" || pathname === "/magictab/" || pathname === "/ebook" || pathname === "/ebook/") ? "pb-0" : "pb-16 md:pb-0")}> 
+            <ScrollArea className={cn("h-screen print:h-auto print:min-h-0 print:w-full print:overflow-visible print:block", (pathname === "/magictab" || pathname === "/magictab/" || pathname === "/ebook" || pathname === "/ebook/") ? "pb-0" : "pb-16 md:pb-0")}> 
               <main className={cn(
-                "flex-1 min-w-0 w-full max-w-full",
+                "flex-1 min-w-0 w-full max-w-full print:p-0 print:m-0 print:w-full print:max-w-none print:min-h-0 print:h-auto print:block",
                 (pathname === "/dashboard" || pathname === "/dashboard/" || pathname === "/magictab" || pathname === "/magictab/" || pathname === "/templates" || pathname === "/templates/" || pathname === "/draft" || pathname === "/draft/" || pathname.startsWith("/customer-orders") || pathname === "/ebook" || pathname === "/ebook/" || pathname === "/marketing-consultation" || pathname === "/marketing-consultation/" || pathname.startsWith("/magic-calculation") || pathname.startsWith("/magic-calc")) ? "p-0" : "p-4 sm:p-6 md:p-8 lg:p-10"
               )}>
                 {children}
