@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { AccountsMobileCards } from '@/components/accounts/AccountsTopNavbar';
 
 import { useEffect, useState, useTransition, useCallback, useRef } from 'react';
@@ -94,6 +95,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowLeft,
+  ArrowRight,
   Phone,
   UserCheck,
   UserX,
@@ -131,6 +133,9 @@ interface StaffItem {
   month_services?: number;
   month_commission?: number;
   month_tips?: number;
+  pin_code?: string;
+  shift_start?: string;
+  shift_end?: string;
   created_at: string;
 }
 
@@ -193,8 +198,8 @@ export default function StaffPage() {
   const { t } = usePreferences();
   const { clientUser } = useClientAuth();
 
-  // Navigation tab in Staff module: 'directory' | 'attendance' | 'payroll' | 'commissions'
-  const [activeMainTab, setActiveMainTab] = useState<'directory' | 'attendance' | 'payroll' | 'commissions'>('directory');
+  // Navigation tab in Staff module: 'directory' | 'payroll' | 'commissions'
+  const [activeMainTab, setActiveMainTab] = useState<'directory' | 'payroll' | 'commissions'>('directory');
 
   // Staff List State
   const [staffList, setStaffList] = useState<StaffItem[]>([]);
@@ -239,6 +244,9 @@ export default function StaffPage() {
   const [staffBaseSalary, setStaffBaseSalary] = useState('');
   const [staffCommType, setStaffCommType] = useState<'percent' | 'fixed'>('percent');
   const [staffCommValue, setStaffCommValue] = useState<string>('');
+  const [staffPin, setStaffPin] = useState('123456');
+  const [staffShiftStart, setStaffShiftStart] = useState('09:00');
+  const [staffShiftEnd, setStaffShiftEnd] = useState('18:00');
   const [staffFormError, setStaffFormError] = useState<string | null>(null);
 
   // Parlour Services & Commissions State
@@ -448,14 +456,12 @@ export default function StaffPage() {
   }, [isParlour, loadServices]);
 
   useEffect(() => {
-    if (activeMainTab === 'attendance') {
-      loadDailyAttendance(attendanceDate);
-    } else if (activeMainTab === 'payroll') {
+    if (activeMainTab === 'payroll') {
       loadSalaryPreview(payrollMonth);
     } else if (activeMainTab === 'commissions' && isParlour) {
       loadCommissions();
     }
-  }, [activeMainTab, attendanceDate, payrollMonth, commissionMonth, commissionStaffFilter, isParlour, loadDailyAttendance, loadSalaryPreview, loadCommissions]);
+  }, [activeMainTab, payrollMonth, commissionMonth, commissionStaffFilter, isParlour, loadSalaryPreview, loadCommissions]);
 
   const scrollPosRef = useRef<number>(0);
 
@@ -499,6 +505,9 @@ export default function StaffPage() {
     setStaffBaseSalary('');
     setStaffCommType('percent');
     setStaffCommValue('');
+    setStaffPin('123456');
+    setStaffShiftStart('09:00');
+    setStaffShiftEnd('18:00');
     setStaffFormError(null);
     setIsStaffModalOpen(true);
   };
@@ -518,6 +527,9 @@ export default function StaffPage() {
         ? String((s as any).commission_value)
         : ''
     );
+    setStaffPin(s.pin_code || '123456');
+    setStaffShiftStart(s.shift_start ? s.shift_start.slice(0, 5) : '09:00');
+    setStaffShiftEnd(s.shift_end ? s.shift_end.slice(0, 5) : '18:00');
     setStaffFormError(null);
     setIsStaffModalOpen(true);
   };
@@ -555,6 +567,9 @@ export default function StaffPage() {
             base_salary: baseSalary,
             commission_type: staffCommType,
             commission_value: isNaN(commValNum) ? 0 : commValNum,
+            pin_code: staffPin.trim() || '123456',
+            shift_start: staffShiftStart ? staffShiftStart + ':00' : '09:00:00',
+            shift_end: staffShiftEnd ? staffShiftEnd + ':00' : '18:00:00',
           });
           if (res.success) {
             setIsStaffModalOpen(false);
@@ -575,6 +590,9 @@ export default function StaffPage() {
             base_salary: baseSalary,
             commission_type: staffCommType,
             commission_value: isNaN(commValNum) ? 0 : commValNum,
+            pin_code: staffPin.trim() || '123456',
+            shift_start: staffShiftStart ? staffShiftStart + ':00' : '09:00:00',
+            shift_end: staffShiftEnd ? staffShiftEnd + ':00' : '18:00:00',
           });
           if (res.success) {
             setIsStaffModalOpen(false);
@@ -1120,7 +1138,7 @@ export default function StaffPage() {
                   isParlour ? 'staffSubtitleParlour' : 'staffSubtitle',
                   isParlour
                     ? 'Stylists and staff roster, attendance, commission/salary generation, and advances.'
-                    : 'Staff roster, daily attendance sheet, salary generation, and cash advances.'
+                    : 'Staff roster, salary generation synced with HRM, and cash advances.'
                 )}
               </p>
             </div>
@@ -1233,14 +1251,10 @@ export default function StaffPage() {
             onValueChange={(val: any) => setActiveMainTab(val)}
             className="w-full sm:w-auto"
           >
-            <TabsList className={`grid ${isParlour ? 'grid-cols-4' : 'grid-cols-3'} w-full sm:w-auto rounded-xl bg-muted/40 p-1`}>
+            <TabsList className={`grid ${isParlour ? 'grid-cols-3' : 'grid-cols-2'} w-full sm:w-auto rounded-xl bg-muted/40 p-1`}>
               <TabsTrigger value="directory" className="rounded-lg text-xs font-semibold px-2 sm:px-4">
                 <Users className="w-3.5 h-3.5 mr-1 sm:mr-1.5" />
                 <span className="truncate">{t('staffDirectory', 'Staff Directory')}</span>
-              </TabsTrigger>
-              <TabsTrigger value="attendance" className="rounded-lg text-xs font-semibold px-2 sm:px-4">
-                <ClipboardList className="w-3.5 h-3.5 mr-1 sm:mr-1.5" />
-                <span className="truncate">{t('dailyAttendance', 'Daily Attendance')}</span>
               </TabsTrigger>
               <TabsTrigger value="payroll" className="rounded-lg text-xs font-semibold px-2 sm:px-4">
                 <Calculator className="w-3.5 h-3.5 mr-1 sm:mr-1.5" />
@@ -1267,6 +1281,18 @@ export default function StaffPage() {
                 <span>{t('addCommission', 'Record Commission')}</span>
               </Button>
             )}
+
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-9 sm:h-10 px-3 sm:px-3.5 rounded-xl border-border/80 text-xs font-semibold hover:bg-muted flex-1 sm:flex-initial whitespace-nowrap"
+            >
+              <Link href="/hrm">
+                <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 text-blue-600" />
+                <span>HRM &amp; Attendance</span>
+              </Link>
+            </Button>
 
             <Button
               variant="outline"
@@ -1774,8 +1800,8 @@ export default function StaffPage() {
           </div>
         )}
 
-        {/* 4. TAB CONTENT 2: DAILY ATTENDANCE KHATA */}
-        {activeMainTab === 'attendance' && (
+        {/* 4. TAB CONTENT 2: DAILY ATTENDANCE KHATA (Migrated to HRM) */}
+        {(activeMainTab as any) === 'attendance' && (
           <div className="space-y-4">
             <Card className="rounded-2xl border border-border/60 bg-card p-3.5 sm:p-5 shadow-xs">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -1936,6 +1962,33 @@ export default function StaffPage() {
         {/* 5. TAB CONTENT 3: GENERATE SALARY (MONTH-END PAYROLL) */}
         {activeMainTab === 'payroll' && (
           <div className="space-y-4">
+            {/* HRM Live Attendance Sync Notice Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/40 text-xs shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-blue-950 dark:text-blue-100 block text-xs sm:text-sm">
+                    HRM Live Attendance Synced
+                  </span>
+                  <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                    Monthly presents, lates, half-days, and absents are automatically calculated from HRM punch records.
+                  </p>
+                </div>
+              </div>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-xl border-blue-300 bg-white dark:bg-card text-blue-700 dark:text-blue-300 hover:bg-blue-100/60 text-xs font-semibold shadow-xs whitespace-nowrap self-start sm:self-auto"
+              >
+                <Link href="/hrm">
+                  Open HRM &amp; Attendance <ArrowRight className="w-3 h-3 ml-1" />
+                </Link>
+              </Button>
+            </div>
+
             <Card className="rounded-2xl border border-border/60 bg-card p-4 sm:p-5 shadow-xs">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -2509,6 +2562,48 @@ export default function StaffPage() {
                   onChange={(e) => setStaffJoiningDate(e.target.value)}
                   className="h-10 rounded-xl text-xs bg-muted/20"
                 />
+              </div>
+
+              {/* Attendance & Shift Details */}
+              <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-500" />
+                    HRM Shift &amp; Kiosk PIN
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">For Counter Kiosk Punch</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">6-Digit PIN</Label>
+                    <Input
+                      type="text"
+                      maxLength={6}
+                      placeholder="123456"
+                      value={staffPin}
+                      onChange={(e) => setStaffPin(e.target.value)}
+                      className="h-9 rounded-xl text-xs font-mono font-bold text-center bg-muted/20"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Shift In</Label>
+                    <Input
+                      type="time"
+                      value={staffShiftStart}
+                      onChange={(e) => setStaffShiftStart(e.target.value)}
+                      className="h-9 rounded-xl text-xs bg-muted/20"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Shift Out</Label>
+                    <Input
+                      type="time"
+                      value={staffShiftEnd}
+                      onChange={(e) => setStaffShiftEnd(e.target.value)}
+                      className="h-9 rounded-xl text-xs bg-muted/20"
+                    />
+                  </div>
+                </div>
               </div>
 
               {isParlour && (

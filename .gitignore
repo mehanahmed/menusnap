@@ -71,6 +71,7 @@ auth_info_baileys/
 
 # Database dumps, exports & local database data
 *.sql
+!src/lib/**/*.sql
 *.sql.gz
 *.sqlite
 *.sqlite3

@@ -2346,6 +2346,9 @@ export interface CreateStaffInput {
   base_salary?: number | string;
   commission_type?: 'percent' | 'fixed';
   commission_value?: number | string;
+  pin_code?: string;
+  shift_start?: string;
+  shift_end?: string;
 }
 
 export interface UpdateStaffInput {
@@ -2358,6 +2361,9 @@ export interface UpdateStaffInput {
   commission_type?: 'percent' | 'fixed';
   commission_value?: number | string;
   is_active?: boolean;
+  pin_code?: string;
+  shift_start?: string;
+  shift_end?: string;
 }
 
 export interface CreateStaffAdvanceInput {
@@ -2486,6 +2492,9 @@ export async function getStaffListAction(params: GetStaffParams) {
         s.commission_value,
         s.is_active,
         s.created_at,
+        COALESCE(s.pin_code, '123456') as pin_code,
+        COALESCE(TIME_FORMAT(s.shift_start, '%H:%i'), '09:00') as shift_start,
+        COALESCE(TIME_FORMAT(s.shift_end, '%H:%i'), '18:00') as shift_end,
         COALESCE(adv.pending_advance, 0) as pending_advance,
         COALESCE(sal.unpaid_salary, 0) as unpaid_salary,
         COALESCE(comm.month_services, 0) as month_services,
@@ -2632,10 +2641,14 @@ export async function createStaffAction(restaurantId: string | number, input: Cr
       commVal = Math.min(100, commVal);
     }
 
+    const pin = (input.pin_code || '123456').trim().slice(0, 10);
+    const shiftStart = input.shift_start || '09:00:00';
+    const shiftEnd = input.shift_end || '18:00:00';
+
     const [result]: any = await pool.execute(
       `INSERT INTO staff (
-        restaurant_id, name, phone, role, joining_date, salary_type, base_salary, commission_type, commission_value, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+        restaurant_id, name, phone, role, joining_date, salary_type, base_salary, commission_type, commission_value, is_active, pin_code, shift_start, shift_end
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)`,
       [
         cleanId,
         trimmedName,
@@ -2646,6 +2659,9 @@ export async function createStaffAction(restaurantId: string | number, input: Cr
         isNaN(baseSalary) ? 0 : baseSalary,
         commType,
         commVal,
+        pin,
+        shiftStart,
+        shiftEnd,
       ]
     );
 
@@ -2735,6 +2751,21 @@ export async function updateStaffAction(
     if (input.is_active !== undefined) {
       updates.push('is_active = ?');
       values.push(Boolean(input.is_active));
+    }
+
+    if (input.pin_code !== undefined) {
+      updates.push('pin_code = ?');
+      values.push(input.pin_code.trim().slice(0, 10));
+    }
+
+    if (input.shift_start !== undefined) {
+      updates.push('shift_start = ?');
+      values.push(input.shift_start);
+    }
+
+    if (input.shift_end !== undefined) {
+      updates.push('shift_end = ?');
+      values.push(input.shift_end);
     }
 
     if (updates.length === 0) {
@@ -2924,7 +2955,7 @@ export async function calculateSalaryPreviewAction(restaurantId: string | number
     const [attRows]: any = await pool.execute(
       `SELECT 
          staff_id,
-         SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as presents,
+         SUM(CASE WHEN status IN ('present', 'late') THEN 1 ELSE 0 END) as presents,
          SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absents,
          SUM(CASE WHEN status = 'leave' THEN 1 ELSE 0 END) as leaves,
          SUM(CASE WHEN status = 'half_day' THEN 1 ELSE 0 END) as half_days

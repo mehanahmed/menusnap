@@ -752,7 +752,7 @@ function DraftQrContent() {
                 {/* Footer Credits */}
                 <div className="pt-3.5 border-t border-border/60 text-[11px] opacity-75">
                   <p className="font-medium">Powered by MenuSnap</p>
-                  <p className="mt-0.5">For inquiries: +8801919760626</p>
+                  <p className="mt-0.5">For inquiries: +8801805561178</p>
                 </div>
               </div>
             </div>

@@ -46,6 +46,9 @@ export function WhatsAppFloat({
                    pathname.startsWith('/m-admin') || 
                    pathname.startsWith('/panel') ||
                    pathname.startsWith('/order-receipt') ||
+                   pathname.startsWith('/punch') ||
+                   pathname.startsWith('/hrm/punch') ||
+                   pathname.startsWith('/hrm/kiosk') ||
                    pathname.startsWith('/free-design');
 
   if (isHidden) return null;

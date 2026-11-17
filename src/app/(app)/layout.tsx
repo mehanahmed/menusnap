@@ -121,6 +121,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                                 pathname.startsWith('/ebook') || 
                                 pathname.startsWith('/ebook/success') || 
                                 pathname.startsWith('/team-tracker') ||
+                                pathname.startsWith('/hrm/punch') ||
+                                pathname.startsWith('/hrm/kiosk') ||
                                 pathname.startsWith('/success');
 
   const isAppStandalone = pathname.startsWith('/magictab') || 

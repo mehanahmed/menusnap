@@ -342,7 +342,7 @@ export default function ShareClient() {
           <p className="font-semibold tracking-wide">
             Powered by <span className="font-bold text-foreground">MenuSnap</span>
           </p>
-          <p className="mt-1 opacity-80">For inquiries, please contact Color Hut at +8801919760626.</p>
+          <p className="mt-1 opacity-80">For inquiries, please contact Color Hut at +8801805561178.</p>
         </footer>
       </main>
     </div>
