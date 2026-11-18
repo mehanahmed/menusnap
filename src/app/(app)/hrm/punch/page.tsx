@@ -39,7 +39,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { staffLoginPortalAction, staffPunchAction, getMonthlyAttendanceCalendarAction } from '@/app/actions/hrm';
 import { sanitizeBdPhone } from '@/lib/accounts/helpers';
-import { calculateDistanceInMeters, formatShiftRange, formatLateReason, formatTime12h } from '@/lib/hrm-constants';
+import { calculateDistanceInMeters, formatShiftRange, formatLateReason, formatTime12h, formatHoursHuman } from '@/lib/hrm-constants';
 
 const REMEMBER_PHONE_KEY = 'menubldr_staff_phone';
 
@@ -333,9 +333,11 @@ function StaffPunchContent() {
     return `${m} min`;
   }, [todayAttendance?.check_in_time, todayAttendance?.check_out_time, currentTime]);
 
-  // Check if current time has passed the scheduled shift end time
-  const isShiftEnded = useMemo(() => {
-    if (!staffData?.shift_end) return false;
+  // Check if current time is outside the valid shift window (standard 30-min early window + shift end lock)
+  const shiftWindow = useMemo(() => {
+    if (!staffData?.shift_start || !staffData?.shift_end) {
+      return { isEnded: false, isTooEarly: false, openTimeStr: '', startTimeStr: '' };
+    }
     const [endHour, endMin] = String(staffData.shift_end).split(':').map(Number);
     const [startHour, startMin] = String(staffData.shift_start || '09:00').split(':').map(Number);
     const end = new Date(currentTime);
@@ -351,7 +353,18 @@ function StaffPunchContent() {
         start.setDate(start.getDate() - 1);
       }
     }
-    return currentTime.getTime() > end.getTime();
+
+    // Standard 30-minute early check-in window
+    const earlyOpen = new Date(start.getTime() - 30 * 60 * 1000);
+    const isEnded = currentTime.getTime() > end.getTime();
+    const isTooEarly = currentTime.getTime() < earlyOpen.getTime();
+
+    return {
+      isEnded,
+      isTooEarly,
+      openTimeStr: formatTime12h(earlyOpen.toTimeString().slice(0, 5)),
+      startTimeStr: formatTime12h(staffData.shift_start),
+    };
   }, [staffData?.shift_start, staffData?.shift_end, currentTime]);
 
   // Restore remembered phone on initial mount
@@ -466,6 +479,7 @@ function StaffPunchContent() {
         // Refresh portal data
         const refresh = await staffLoginPortalAction({ phone: staffData.phone, pinCode: pin });
         if (refresh.success && refresh.staff) {
+          setStaffData(refresh.staff);
           setTodayAttendance(refresh.todayAttendance || null);
           setMonthSummary(refresh.monthSummary || null);
           fetchHistory(historyYear, historyMonth, refresh.staff.id, refresh.staff.restaurant_id);
@@ -497,6 +511,47 @@ function StaffPunchContent() {
     setDistanceMeters(null);
     setLocationError(null);
   };
+
+  // Cross-tab auto-sync: instantly updates shift timings and policy when changed in Settings
+  useEffect(() => {
+    if (!staffData?.phone || !pin) return;
+
+    const handleSync = async () => {
+      try {
+        const refresh = await staffLoginPortalAction({ phone: staffData.phone, pinCode: pin });
+        if (refresh.success && refresh.staff) {
+          setStaffData(refresh.staff);
+          setTodayAttendance(refresh.todayAttendance || null);
+          setMonthSummary(refresh.monthSummary || null);
+          if (refresh.geofence) {
+            setGeofence(refresh.geofence);
+          }
+        }
+      } catch {}
+    };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('menubldr_hrm_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'settings_updated' || event.data?.type === 'punch_updated') {
+          handleSync();
+        }
+      };
+    } catch {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'menubldr_hrm_punch_sync') {
+        handleSync();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [staffData?.phone, pin]);
 
   const isGeofenceActive = Boolean(
     geofence?.enforce_geofence &&
@@ -747,7 +802,7 @@ function StaffPunchContent() {
                           <Clock className="w-3.5 h-3.5 text-blue-400" />
                           <span>Duration:</span>
                           <span className="font-mono font-bold text-white text-sm bg-slate-800/80 px-2.5 py-0.5 rounded-lg border border-slate-700/60">
-                            {todayAttendance.hours_worked} hrs
+                            {formatHoursHuman(todayAttendance.hours_worked, todayAttendance.check_in_time, todayAttendance.check_out_time)}
                           </span>
                         </div>
                       </div>
@@ -854,7 +909,7 @@ function StaffPunchContent() {
 
                   {/* Big Punch Button */}
                   {!todayAttendance?.check_in_time ? (
-                    isShiftEnded ? (
+                    shiftWindow.isEnded ? (
                       <div className="space-y-2">
                         <Button
                           disabled
@@ -864,6 +919,18 @@ function StaffPunchContent() {
                         </Button>
                         <p className="text-xs text-amber-400/80 font-medium">
                           Your scheduled shift ({formatShiftRange(staffData.shift_start, staffData.shift_end)}) has ended for today. Check-in is not allowed after shift hours.
+                        </p>
+                      </div>
+                    ) : shiftWindow.isTooEarly ? (
+                      <div className="space-y-2">
+                        <Button
+                          disabled
+                          className="w-full h-14 rounded-2xl bg-slate-800/80 text-blue-400 font-bold text-sm tracking-wide cursor-not-allowed border border-blue-500/20 shadow-none"
+                        >
+                          <Clock className="w-4 h-4 mr-2 text-blue-400" /> Shift Starts at {shiftWindow.startTimeStr}
+                        </Button>
+                        <p className="text-xs text-blue-400/80 font-medium">
+                          Early check-in opens 30 minutes before your shift (at {shiftWindow.openTimeStr}).
                         </p>
                       </div>
                     ) : isGeofenceActive && !isInsideGeofence ? (
@@ -1091,7 +1158,7 @@ function StaffPunchContent() {
                             Out: <b className="text-white font-mono">{selectedDayRecord.check_out_time ? new Date(selectedDayRecord.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</b>
                           </span>
                           <span className="font-mono font-bold text-emerald-400">
-                            {selectedDayRecord.check_out_time ? `${selectedDayRecord.hours_worked} hrs` : 'On Shift'}
+                            {selectedDayRecord.check_out_time ? formatHoursHuman(selectedDayRecord.hours_worked, selectedDayRecord.check_in_time, selectedDayRecord.check_out_time) : 'On Shift'}
                           </span>
                         </div>
                       )}
@@ -1211,7 +1278,7 @@ function StaffPunchContent() {
 
                         <div className="text-right">
                           <span className="font-mono font-bold text-sm text-emerald-400 block">
-                            {r.check_out_time ? `${r.hours_worked}h` : 'On Shift'}
+                            {r.check_out_time ? formatHoursHuman(r.hours_worked, r.check_in_time, r.check_out_time) : 'On Shift'}
                           </span>
                           {r.late_reason && (
                             <span className="text-[10px] text-amber-400/90 font-medium block">

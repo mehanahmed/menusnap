@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { cn } from '@/lib/utils';
 import { getMonthlyAttendanceCalendarAction, getStaffRosterAction } from '@/app/actions/hrm';
-import { formatLateReason } from '@/lib/hrm-constants';
+import { formatLateReason, formatHoursHuman } from '@/lib/hrm-constants';
 
 export default function HrmMonthlyHistoryPage() {
   const { clientUser } = useClientAuth();
@@ -238,7 +238,7 @@ export default function HrmMonthlyHistoryPage() {
 
         {/* Monthly Summary Statistics */}
         {calendarData?.summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-slate-100 dark:border-border/60">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-3 border-t border-slate-100 dark:border-border/60">
             <div className="p-3 rounded-2xl bg-slate-50 dark:bg-muted/30 border border-slate-100 dark:border-border/40">
               <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Entries</span>
               <span className="text-xl font-black text-slate-800 dark:text-foreground">{calendarData.summary.totalRecords}</span>
@@ -258,10 +258,6 @@ export default function HrmMonthlyHistoryPage() {
             <div className="p-3 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
               <span className="text-[10px] text-rose-700 dark:text-rose-400 uppercase font-bold block">Absent Days</span>
               <span className="text-xl font-black text-rose-800 dark:text-rose-300">{calendarData.summary.absentCount}</span>
-            </div>
-            <div className="p-3 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30">
-              <span className="text-[10px] text-blue-700 dark:text-blue-400 uppercase font-bold block">Hours Logged</span>
-              <span className="text-xl font-black text-blue-800 dark:text-blue-300">{calendarData.summary.totalHoursWorked} hrs</span>
             </div>
           </div>
         )}
@@ -380,7 +376,7 @@ export default function HrmMonthlyHistoryPage() {
                     <div className="text-right">
                       <span className="text-[9px] uppercase font-bold text-slate-400 block">Logged</span>
                       <span className="font-mono font-black text-sm text-slate-900 dark:text-foreground">
-                        {r.hours_worked > 0 ? `${r.hours_worked} hrs` : '--'}
+                        {formatHoursHuman(r.hours_worked, r.check_in_time, r.check_out_time)}
                       </span>
                     </div>
                   </div>
@@ -440,7 +436,7 @@ export default function HrmMonthlyHistoryPage() {
                         : '--'}
                     </TableCell>
                     <TableCell className="font-bold text-xs text-slate-800 dark:text-foreground">
-                      {r.hours_worked > 0 ? `${r.hours_worked}h` : '--'}
+                      {formatHoursHuman(r.hours_worked, r.check_in_time, r.check_out_time)}
                     </TableCell>
                     <TableCell>
                       {r.status === 'present' ? (

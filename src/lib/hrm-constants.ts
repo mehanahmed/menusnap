@@ -128,6 +128,7 @@ export function formatShiftRange(start?: string | null, end?: string | null): st
  * 231 -> "3 hr 51 min"
  * 60  -> "1 hr"
  * 45  -> "45 min"
+ * 0   -> "0 min"
  */
 export function formatMinutesHuman(totalMinutes: number): string {
   const mins = Math.max(0, Math.round(totalMinutes));
@@ -136,6 +137,35 @@ export function formatMinutesHuman(totalMinutes: number): string {
   if (h > 0 && m > 0) return `${h} hr ${m} min`;
   if (h > 0) return `${h} hr`;
   return `${m} min`;
+}
+
+/**
+ * Convert hours (float e.g. 0.34, 5.58, 0 or checkIn/checkOut timestamps)
+ * into friendly human-readable duration like "20 min", "0 min", "5 hr 35 min", "1 hr".
+ */
+export function formatHoursHuman(
+  hours?: number | null,
+  checkIn?: string | null,
+  checkOut?: string | null
+): string {
+  // If both timestamps are present, calculate exact difference
+  if (checkIn && checkOut) {
+    const start = new Date(checkIn).getTime();
+    const end = new Date(checkOut).getTime();
+    if (!isNaN(start) && !isNaN(end)) {
+      const diffMins = Math.max(0, Math.round((end - start) / 60000));
+      return formatMinutesHuman(diffMins);
+    }
+  }
+
+  // If hours is provided
+  if (hours !== undefined && hours !== null) {
+    if (hours === 0 && checkIn && checkOut) return '0 min';
+    if (hours === 0) return '--';
+    return formatMinutesHuman(Math.round(hours * 60));
+  }
+
+  return '--';
 }
 
 /**

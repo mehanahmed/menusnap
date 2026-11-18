@@ -307,6 +307,14 @@ export async function updateHrmSettingsAction(
       [cleanId, shiftStart, shiftEnd, graceMin, halfDay, weekends, allowSelfPunch, latitude, longitude, radiusMeters, enforceGeofence]
     );
 
+    // Sync default shift schedule to all active staff profiles for this business
+    await pool.execute(
+      `UPDATE staff 
+       SET shift_start = ?, shift_end = ? 
+       WHERE restaurant_id = ? AND deleted_at IS NULL`,
+      [shiftStart, shiftEnd, cleanId]
+    );
+
     return { success: true, message: 'HRM Settings updated successfully.' };
   } catch (error: any) {
     console.error('Failed to update HRM settings:', error);
@@ -845,9 +853,9 @@ export async function staffPunchAction(params: {
         distanceRecorded = Math.round(dist);
       }
 
-      // Shift Schedule Window Validation
-      const expectedShiftStart = staffMember.shift_start || settings.shift_start || '09:00';
-      const expectedShiftEnd = staffMember.shift_end || settings.shift_end || '18:00';
+      // Shift Schedule Window Validation (Prioritize business HRM setting, fallback to staff custom shift or 09:00/18:00)
+      const expectedShiftStart = settings.shift_start || staffMember.shift_start || '09:00';
+      const expectedShiftEnd = settings.shift_end || staffMember.shift_end || '18:00';
 
       const [startHour, startMin] = String(expectedShiftStart).split(':').map(Number);
       const shiftStartTimeToday = new Date(now);
@@ -864,6 +872,20 @@ export async function staffPunchAction(params: {
         } else {
           shiftStartTimeToday.setDate(shiftStartTimeToday.getDate() - 1);
         }
+      }
+
+      // Standard 30-minute early check-in window
+      const earlyCheckInMinutes = 30;
+      const earlyOpenTime = new Date(shiftStartTimeToday.getTime() - earlyCheckInMinutes * 60 * 1000);
+
+      // Block check-in if staff arrives too early (before 30 mins prior to shift)
+      if (!params.bypassShiftWindow && now < earlyOpenTime) {
+        const formattedStartTime = formatTime12h(expectedShiftStart);
+        const formattedOpenTime = formatTime12h(earlyOpenTime.toTimeString().slice(0, 5));
+        return {
+          success: false,
+          error: `Shift starts at ${formattedStartTime}. Early check-in opens 30 minutes before shift start (${formattedOpenTime}).`,
+        };
       }
 
       // Block check-in if scheduled shift has already passed
@@ -1131,8 +1153,8 @@ export async function staffLoginPortalAction(params: {
         name: staffMember.name,
         role: staffMember.role || 'Staff',
         phone: staffMember.phone,
-        shift_start: staffMember.shift_start || '09:00',
-        shift_end: staffMember.shift_end || '18:00',
+        shift_start: hrmSet?.shift_start || staffMember.shift_start || '09:00',
+        shift_end: hrmSet?.shift_end || staffMember.shift_end || '18:00',
         restaurant_id: staffMember.restaurant_id,
         business_name: staffMember.business_name,
       },
@@ -1366,5 +1388,178 @@ export async function getMonthlyAttendanceCalendarAction(
   } catch (error: any) {
     console.error('Failed to get monthly attendance calendar:', error);
     return { success: false, error: error?.message || 'Failed to load attendance calendar.' };
+  }
+}
+
+/**
+ * Get full profile details for a staff member in HRM:
+ * Personal info, shift & PIN, salary, monthly attendance summary, and recent punch logs.
+ */
+export async function getHrmStaffProfileAction(
+  restaurantId: string | number | undefined,
+  staffId: number
+): Promise<{
+  success: boolean;
+  staff?: {
+    id: number;
+    name: string;
+    phone: string;
+    role: string;
+    pin_code: string;
+    shift_start: string;
+    shift_end: string;
+    base_salary: number;
+    salary_type: string;
+    joining_date: string | null;
+    is_active: boolean;
+  };
+  attendanceSummary?: {
+    present: number;
+    late: number;
+    half_day: number;
+    absent: number;
+    leave: number;
+    total: number;
+  };
+  recentLogs?: Array<{
+    id: number;
+    date: string;
+    status: string;
+    check_in_time: string | null;
+    check_out_time: string | null;
+    hours_worked: number;
+    late_reason: string | null;
+    note: string | null;
+  }>;
+  pendingAdvance?: number;
+  error?: string;
+}> {
+  try {
+    await ensureHrmSchema();
+    const authCheck = await resolveAuthenticatedRestaurantId(restaurantId);
+    if (!authCheck.success || !authCheck.restaurantId) {
+      return { success: false, error: authCheck.error || 'Unauthorized.' };
+    }
+    const cleanId = authCheck.restaurantId;
+    const cleanStaffId = Number(staffId);
+
+    // 1. Staff Record
+    const [staffRows]: any = await pool.execute(
+      `SELECT 
+         id,
+         name,
+         phone,
+         COALESCE(role, 'Staff') as role,
+         COALESCE(pin_code, '123456') as pin_code,
+         COALESCE(TIME_FORMAT(shift_start, '%H:%i'), '09:00') as shift_start,
+         COALESCE(TIME_FORMAT(shift_end, '%H:%i'), '18:00') as shift_end,
+         COALESCE(base_salary, 0) as base_salary,
+         COALESCE(salary_type, 'monthly') as salary_type,
+         DATE_FORMAT(joining_date, '%Y-%m-%d') as joining_date,
+         is_active
+       FROM staff
+       WHERE id = ? AND restaurant_id = ? AND deleted_at IS NULL
+       LIMIT 1`,
+      [cleanStaffId, cleanId]
+    );
+
+    if (!Array.isArray(staffRows) || staffRows.length === 0) {
+      return { success: false, error: 'Staff member not found.' };
+    }
+    const staff = staffRows[0];
+
+    // 2. Attendance Summary for current month (Asia/Dhaka)
+    const currentMonth = getDhakaDate().dateStr.slice(0, 7); // 'YYYY-MM'
+    const [attRows]: any = await pool.execute(
+      `SELECT status, COUNT(*) as count 
+       FROM staff_attendance 
+       WHERE staff_id = ? AND restaurant_id = ? AND DATE_FORMAT(date, '%Y-%m') = ?
+       GROUP BY status`,
+      [cleanStaffId, cleanId, currentMonth]
+    );
+
+    const attendanceSummary = {
+      present: 0,
+      late: 0,
+      half_day: 0,
+      absent: 0,
+      leave: 0,
+      total: 0,
+    };
+    for (const a of (attRows || [])) {
+      if (a.status in attendanceSummary) {
+        (attendanceSummary as any)[a.status] = Number(a.count);
+      }
+      attendanceSummary.total += Number(a.count);
+    }
+
+    // 3. Recent 5 Attendance Logs
+    const [recentRows]: any = await pool.execute(
+      `SELECT 
+         id,
+         DATE_FORMAT(date, '%Y-%m-%d') as date,
+         status,
+         check_in_time,
+         check_out_time,
+         COALESCE(hours_worked, 0.00) as hours_worked,
+         late_reason,
+         note
+       FROM staff_attendance
+       WHERE staff_id = ? AND restaurant_id = ?
+       ORDER BY date DESC, id DESC
+       LIMIT 5`,
+      [cleanStaffId, cleanId]
+    );
+
+    const recentLogs = (recentRows || []).map((r: any) => ({
+      id: Number(r.id),
+      date: r.date,
+      status: r.status,
+      check_in_time: r.check_in_time ? new Date(r.check_in_time).toISOString() : null,
+      check_out_time: r.check_out_time ? new Date(r.check_out_time).toISOString() : null,
+      hours_worked: Number(r.hours_worked || 0),
+      late_reason: r.late_reason,
+      note: r.note,
+    }));
+
+    // 4. Pending Advance
+    let pendingAdvance = 0;
+    try {
+      const [advRows]: any = await pool.execute(
+        `SELECT (a.amount - a.adjusted_amount) as remaining_balance
+         FROM staff_advances a
+         WHERE a.staff_id = ? AND a.restaurant_id = ? AND a.deleted_at IS NULL`,
+        [cleanStaffId, cleanId]
+      );
+      pendingAdvance = (advRows || []).reduce(
+        (acc: number, item: any) => acc + Math.max(0, Number(item.remaining_balance || 0)),
+        0
+      );
+    } catch {
+      // Table may not exist yet
+    }
+
+    return {
+      success: true,
+      staff: {
+        id: Number(staff.id),
+        name: staff.name,
+        phone: staff.phone,
+        role: staff.role,
+        pin_code: staff.pin_code,
+        shift_start: staff.shift_start,
+        shift_end: staff.shift_end,
+        base_salary: Number(staff.base_salary || 0),
+        salary_type: staff.salary_type,
+        joining_date: staff.joining_date,
+        is_active: Boolean(staff.is_active),
+      },
+      attendanceSummary,
+      recentLogs,
+      pendingAdvance,
+    };
+  } catch (error: any) {
+    console.error('Failed to get staff profile in HRM:', error);
+    return { success: false, error: error?.message || 'Failed to load staff profile.' };
   }
 }

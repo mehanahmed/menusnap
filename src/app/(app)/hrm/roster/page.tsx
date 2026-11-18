@@ -27,6 +27,7 @@ import { useClientAuth } from '@/hooks/use-client-auth';
 import { cn } from '@/lib/utils';
 import { getStaffRosterAction } from '@/app/actions/hrm';
 import { StaffModal } from '@/components/hrm/StaffModal';
+import { StaffProfileModal } from '@/components/hrm/StaffProfileModal';
 import { formatShiftRange } from '@/lib/hrm-constants';
 
 export default function HrmStaffRosterPage() {
@@ -44,6 +45,10 @@ export default function HrmStaffRosterPage() {
   // Add / Edit Modal
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any | null>(null);
+
+  // Staff Profile Modal
+  const [profileStaffId, setProfileStaffId] = useState<number | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Load Staff Roster
   const loadRoster = useCallback(async (showToast = false) => {
@@ -190,11 +195,27 @@ export default function HrmStaffRosterPage() {
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center font-black text-base text-blue-700 dark:text-blue-300 uppercase shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileStaffId(st.id);
+                        setIsProfileModalOpen(true);
+                      }}
+                      className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40 flex items-center justify-center font-black text-base text-blue-700 dark:text-blue-300 uppercase shadow-2xs hover:scale-105 transition-transform shrink-0"
+                    >
                       {st.name.slice(0, 2)}
-                    </div>
+                    </button>
                     <div>
-                      <h3 className="font-bold text-slate-900 dark:text-foreground text-sm line-clamp-1">{st.name}</h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileStaffId(st.id);
+                          setIsProfileModalOpen(true);
+                        }}
+                        className="font-bold text-slate-900 dark:text-foreground text-sm line-clamp-1 hover:text-blue-600 dark:hover:text-blue-400 text-left transition-colors"
+                      >
+                        {st.name}
+                      </button>
                       <Badge
                         variant="secondary"
                         className={cn(
@@ -257,21 +278,33 @@ export default function HrmStaffRosterPage() {
                   </div>
                 </div>
 
-                {st.joining_date && (
                   <div className="mt-3 pt-2 border-t border-slate-50 dark:border-border/30 flex items-center justify-between text-[11px] text-slate-400">
                     <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> Joined: {st.joining_date}
+                      <Calendar className="w-3 h-3" /> {st.joining_date ? `Joined: ${st.joining_date}` : 'Active Staff'}
                     </span>
-                    <Button
-                      variant="link"
-                      size="sm"
-                      onClick={() => openEditStaff(st)}
-                      className="p-0 h-auto text-[11px] text-blue-600 font-semibold"
-                    >
-                      Edit Profile &rarr;
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={() => {
+                          setProfileStaffId(st.id);
+                          setIsProfileModalOpen(true);
+                        }}
+                        className="p-0 h-auto text-[11px] text-blue-600 dark:text-blue-400 font-semibold"
+                      >
+                        Profile
+                      </Button>
+                      <span className="text-slate-300 dark:text-slate-700">•</span>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={() => openEditStaff(st)}
+                        className="p-0 h-auto text-[11px] text-slate-500 hover:text-slate-900 dark:hover:text-foreground font-semibold"
+                      >
+                        Edit &rarr;
+                      </Button>
+                    </div>
                   </div>
-                )}
               </CardContent>
             </Card>
           ))}
@@ -320,6 +353,19 @@ export default function HrmStaffRosterPage() {
           </div>
         </div>
       )}
+
+      {/* Staff Profile Modal */}
+      <StaffProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => {
+          setIsProfileModalOpen(false);
+          setProfileStaffId(null);
+        }}
+        staffId={profileStaffId}
+        businessId={businessId}
+        businessType={businessType}
+        onEditStaff={(st) => openEditStaff(st)}
+      />
 
       {/* Staff Modal */}
       <StaffModal

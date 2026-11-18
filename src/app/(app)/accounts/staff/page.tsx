@@ -1288,7 +1288,7 @@ export default function StaffPage() {
               size="sm"
               className="h-9 sm:h-10 px-3 sm:px-3.5 rounded-xl border-border/80 text-xs font-semibold hover:bg-muted flex-1 sm:flex-initial whitespace-nowrap"
             >
-              <Link href="/hrm">
+              <Link href="/hrm/live">
                 <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 text-blue-600" />
                 <span>HRM &amp; Attendance</span>
               </Link>
@@ -1983,7 +1983,7 @@ export default function StaffPage() {
                 size="sm"
                 className="h-8 rounded-xl border-blue-300 bg-white dark:bg-card text-blue-700 dark:text-blue-300 hover:bg-blue-100/60 text-xs font-semibold shadow-xs whitespace-nowrap self-start sm:self-auto"
               >
-                <Link href="/hrm">
+                <Link href="/hrm/live">
                   Open HRM &amp; Attendance <ArrowRight className="w-3 h-3 ml-1" />
                 </Link>
               </Button>

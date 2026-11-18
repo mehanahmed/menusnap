@@ -56,8 +56,9 @@ import {
   staffPunchAction,
   manualMarkAttendanceAction,
 } from '@/app/actions/hrm';
-import { type StaffAttendanceItem, type HrmSettings, formatShiftRange, formatLateReason, formatMinutesHuman } from '@/lib/hrm-constants';
+import { type StaffAttendanceItem, type HrmSettings, formatShiftRange, formatLateReason, formatMinutesHuman, formatHoursHuman } from '@/lib/hrm-constants';
 import { StaffModal } from '@/components/hrm/StaffModal';
+import { StaffProfileModal } from '@/components/hrm/StaffProfileModal';
 
 export default function HrmLiveBoardPage() {
   const { clientUser } = useClientAuth();
@@ -87,8 +88,13 @@ export default function HrmLiveBoardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'half_day' | 'absent' | 'not_marked'>('all');
 
-  // Add Staff Modal
+  // Add / Edit Staff Modal
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<any | null>(null);
+
+  // Staff Profile Modal
+  const [profileStaffId, setProfileStaffId] = useState<number | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Manual Attendance Mark Modal
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -280,18 +286,48 @@ export default function HrmLiveBoardPage() {
     }
   };
 
+  // Helper to convert ISO string to browser's local "HH:mm" 24-hr time input format
+  const toLocalTimeInput = (isoStr?: string | null, fallback = ''): string => {
+    if (!isoStr) return fallback;
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return fallback;
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
+  // Helper to calculate duration in hours between two HH:mm strings
+  const calcDurationHours = (inTimeStr: string, outTimeStr: string): number => {
+    if (!inTimeStr || !outTimeStr) return 0;
+    const [inH, inM] = inTimeStr.split(':').map(Number);
+    const [outH, outM] = outTimeStr.split(':').map(Number);
+    if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return 0;
+    let diff = (outH * 60 + outM) - (inH * 60 + inM);
+    if (diff < 0) diff += 24 * 60; // Overnight
+    return Number((diff / 60).toFixed(2));
+  };
+
   // Open manual mark modal
   const openManualMark = (item: StaffAttendanceItem) => {
-    const inTime = item.check_in_time ? item.check_in_time.slice(11, 16) : '09:00';
-    const outTime = item.check_out_time ? item.check_out_time.slice(11, 16) : '18:00';
+    const inTime = toLocalTimeInput(item.check_in_time, item.shift_start ? item.shift_start.slice(0, 5) : '09:00');
+    const outTime = toLocalTimeInput(
+      item.check_out_time,
+      item.check_out_time ? '' : (item.status === 'not_marked' ? (item.shift_end ? item.shift_end.slice(0, 5) : '18:00') : '')
+    );
+
+    // If attendance record already exists, preserve its recorded hours_worked (even if 0.00), otherwise fallback to full shift or 8
+    const initialHours = item.check_in_time || item.status !== 'not_marked'
+      ? Number(item.hours_worked ?? 0)
+      : (calcDurationHours(inTime, outTime) || 8);
+
     setManualRecord({
       staffId: item.staff_id,
       staffName: item.name,
       date: selectedDate,
       status: item.status === 'not_marked' ? 'present' : (item.status as any),
       checkInTime: inTime,
-      checkOutTime: item.check_out_time ? outTime : '',
-      hoursWorked: item.hours_worked || 8,
+      checkOutTime: outTime,
+      hoursWorked: initialHours,
       lateReason: item.late_reason || '',
       note: item.note || '',
     });
@@ -304,12 +340,18 @@ export default function HrmLiveBoardPage() {
     if (!manualRecord) return;
     try {
       setManualSubmitting(true);
+      const buildIsoTime = (date: string, time: string) => {
+        if (!time) return null;
+        const d = new Date(`${date}T${time}:00`);
+        return isNaN(d.getTime()) ? null : d.toISOString();
+      };
+
       const res = await manualMarkAttendanceAction(businessId, {
         staffId: manualRecord.staffId,
         date: manualRecord.date,
         status: manualRecord.status,
-        checkInTime: manualRecord.checkInTime ? `${manualRecord.date}T${manualRecord.checkInTime}:00` : null,
-        checkOutTime: manualRecord.checkOutTime ? `${manualRecord.date}T${manualRecord.checkOutTime}:00` : null,
+        checkInTime: buildIsoTime(manualRecord.date, manualRecord.checkInTime),
+        checkOutTime: buildIsoTime(manualRecord.date, manualRecord.checkOutTime),
         hoursWorked: Number(manualRecord.hoursWorked || 0),
         lateReason: manualRecord.lateReason || null,
         note: manualRecord.note || null,
@@ -493,7 +535,10 @@ export default function HrmLiveBoardPage() {
 
           <div className="flex items-center gap-2">
             <Button
-              onClick={() => setIsStaffModalOpen(true)}
+              onClick={() => {
+                setEditingStaff(null);
+                setIsStaffModalOpen(true);
+              }}
               size="sm"
               className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
             >
@@ -620,8 +665,8 @@ export default function HrmLiveBoardPage() {
                     <div className="text-right">
                       <span className="text-[9px] uppercase font-bold text-slate-400 block">Duration</span>
                       <span className="font-mono font-black text-sm text-slate-900 dark:text-foreground">
-                        {item.hours_worked > 0 ? (
-                          `${item.hours_worked} hrs`
+                        {isCheckedOut ? (
+                          formatHoursHuman(item.hours_worked, item.check_in_time, item.check_out_time)
                         ) : liveDuration ? (
                           <span className="text-emerald-600 dark:text-emerald-400">
                             {liveDuration} <span className="text-[9px] font-normal text-slate-400">(live)</span>
@@ -674,8 +719,14 @@ export default function HrmLiveBoardPage() {
                           Adjust Attendance
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild className="text-xs cursor-pointer">
-                          <Link href="/hrm/roster">View Staff Profile</Link>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setProfileStaffId(item.staff_id);
+                            setIsProfileModalOpen(true);
+                          }}
+                          className="text-xs cursor-pointer"
+                        >
+                          View Staff Profile
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -806,8 +857,10 @@ export default function HrmLiveBoardPage() {
                       </TableCell>
 
                       <TableCell className="text-xs font-bold text-slate-700 dark:text-foreground">
-                        {item.hours_worked > 0 ? (
-                          `${item.hours_worked} hrs`
+                        {isCheckedOut ? (
+                          <span className="font-mono text-slate-800 dark:text-foreground">
+                            {formatHoursHuman(item.hours_worked, item.check_in_time, item.check_out_time)}
+                          </span>
                         ) : isCheckedIn && item.check_in_time ? (
                           <span className="inline-flex items-center gap-1 font-mono text-emerald-600 dark:text-emerald-400 font-bold">
                             {formatMinutesHuman(Math.max(0, Math.floor((new Date().getTime() - new Date(item.check_in_time).getTime()) / 60000)))}
@@ -881,8 +934,14 @@ export default function HrmLiveBoardPage() {
                                 Adjust Attendance
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem asChild className="text-xs cursor-pointer">
-                                <Link href="/hrm/roster">View Staff Profile</Link>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setProfileStaffId(item.staff_id);
+                                  setIsProfileModalOpen(true);
+                                }}
+                                className="text-xs cursor-pointer"
+                              >
+                                View Staff Profile
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -969,7 +1028,11 @@ export default function HrmLiveBoardPage() {
                   <Input
                     type="time"
                     value={manualRecord.checkInTime}
-                    onChange={(e) => setManualRecord({ ...manualRecord, checkInTime: e.target.value })}
+                    onChange={(e) => {
+                      const newIn = e.target.value;
+                      const autoHours = manualRecord.checkOutTime ? calcDurationHours(newIn, manualRecord.checkOutTime) : manualRecord.hoursWorked;
+                      setManualRecord({ ...manualRecord, checkInTime: newIn, hoursWorked: autoHours });
+                    }}
                     className="mt-1 rounded-xl text-xs font-mono"
                   />
                 </div>
@@ -978,7 +1041,11 @@ export default function HrmLiveBoardPage() {
                   <Input
                     type="time"
                     value={manualRecord.checkOutTime}
-                    onChange={(e) => setManualRecord({ ...manualRecord, checkOutTime: e.target.value })}
+                    onChange={(e) => {
+                      const newOut = e.target.value;
+                      const autoHours = manualRecord.checkInTime ? calcDurationHours(manualRecord.checkInTime, newOut) : manualRecord.hoursWorked;
+                      setManualRecord({ ...manualRecord, checkOutTime: newOut, hoursWorked: autoHours });
+                    }}
                     className="mt-1 rounded-xl text-xs font-mono"
                   />
                 </div>
@@ -988,7 +1055,8 @@ export default function HrmLiveBoardPage() {
                 <Label className="text-xs font-bold text-slate-700 dark:text-foreground">Worked Hours</Label>
                 <Input
                   type="number"
-                  step="0.1"
+                  step="0.01"
+                  min="0"
                   value={manualRecord.hoursWorked}
                   onChange={(e) => setManualRecord({ ...manualRecord, hoursWorked: Number(e.target.value) })}
                   className="mt-1 rounded-xl font-bold"
@@ -1028,11 +1096,30 @@ export default function HrmLiveBoardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Staff Modal */}
+      {/* Staff Profile Modal */}
+      <StaffProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => {
+          setIsProfileModalOpen(false);
+          setProfileStaffId(null);
+        }}
+        staffId={profileStaffId}
+        businessId={businessId}
+        businessType={businessType}
+        onEditStaff={(st) => {
+          setEditingStaff(st);
+          setIsStaffModalOpen(true);
+        }}
+      />
+
+      {/* Add / Edit Staff Modal */}
       <StaffModal
         isOpen={isStaffModalOpen}
-        onClose={() => setIsStaffModalOpen(false)}
-        editingStaff={null}
+        onClose={() => {
+          setIsStaffModalOpen(false);
+          setEditingStaff(null);
+        }}
+        editingStaff={editingStaff}
         businessId={businessId}
         businessType={businessType}
         defaultShiftStart={overview?.settings?.shift_start || '09:00'}

@@ -26,7 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useClientAuth } from '@/hooks/use-client-auth';
 import { cn } from '@/lib/utils';
 import { getHrmOverviewAction, updateHrmSettingsAction } from '@/app/actions/hrm';
-import { type HrmSettings } from '@/lib/hrm-constants';
+import { type HrmSettings, formatTime12h } from '@/lib/hrm-constants';
 
 export default function HrmShiftPolicySettingsPage() {
   const { clientUser } = useClientAuth();
@@ -180,6 +180,16 @@ export default function HrmShiftPolicySettingsPage() {
       const res = await updateHrmSettingsAction(businessId, settingsForm);
       if (res.success) {
         toast({ title: 'Shift Policy Saved', description: 'Shift rules & geofencing updated successfully.' });
+        if (typeof window !== 'undefined') {
+          try {
+            const bc = new BroadcastChannel('menubldr_hrm_sync');
+            bc.postMessage({ type: 'settings_updated', timestamp: Date.now() });
+            bc.close();
+          } catch {}
+          try {
+            localStorage.setItem('menubldr_hrm_punch_sync', String(Date.now()));
+          } catch {}
+        }
       } else {
         toast({ title: 'Error', description: res.error || 'Failed to update settings', variant: 'destructive' });
       }
@@ -211,7 +221,10 @@ export default function HrmShiftPolicySettingsPage() {
                   required
                   className="mt-1.5 rounded-xl border-slate-300 dark:border-border"
                 />
-                <span className="text-[11px] text-slate-400 block mt-1">Expected arrival time</span>
+                <span className="text-[11px] font-semibold text-primary block mt-1">
+                  Arrival: {formatTime12h(settingsForm.shift_start)}
+                  {settingsForm.shift_start === '00:00' ? ' (Midnight)' : settingsForm.shift_start === '12:00' ? ' (Noon / Midday)' : ''}
+                </span>
               </div>
 
               <div>
@@ -223,7 +236,10 @@ export default function HrmShiftPolicySettingsPage() {
                   required
                   className="mt-1.5 rounded-xl border-slate-300 dark:border-border"
                 />
-                <span className="text-[11px] text-slate-400 block mt-1">Expected departure time</span>
+                <span className="text-[11px] font-semibold text-primary block mt-1">
+                  Departure: {formatTime12h(settingsForm.shift_end)}
+                  {settingsForm.shift_end === '00:00' ? ' (Midnight)' : settingsForm.shift_end === '12:00' ? ' (Noon / Midday)' : ''}
+                </span>
               </div>
             </div>
 

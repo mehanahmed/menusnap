@@ -42,6 +42,7 @@ export default function HrmKioskPage() {
 
   const [liveTime, setLiveTime] = useState('');
   const [liveDate, setLiveDate] = useState('');
+  const [liveDateShort, setLiveDateShort] = useState('');
 
   // Ticker
   useEffect(() => {
@@ -59,7 +60,15 @@ export default function HrmKioskPage() {
         now.toLocaleDateString('en-US', {
           weekday: 'long',
           year: 'numeric',
-          month: 'long',
+          month: 'short',
+          day: 'numeric',
+        })
+      );
+      setLiveDateShort(
+        now.toLocaleDateString('en-US', {
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
           day: 'numeric',
         })
       );
@@ -263,14 +272,16 @@ export default function HrmKioskPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col p-4 sm:p-6 lg:p-8">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-black text-lg text-white tracking-tight">{businessName}</span>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pb-4 border-b border-slate-800">
+        <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-base sm:text-lg text-white tracking-tight truncate max-w-[200px] sm:max-w-none">
+                {businessName}
+              </span>
               <Badge
                 variant="outline"
-                className="text-[10px] font-bold border-slate-700 bg-slate-900 text-slate-300"
+                className="text-[10px] font-bold border-slate-700 bg-slate-900 text-slate-300 shrink-0"
               >
                 {businessType === 'parlour' ? (
                   <>
@@ -283,14 +294,24 @@ export default function HrmKioskPage() {
                 )}
               </Badge>
             </div>
-            <p className="text-xs text-slate-400">Staff Counter Attendance Kiosk</p>
+            <p className="text-[11px] sm:text-xs text-slate-400">Staff Counter Attendance Kiosk</p>
+          </div>
+
+          {/* Live Clock Display (Mobile: sits neatly at top right) */}
+          <div className="sm:hidden text-right shrink-0 pl-2">
+            <div className="text-base font-mono font-black text-emerald-400 tracking-tight whitespace-nowrap tabular-nums">
+              {liveTime || '--:--:--'}
+            </div>
+            <div className="text-[10px] font-medium text-slate-400 whitespace-nowrap">
+              {liveDateShort || liveDate}
+            </div>
           </div>
         </div>
 
         {/* Live Clock Display & Mode Switcher */}
-        <div className="flex items-center gap-4 self-stretch sm:self-auto justify-between sm:justify-end">
+        <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
           {/* Mode Switcher */}
-          <div className="bg-slate-900 p-1 rounded-2xl border border-slate-800 flex items-center gap-1">
+          <div className="bg-slate-900 p-1 rounded-2xl border border-slate-800 flex items-center gap-1 w-full sm:w-auto">
             <button
               onClick={() => {
                 setKioskMode('phone');
@@ -298,7 +319,7 @@ export default function HrmKioskPage() {
                 setPinInput('');
               }}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all',
+                'flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all',
                 kioskMode === 'phone'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -314,7 +335,7 @@ export default function HrmKioskPage() {
                 setPinInput('');
               }}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all',
+                'flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all',
                 kioskMode === 'roster'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
@@ -325,11 +346,12 @@ export default function HrmKioskPage() {
             </button>
           </div>
 
-          <div className="text-right pl-3 border-l border-slate-800">
-            <div className="text-2xl font-mono font-black text-emerald-400 tracking-tight">
+          {/* Live Clock Display (Desktop / Tablet) */}
+          <div className="hidden sm:block text-right pl-3 border-l border-slate-800 shrink-0">
+            <div className="text-xl lg:text-2xl font-mono font-black text-emerald-400 tracking-tight whitespace-nowrap tabular-nums">
               {liveTime || '--:--:--'}
             </div>
-            <div className="text-[11px] font-medium text-slate-400">{liveDate}</div>
+            <div className="text-[11px] font-medium text-slate-400 whitespace-nowrap">{liveDate}</div>
           </div>
         </div>
       </div>
@@ -508,35 +530,36 @@ export default function HrmKioskPage() {
           /* MODE 2: ROSTER GRID (Tap name from cards) */
           <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
             {/* Left: Staff Cards */}
-            <div className="lg:col-span-7 flex flex-col bg-slate-900/80 border border-slate-800 rounded-3xl p-5 overflow-hidden">
-              <div className="flex items-center justify-between mb-4">
+            <div className="lg:col-span-7 flex flex-col bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 overflow-hidden min-h-[550px]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-800/80">
                 <div>
                   <h2 className="text-base font-bold text-white flex items-center gap-2">
                     <Users className="w-4 h-4 text-blue-400" />
                     Select Your Name
                   </h2>
-                  <p className="text-xs text-slate-400">Tap your card from the active roster</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Tap your card from the active roster</p>
                 </div>
 
-                <div className="relative w-48 sm:w-56">
+                <div className="relative w-full sm:w-56">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                   <Input
                     type="text"
                     placeholder="Search staff..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="pl-8 h-9 text-xs bg-slate-800/80 border-slate-700 text-white rounded-xl"
+                    className="pl-8 h-9 text-xs bg-slate-800/80 border-slate-700 text-white rounded-xl focus-visible:ring-blue-500"
                   />
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 pr-1 max-h-[500px]">
+              {/* Roster Cards Grid with sleek dark scrollbar */}
+              <div className="flex-1 overflow-y-auto pr-1.5 grid grid-cols-1 sm:grid-cols-2 gap-3.5 auto-rows-max [scrollbar-width:thin] [scrollbar-color:#334155_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-700/80 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
                 {loading ? (
-                  <div className="col-span-full text-center py-12 text-slate-500 text-sm">
+                  <div className="col-span-full text-center py-16 text-slate-500 text-sm">
                     Loading staff roster...
                   </div>
                 ) : filteredStaff.length === 0 ? (
-                  <div className="col-span-full text-center py-12 text-slate-500 text-sm">
+                  <div className="col-span-full text-center py-16 text-slate-500 text-sm">
                     No matching staff found
                   </div>
                 ) : (
@@ -545,35 +568,42 @@ export default function HrmKioskPage() {
                     return (
                       <button
                         key={st.id}
+                        type="button"
                         onClick={() => {
                           setSelectedStaff(st);
                           setPinInput('');
                         }}
                         className={cn(
-                          'p-4 rounded-2xl border text-left transition-all flex flex-col justify-between group',
+                          'p-4 rounded-2xl border text-left transition-all duration-150 flex flex-col justify-between relative group shadow-sm',
                           isSelected
-                            ? 'bg-blue-600/20 border-blue-500 ring-2 ring-blue-500/50 shadow-lg scale-[1.02]'
-                            : 'bg-slate-800/50 border-slate-800 hover:bg-slate-800 hover:border-slate-700'
+                            ? 'bg-blue-600/15 border-blue-500 ring-2 ring-blue-500/50 shadow-md shadow-blue-950/50'
+                            : 'bg-slate-800/50 border-slate-700/60 hover:bg-slate-800/80 hover:border-slate-600'
                         )}
                       >
-                        <div className="flex items-center gap-2.5 mb-2">
+                        {isSelected && (
+                          <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-sm shadow-blue-500/50">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-3">
                           <div
                             className={cn(
-                              'w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm uppercase transition-colors',
+                              'w-11 h-11 rounded-xl flex items-center justify-center font-bold text-sm uppercase transition-colors shrink-0 shadow-xs',
                               isSelected
-                                ? 'bg-blue-500 text-white'
-                                : 'bg-slate-700 text-slate-200 group-hover:bg-slate-600'
+                                ? 'bg-blue-500 text-white shadow-blue-500/30'
+                                : 'bg-slate-700/80 text-slate-200 group-hover:bg-slate-600'
                             )}
                           >
                             {st.name.slice(0, 2)}
                           </div>
-                          <div className="overflow-hidden">
+                          <div className="min-w-0 flex-1 pr-4">
                             <p className="font-bold text-sm text-white truncate">{st.name}</p>
                             <Badge
                               variant="secondary"
                               className={cn(
-                                'text-[9px] font-bold rounded px-1.5 py-0 mt-0.5',
-                                isSelected ? 'bg-blue-500/40 text-blue-200' : 'bg-slate-700/80 text-slate-300'
+                                'text-[10px] font-semibold rounded-md px-1.5 py-0 mt-0.5 inline-block truncate max-w-full',
+                                isSelected ? 'bg-blue-500/30 text-blue-200 border-blue-400/40' : 'bg-slate-700/60 text-slate-300 border-slate-600/40'
                               )}
                             >
                               {st.role}
@@ -581,9 +611,10 @@ export default function HrmKioskPage() {
                           </div>
                         </div>
 
-                        <div className="text-[10px] text-slate-400 font-mono pt-2 border-t border-slate-800/60 flex items-center justify-between">
-                          <span>Shift</span>
-                          <span>{formatShiftRange(st.shift_start, st.shift_end)}</span>
+                        {/* Shift timing pill */}
+                        <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center gap-1.5 text-[11px] font-mono text-slate-300">
+                          <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span className="truncate">{formatShiftRange(st.shift_start, st.shift_end)}</span>
                         </div>
                       </button>
                     );
@@ -593,7 +624,7 @@ export default function HrmKioskPage() {
             </div>
 
             {/* Right: Selected Staff PIN Pad */}
-            <div className="lg:col-span-5 flex flex-col justify-between bg-slate-900/80 border border-slate-800 rounded-3xl p-5 space-y-4">
+            <div className="lg:col-span-5 flex flex-col justify-between bg-slate-900/80 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 min-h-[550px]">
               <div className="bg-slate-800/60 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
                 {selectedStaff ? (
                   <div className="flex items-center gap-3">
