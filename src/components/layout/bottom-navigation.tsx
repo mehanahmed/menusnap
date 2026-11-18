@@ -24,6 +24,7 @@ import {
   ExternalLink,
   Wallet,
   Users,
+  Crown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -89,6 +90,7 @@ export function BottomNavigation() {
   const isMoreActive = useMemo(() => {
     const moreRoutes = [
       '/customer-orders',
+      '/crm',
       '/hrm',
       '/accounts',
       '/templates',
@@ -107,14 +109,21 @@ export function BottomNavigation() {
       isLive: true,
     },
     {
-      href: '/hrm/',
+      href: '/crm/customers',
+      label: 'CRM & Loyalty',
+      translationKey: 'crm',
+      icon: Crown,
+      description: 'Customer directory, membership cards & loyalty',
+    },
+    {
+      href: '/hrm/live',
       label: 'HRM',
       translationKey: 'hrm',
       icon: Users,
       description: 'Employee duties, attendance & shifts',
     },
     {
-      href: '/accounts/',
+      href: '/accounts/overview/',
       label: 'Accounts',
       translationKey: 'accounts',
       icon: Wallet,

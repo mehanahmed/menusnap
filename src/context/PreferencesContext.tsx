@@ -72,6 +72,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     customerOrders: 'Customer Orders',
     hrm: 'HRM',
     accounts: 'Accounts',
+    crm: 'CRM & Loyalty',
   },
   bn: {
     magictab: 'ম্যাজিকট্যাব',
@@ -107,6 +108,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     customerOrders: 'কাস্টমার অর্ডার',
     hrm: 'এইচআরএম',
     accounts: 'অ্যাকাউন্টস',
+    crm: 'সিআরএম ও লয়্যালটি',
   },
   ar: {
     magictab: 'ماجيك تاب',
@@ -142,6 +144,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     customerOrders: 'طلبات العملاء',
     hrm: 'الموارد البشرية',
     accounts: 'الحسابات',
+    crm: 'العملاء والولاء',
   },
   es: {
     magictab: 'MagicTab',
@@ -177,6 +180,7 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
     customerOrders: 'Pedidos de Clientes',
     hrm: 'RRHH',
     accounts: 'Cuentas',
+    crm: 'CRM y Fidelización',
   },
 };
 

@@ -63,10 +63,10 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
             <span>Powerhouse Features</span>
           </div>
           <h2 className="text-2xl sm:text-4xl lg:text-[40px] font-black text-gray-950 tracking-tight leading-[1.2]">
-            এক প্ল্যাটফর্মে ৫টি <span className="text-[#FF5A36]">Smart Business Solution</span>
+            এক প্ল্যাটফর্মে ৫টি <span className="text-[#FF5A36]">Solution</span>
           </h2>
           <p className="mt-3 text-sm sm:text-base text-gray-600 leading-relaxed font-normal">
-            মেনু তৈরি, কাস্টমার QR টেবিল অর্ডার ও প্রফিট মার্জিন ক্যালকুলেশন — রেস্তোরাঁ পরিচালনার প্রতিটি ধাপ এখন সিম্পল।
+            মেনু তৈরি, QR কোড অর্ডার ম্যানেজমেন্ট, ফুড কস্টিং ক্যালকুলেশনসহ রেস্তোরাঁ পরিচালনার প্রতিটি ধাপ এখন আর অনেক সহজ।
           </p>
         </div>
 
@@ -80,8 +80,8 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
                   key={slide.id}
                   onClick={() => setCurrentIndex(idx)}
                   className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-[13px] font-bold whitespace-nowrap transition-all flex items-center gap-2 border cursor-pointer ${isActive
-                      ? "bg-[#FF5A36] text-white border-[#FF5A36] shadow-md shadow-[#FF5A36]/25 scale-[1.02]"
-                      : "bg-white text-gray-600 border-gray-200/80 hover:border-orange-200 hover:text-gray-950 shadow-xs"
+                    ? "bg-[#FF5A36] text-white border-[#FF5A36] shadow-md shadow-[#FF5A36]/25 scale-[1.02]"
+                    : "bg-white text-gray-600 border-gray-200/80 hover:border-orange-200 hover:text-gray-950 shadow-xs"
                     }`}
                 >
                   <span
@@ -211,11 +211,10 @@ export function FeatureCarouselSection({ initialSlides = [] }: FeatureCarouselSe
                     key={dotIdx}
                     onClick={() => setCurrentIndex(dotIdx)}
                     aria-label={`Go to slide ${dotIdx + 1}`}
-                    className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                      dotIdx === currentIndex
-                        ? "w-7 bg-[#FF5A36]"
-                        : "w-2 bg-gray-200 hover:bg-gray-300"
-                    }`}
+                    className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${dotIdx === currentIndex
+                      ? "w-7 bg-[#FF5A36]"
+                      : "w-2 bg-gray-200 hover:bg-gray-300"
+                      }`}
                   />
                 ))}
               </div>

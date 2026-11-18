@@ -509,6 +509,14 @@ export async function ensureAccountsTables() {
     }
 
     accountsTablesChecked = true;
+
+    // Auto-migrate CRM tables & migrations on startup without blocking
+    try {
+      const { ensureCrmSchema } = await import('./crm');
+      await ensureCrmSchema();
+    } catch {
+      // Non-fatal if CRM tables fail
+    }
   } catch (error) {
     console.error('Failed to initialize accounts tables:', error);
   }
@@ -4747,6 +4755,14 @@ export async function createIncomeAction(restaurantId: string | number, input: C
       [cleanId, input.date, cleanServiceId, amount, cleanPmId, finalCustomerName, customerPhone, note, orderId, createdBy]
     );
 
+    // Sync CRM in background if customer phone is present
+    if (customerPhone) {
+      try {
+        const { syncCustomersFromOrders } = await import('@/app/actions/crm');
+        syncCustomersFromOrders(cleanId).catch(() => {});
+      } catch {}
+    }
+
     return { success: true, incomeId: res.insertId, orderId, message: 'Income recorded successfully.' };
   } catch (error: any) {
     console.error('Failed to create income:', error);
@@ -4861,6 +4877,11 @@ export async function updateIncomeAction(
       values
     );
 
+    try {
+      const { syncCustomersFromOrders } = await import('@/app/actions/crm');
+      syncCustomersFromOrders(cleanId).catch(() => {});
+    } catch {}
+
     return { success: true, message: 'Income record updated successfully.' };
   } catch (error: any) {
     console.error('Failed to update income:', error);
@@ -4916,6 +4937,11 @@ export async function deleteIncomeAction(restaurantId: string | number, incomeId
       `UPDATE incomes SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?`,
       [cleanIncId, cleanId]
     );
+
+    try {
+      const { syncCustomersFromOrders } = await import('@/app/actions/crm');
+      syncCustomersFromOrders(cleanId).catch(() => {});
+    } catch {}
 
     return { success: true, message: 'Income record deleted successfully.' };
   } catch (error: any) {

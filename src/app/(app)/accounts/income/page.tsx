@@ -10,6 +10,7 @@ import { AccountsGate } from '@/components/accounts/AccountsGate';
 import { formatCurrency, formatAccountDate } from '@/lib/accounts/helpers';
 import { toPng } from 'html-to-image';
 import { getCustomerOrderByIdAction, type CustomerOrderRecord } from '@/app/actions/customer-orders';
+import { checkCustomerMembershipAction } from '@/app/actions/crm';
 import { format, parseISO, isValid } from 'date-fns';
 import {
   getIncomesAction,
@@ -70,6 +71,7 @@ import {
   Download,
   ExternalLink,
   CheckCircle2,
+  Crown,
 } from 'lucide-react';
 
 export default function ParlourIncomePage() {
@@ -139,6 +141,83 @@ function IncomeContent() {
   const [formNote, setFormNote] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // CRM Membership Detection State
+  const [detectedMember, setDetectedMember] = useState<{
+    tier: string;
+    discountPercent: number;
+    cardNumber: string;
+    customerName: string;
+  } | null>(null);
+  const [checkingMember, setCheckingMember] = useState(false);
+  const [originalAmountBeforeDiscount, setOriginalAmountBeforeDiscount] = useState<string | null>(null);
+
+  // Auto-detect CRM Membership when 11-digit phone is entered
+  useEffect(() => {
+    const digits = formPhone.replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('01') && restaurantId) {
+      let isCancelled = false;
+      setCheckingMember(true);
+      const timer = setTimeout(() => {
+        checkCustomerMembershipAction({
+          restaurantId,
+          phone: digits,
+        })
+          .then((res) => {
+            if (isCancelled) return;
+            if (res.success && res.found && res.membership) {
+              setDetectedMember({
+                tier: res.membership.tier,
+                discountPercent: res.membership.discountPercent,
+                cardNumber: res.membership.cardNumber,
+                customerName: res.membership.customerName,
+              });
+              // Auto-fill customer name if empty
+              setFormCustomerName((prev) => (prev.trim() ? prev : res.membership!.customerName));
+            } else {
+              setDetectedMember(null);
+            }
+          })
+          .catch(() => {
+            if (!isCancelled) setDetectedMember(null);
+          })
+          .finally(() => {
+            if (!isCancelled) setCheckingMember(false);
+          });
+      }, 300);
+
+      return () => {
+        isCancelled = true;
+        clearTimeout(timer);
+      };
+    } else {
+      setDetectedMember(null);
+      setCheckingMember(false);
+      setOriginalAmountBeforeDiscount(null);
+    }
+  }, [formPhone, restaurantId]);
+
+  const handleApplyMemberDiscount = () => {
+    if (!detectedMember) return;
+    const currentNum = Number(formAmount);
+    if (isNaN(currentNum) || currentNum <= 0) return;
+
+    setOriginalAmountBeforeDiscount(formAmount);
+    const discounted = Math.max(0, Math.round(currentNum * (1 - detectedMember.discountPercent / 100)));
+    setFormAmount(String(discounted));
+
+    const discountTag = `[${detectedMember.tier} Member ${detectedMember.discountPercent}% Off (Card #${detectedMember.cardNumber})]`;
+    if (!formNote.includes(discountTag)) {
+      setFormNote((prev) => [prev.trim(), discountTag].filter(Boolean).join(' | '));
+    }
+  };
+
+  const handleRevertMemberDiscount = () => {
+    if (originalAmountBeforeDiscount) {
+      setFormAmount(originalAmountBeforeDiscount);
+      setOriginalAmountBeforeDiscount(null);
+    }
+  };
 
   // Preset Handlers
   const handlePresetSelect = (preset: 'today' | 'weekly' | 'last30' | 'thisYear' | 'all') => {
@@ -235,6 +314,9 @@ function IncomeContent() {
     setFormTableNumber('');
     setFormNote('');
     setFormError(null);
+    setDetectedMember(null);
+    setCheckingMember(false);
+    setOriginalAmountBeforeDiscount(null);
     setIsAddModalOpen(true);
   };
 
@@ -1193,6 +1275,63 @@ function IncomeContent() {
                   className="flex-1 bg-transparent px-3 text-xs outline-none font-mono text-foreground placeholder:text-muted-foreground placeholder:font-sans h-full"
                 />
               </div>
+
+              {/* Checking CRM indicator */}
+              {checkingMember && (
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-1 animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                  <span>Checking CRM loyalty membership...</span>
+                </div>
+              )}
+
+              {/* Detected VIP/Loyalty Member Banner */}
+              {detectedMember && (
+                <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2 animate-in fade-in">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                      <Crown className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-foreground truncate">
+                          {detectedMember.tier} Member Recognized
+                        </p>
+                        <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-bold text-[9px] px-1.5 py-0 border-none">
+                          {detectedMember.discountPercent}% OFF
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">
+                        {detectedMember.customerName} • #{detectedMember.cardNumber}
+                      </p>
+                    </div>
+                  </div>
+
+                  {originalAmountBeforeDiscount ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleRevertMemberDiscount}
+                      className="h-7 text-[10px] font-bold border-amber-500/40 text-amber-700 hover:bg-amber-500/10 rounded-lg shrink-0"
+                    >
+                      Undo Discount
+                    </Button>
+                  ) : formAmount && Number(formAmount) > 0 ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleApplyMemberDiscount}
+                      className="h-7 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shrink-0 shadow-xs"
+                    >
+                      Apply {detectedMember.discountPercent}% Off
+                    </Button>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 font-semibold shrink-0">
+                      Enter amount to apply
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -1355,6 +1494,63 @@ function IncomeContent() {
                   className="flex-1 bg-transparent px-3 text-xs outline-none font-mono text-foreground placeholder:text-muted-foreground placeholder:font-sans h-full"
                 />
               </div>
+
+              {/* Checking CRM indicator */}
+              {checkingMember && (
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-1 animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                  <span>Checking CRM loyalty membership...</span>
+                </div>
+              )}
+
+              {/* Detected VIP/Loyalty Member Banner */}
+              {detectedMember && (
+                <div className="mt-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2 animate-in fade-in">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                      <Crown className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-foreground truncate">
+                          {detectedMember.tier} Member Recognized
+                        </p>
+                        <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-bold text-[9px] px-1.5 py-0 border-none">
+                          {detectedMember.discountPercent}% OFF
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-mono truncate">
+                        {detectedMember.customerName} • #{detectedMember.cardNumber}
+                      </p>
+                    </div>
+                  </div>
+
+                  {originalAmountBeforeDiscount ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleRevertMemberDiscount}
+                      className="h-7 text-[10px] font-bold border-amber-500/40 text-amber-700 hover:bg-amber-500/10 rounded-lg shrink-0"
+                    >
+                      Undo Discount
+                    </Button>
+                  ) : formAmount && Number(formAmount) > 0 ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleApplyMemberDiscount}
+                      className="h-7 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shrink-0 shadow-xs"
+                    >
+                      Apply {detectedMember.discountPercent}% Off
+                    </Button>
+                  ) : (
+                    <span className="text-[10px] text-amber-600 font-semibold shrink-0">
+                      Enter amount to apply
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">

@@ -12,33 +12,21 @@ interface StatItem {
 
 const STATS: StatItem[] = [
   {
-    value: "500+",
-    label: "Restaurant & Parlor Menus",
+    value: "3,000+",
+    label: "Restaurant & Parlour Menus",
   },
   {
-    value: "Thousands",
-    label: "Menu Items",
-    highlight: true,
-  },
-  {
-    value: "2,000+",
-    label: "Categories",
+    value: "3,500+",
+    label: "Items",
   },
   {
     value: "One Platform",
-    label: "to Build Your Menu",
+    label: "To Grow Your Business",
     highlight: true,
   },
 ];
 
 export function StatsStrip() {
-  const borderClasses = [
-    "border-b sm:border-b lg:border-b-0 sm:border-r border-gray-100", // item 0
-    "border-b sm:border-b lg:border-b-0 lg:border-r border-gray-100", // item 1
-    "border-b sm:border-b-0 sm:border-r border-gray-100",            // item 2
-    "",                                                               // item 3
-  ];
-
   return (
     <section className="w-full bg-white py-8 sm:py-12 px-4 sm:px-6 lg:px-8 border-b border-gray-100">
       <div className="max-w-[1240px] mx-auto">
@@ -49,17 +37,16 @@ export function StatsStrip() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="bg-white rounded-2xl sm:rounded-3xl border border-gray-200/80 shadow-[0_4px_25px_rgba(0,0,0,0.03),0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-            {STATS.map((stat, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+            {STATS.map((stat) => (
               <div
                 key={stat.label}
-                className={`flex flex-col p-5 sm:p-6 lg:p-7 hover:bg-orange-50/20 transition-colors group ${borderClasses[i] || ""}`}
+                className="flex flex-col p-6 sm:p-7 lg:p-8 hover:bg-orange-50/20 transition-colors group justify-center"
               >
                 {/* Bold Stat Value */}
                 <span
-                  className={`text-3xl sm:text-4xl lg:text-[36px] font-black tracking-tight leading-none mb-2 sm:mb-2.5 ${
-                    stat.highlight ? "text-[#FF5A36]" : "text-gray-950"
-                  }`}
+                  className={`text-3xl sm:text-4xl lg:text-[36px] font-black tracking-tight leading-none mb-2 sm:mb-2.5 ${stat.highlight ? "text-[#FF5A36]" : "text-gray-950"
+                    }`}
                 >
                   {stat.value}
                 </span>

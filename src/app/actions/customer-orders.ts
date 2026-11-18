@@ -330,6 +330,19 @@ export async function updateCustomerOrderStatusAction(
       console.warn('Completed order sync to accounts incomes error:', syncErr);
     }
 
+    // Auto-sync CRM in background so status changes (like cancelled) recalculate immediately
+    try {
+      const [ordRows]: any = await pool.execute(
+        `SELECT client_id, business_name FROM customer_orders WHERE order_id = ? LIMIT 1`,
+        [orderId]
+      );
+      const cId = ordRows?.[0]?.client_id || ordRows?.[0]?.business_name;
+      if (cId) {
+        const { syncCustomersFromOrders } = await import('@/app/actions/crm');
+        syncCustomersFromOrders(String(cId)).catch(() => {});
+      }
+    } catch {}
+
     return { success: true };
   } catch (error: any) {
     console.error('Error in updateCustomerOrderStatusAction:', error);
@@ -346,11 +359,27 @@ export async function deleteCustomerOrderAction(
   try {
     await ensureCustomerOrdersSchema();
 
+    // Fetch client_id before deleting so we can sync CRM
+    const [ordRows]: any = await pool.execute(
+      `SELECT client_id, business_name FROM customer_orders WHERE order_id = ? LIMIT 1`,
+      [orderId]
+    );
+    const clientId = ordRows?.[0]?.client_id;
+    const businessName = ordRows?.[0]?.business_name;
+
     await pool.execute(`DELETE FROM customer_orders WHERE order_id = ?`, [orderId]);
 
     try {
       await pool.execute(`UPDATE incomes SET deleted_at = NOW() WHERE order_id = ? AND deleted_at IS NULL`, [orderId]);
     } catch {}
+
+    // Auto-sync CRM in background so customer order counts and LTV update immediately
+    if (clientId || businessName) {
+      try {
+        const { syncCustomersFromOrders } = await import('@/app/actions/crm');
+        syncCustomersFromOrders(String(clientId || businessName)).catch(() => {});
+      } catch {}
+    }
 
     return { success: true };
   } catch (error: any) {

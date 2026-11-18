@@ -119,9 +119,10 @@
     --sidebar-ring: 330 85% 65%; /* Lighter Pink */
     --chart-1: 330 85% 65%; /* Lighter Pink for chart */
   }
-
-  html {
+  html[data-scroll-behavior="smooth"] {
     scroll-behavior: smooth;
+  }
+  html {
     scroll-padding-top: 60px;
   }
   @media (min-width: 640px) {

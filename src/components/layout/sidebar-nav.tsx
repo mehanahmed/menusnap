@@ -40,13 +40,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { SidebarPreferences } from '@/components/layout/sidebar-preferences';
 import { usePreferences } from '@/context/PreferencesContext';
 
-const mainNavItems: { href: string, label: string, icon: React.ElementType, hasChevron?: boolean, isLive?: boolean }[] = [
+const mainNavItems: { href: string, label: string, icon: React.ElementType, hasChevron?: boolean, isLive?: boolean, activePrefix?: string }[] = [
   { href: '/magictab/', label: 'MagicTab', icon: ListOrdered, hasChevron: true },
   { href: '/templates/', label: 'Template Library', icon: Layers, hasChevron: true },
   { href: '/draft/', label: 'Draft', icon: FileEdit, hasChevron: true },
   { href: '/customer-orders/', label: 'Customer Orders', icon: UtensilsCrossed, hasChevron: true, isLive: true },
-  { href: '/hrm/', label: 'HRM', icon: Users, hasChevron: true },
-  { href: '/accounts/', label: 'Accounts', icon: Wallet, hasChevron: true },
+  { href: '/crm/customers', label: 'CRM & Loyalty', icon: Crown, hasChevron: true, activePrefix: '/crm' },
+  { href: '/hrm/live', label: 'HRM', icon: Users, hasChevron: true, activePrefix: '/hrm' },
+  { href: '/accounts/overview/', label: 'Accounts', icon: Wallet, hasChevron: true, activePrefix: '/accounts' },
   { href: '/magic-calculation/', label: 'Magic Calculation', icon: Calculator, hasChevron: true },
   { href: '/order-history/', label: 'Order History', icon: HistoryIcon, hasChevron: true },
   { href: '/happy-clients/', label: 'Happy Clients', icon: HeartHandshake, hasChevron: true },
@@ -62,7 +63,12 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
       case '/templates/': return t('templateLibrary', fallback);
       case '/draft/': return t('draft', fallback);
       case '/customer-orders/': return t('customerOrders', fallback);
+      case '/crm/customers':
+      case '/crm/': return t('crm', fallback);
+      case '/hrm/live':
       case '/hrm/': return t('hrm', fallback);
+      case '/accounts/overview/':
+      case '/accounts/overview':
       case '/accounts/': return t('accounts', fallback);
       case '/magic-calculation/': return t('magicCalc', fallback);
       case '/order-history/': return t('orderHistory', fallback);
@@ -157,6 +163,9 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
           <SidebarMenu>
             {mainNavItems.map((item) => {
               const isExternal = item.href.startsWith('http');
+              const isActive = item.activePrefix 
+                ? pathname.startsWith(item.activePrefix)
+                : (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)));
               return (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
@@ -164,12 +173,12 @@ const mainNavItems: { href: string, label: string, icon: React.ElementType, hasC
                     variant="default"
                     className={cn(
                       "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                      (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)))
+                      isActive
                         ? "bg-sidebar-accent text-sidebar-primary-foreground font-semibold"
                         : "text-sidebar-foreground/80",
                       "group-data-[collapsible=icon]:justify-center"
                     )}
-                    isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+                    isActive={isActive}
                     tooltip={{
                       children: getNavLabel(item.href, item.label),
                       className: "bg-popover text-popover-foreground border-border shadow-md",

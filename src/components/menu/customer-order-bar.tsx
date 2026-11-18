@@ -17,6 +17,7 @@ import {
   Loader2,
   Receipt,
   Sparkles,
+  Crown,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ import {
 import { cn, decodeHtmlEntities } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { createCustomerOrderAction } from '@/app/actions/customer-orders';
+import { checkCustomerMembershipAction } from '@/app/actions/crm';
 
 export interface CartItem {
   key: string;
@@ -100,6 +102,61 @@ export function CustomerOrderBar({
   const [isDownloading, setIsDownloading] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
 
+  const [membershipInfo, setMembershipInfo] = useState<{
+    tier: string;
+    discountPercent: number;
+    cardNumber: string;
+    customerName: string;
+  } | null>(null);
+  const [isCheckingMembership, setIsCheckingMembership] = useState(false);
+
+  // Live lookup to auto-detect membership discount when 11-digit mobile is entered
+  React.useEffect(() => {
+    const digits = customerPhone.replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('01')) {
+      let isCancelled = false;
+      setIsCheckingMembership(true);
+
+      const timer = setTimeout(() => {
+        checkCustomerMembershipAction({
+          restaurantId: clientId ? String(clientId) : undefined,
+          draftId,
+          businessName,
+          phone: digits,
+        })
+          .then((res) => {
+            if (isCancelled) return;
+            if (res.success && res.found && res.membership) {
+              setMembershipInfo({
+                tier: res.membership.tier,
+                discountPercent: res.membership.discountPercent,
+                cardNumber: res.membership.cardNumber,
+                customerName: res.membership.customerName,
+              });
+              // Auto-fill customer name if empty
+              setCustomerName((prev) => (prev.trim() ? prev : res.membership!.customerName));
+            } else {
+              setMembershipInfo(null);
+            }
+          })
+          .catch(() => {
+            if (!isCancelled) setMembershipInfo(null);
+          })
+          .finally(() => {
+            if (!isCancelled) setIsCheckingMembership(false);
+          });
+      }, 300);
+
+      return () => {
+        isCancelled = true;
+        clearTimeout(timer);
+      };
+    } else {
+      setMembershipInfo(null);
+      setIsCheckingMembership(false);
+    }
+  }, [customerPhone, clientId, draftId, businessName]);
+
   const [orderSuccessData, setOrderSuccessData] = useState<{
     orderId: string;
     name: string;
@@ -107,6 +164,10 @@ export function CustomerOrderBar({
     table?: string;
     note?: string;
     items: CartItem[];
+    subtotal?: number;
+    discountAmount?: number;
+    membershipTier?: string;
+    cardNumber?: string;
     total: number;
     placedAt: string;
     whatsappUrl?: string;
@@ -120,6 +181,10 @@ export function CustomerOrderBar({
     (acc, item) => acc + item.price * item.quantity,
     0
   );
+
+  const discountRate = membershipInfo ? membershipInfo.discountPercent : 0;
+  const discountAmount = discountRate > 0 ? Math.round((totalOrderAmount * discountRate) / 100) : 0;
+  const finalPayableTotal = Math.max(0, totalOrderAmount - discountAmount);
 
   const handleDownloadReceipt = async () => {
     if (!receiptRef.current || !orderSuccessData) return;
@@ -209,6 +274,11 @@ export function CustomerOrderBar({
     // Generate order ID
     const fakeOrderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const memberNoteTag = discountAmount > 0 && membershipInfo
+      ? `[${membershipInfo.tier} Member ${discountRate}% Off (Card #${membershipInfo.cardNumber})]`
+      : '';
+    const finalSpecialNote = [specialNote.trim(), memberNoteTag].filter(Boolean).join(' | ') || undefined;
+
     const orderPayload = {
       orderId: fakeOrderId,
       clientId: clientId || null,
@@ -217,9 +287,9 @@ export function CustomerOrderBar({
       customerName: cleanName,
       customerPhone: cleanPhone,
       tableNumber: cleanTable || undefined,
-      specialNote: specialNote.trim() || undefined,
+      specialNote: finalSpecialNote,
       items: [...cartItems],
-      totalAmount: totalOrderAmount,
+      totalAmount: finalPayableTotal,
     };
 
     // Save to MySQL in background
@@ -280,6 +350,13 @@ export function CustomerOrderBar({
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://menusnap.colorhutbd.xyz';
     const receiptUrl = `${origin}/order-receipt/${fakeOrderId}`;
 
+    const discountWaLine = discountAmount > 0 && membershipInfo
+      ? `🏷️ *Membership Discount (${membershipInfo.tier} ${discountRate}%):* -${currencySymbol}${discountAmount.toLocaleString()} (Card #${membershipInfo.cardNumber})\n`
+      : '';
+    const billBreakdownWa = discountAmount > 0 && membershipInfo
+      ? `💰 *Subtotal:* ${currencySymbol}${totalOrderAmount.toLocaleString()}\n${discountWaLine}💵 *Net Payable Total:* ${currencySymbol}${finalPayableTotal.toLocaleString()}`
+      : `💰 *Total Bill:* ${currencySymbol}${totalOrderAmount.toLocaleString()}`;
+
     const waText = 
 `🍽️ *NEW ORDER - ${decodeHtmlEntities(businessName || 'Restaurant')}*
 ━━━━━━━━━━━━━━━━━━━━
@@ -289,7 +366,7 @@ ${tableLine}👤 *Customer:* ${cleanName} (${cleanPhone})
 📋 *Items Ordered:*
 ${itemsSummary}
 
-💰 *Total Bill:* ${currencySymbol}${totalOrderAmount.toLocaleString()}
+${billBreakdownWa}
 ${noteLine}⏰ *Time:* ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
 ━━━━━━━━━━━━━━━━━━━━
 🔒 *Official Verified Digital Receipt:*
@@ -323,9 +400,13 @@ _Verified by MenuSnap — Prices & items locked in system_`;
       name: cleanName,
       phone: cleanPhone,
       table: cleanTable || undefined,
-      note: specialNote.trim() || undefined,
+      note: finalSpecialNote,
       items: [...cartItems],
-      total: totalOrderAmount,
+      subtotal: totalOrderAmount,
+      discountAmount,
+      membershipTier: membershipInfo?.tier,
+      cardNumber: membershipInfo?.cardNumber,
+      total: finalPayableTotal,
       placedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       whatsappUrl: waUrl,
     });
@@ -526,13 +607,32 @@ _Verified by MenuSnap — Prices & items locked in system_`;
                     </div>
                   </div>
 
-                  {/* Total Bill */}
-                  <div className="pt-2.5 border-t-2 border-zinc-900 flex justify-between items-center text-sm font-extrabold text-zinc-950">
-                    <span>Total Amount:</span>
-                    <span className="text-base font-black text-zinc-950">
-                      {currencySymbol}{orderSuccessData.total.toLocaleString()}
-                    </span>
-                  </div>
+                  {/* Total Bill / Member Breakdown */}
+                  {orderSuccessData.discountAmount && orderSuccessData.discountAmount > 0 ? (
+                    <div className="pt-2 border-t border-zinc-200 space-y-1 text-xs">
+                      <div className="flex justify-between text-zinc-500">
+                        <span>Items Subtotal:</span>
+                        <span>{currencySymbol}{(orderSuccessData.subtotal || orderSuccessData.total).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-600 font-bold">
+                        <span>{orderSuccessData.membershipTier || 'Member'} Discount:</span>
+                        <span>-{currencySymbol}{orderSuccessData.discountAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="pt-1.5 border-t-2 border-zinc-900 flex justify-between items-center text-sm font-extrabold text-zinc-950">
+                        <span>Total Payable:</span>
+                        <span className="text-base font-black text-zinc-950">
+                          {currencySymbol}{orderSuccessData.total.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2.5 border-t-2 border-zinc-900 flex justify-between items-center text-sm font-extrabold text-zinc-950">
+                      <span>Total Amount:</span>
+                      <span className="text-base font-black text-zinc-950">
+                        {currencySymbol}{orderSuccessData.total.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Receipt Bottom Branding */}
                   <div className="pt-2 border-t border-dashed border-zinc-300 text-center text-[10px] text-zinc-400">
@@ -682,13 +782,43 @@ _Verified by MenuSnap — Prices & items locked in system_`;
                     ))}
                   </div>
 
-                  {/* Total calculation */}
-                  <div className="p-3 bg-muted/40 rounded-xl border border-border/60 flex items-center justify-between text-sm">
-                    <span className="font-semibold text-foreground">Total Bill:</span>
-                    <span className="text-base font-extrabold text-primary">
-                      {currencySymbol}{totalOrderAmount.toLocaleString()}
-                    </span>
-                  </div>
+                  {/* Total calculation & Membership Privilege Breakdown */}
+                  {membershipInfo && discountAmount > 0 ? (
+                    <div className="p-3 bg-amber-500/10 dark:bg-amber-950/20 rounded-xl border border-amber-500/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">
+                          <Crown className="w-4 h-4 text-amber-500" />
+                          {membershipInfo.tier} Loyalty Member Recognized!
+                        </span>
+                        <Badge className="bg-amber-500 hover:bg-amber-500 text-white font-bold text-[10px] px-2 py-0.5 border-none shadow-xs">
+                          {membershipInfo.discountPercent}% OFF
+                        </Badge>
+                      </div>
+                      <div className="space-y-1 text-xs border-t border-amber-500/20 pt-1.5 text-muted-foreground">
+                        <div className="flex justify-between">
+                          <span>Items Total (Subtotal):</span>
+                          <span className="font-medium text-foreground">{currencySymbol}{totalOrderAmount.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                          <span>Member Discount ({membershipInfo.discountPercent}%):</span>
+                          <span>-{currencySymbol}{discountAmount.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-extrabold text-foreground pt-1 border-t border-amber-500/20">
+                          <span>Total Payable:</span>
+                          <span className="text-base font-black text-primary">
+                            {currencySymbol}{finalPayableTotal.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-muted/40 rounded-xl border border-border/60 flex items-center justify-between text-sm">
+                      <span className="font-semibold text-foreground">Total Bill:</span>
+                      <span className="text-base font-extrabold text-primary">
+                        {currencySymbol}{totalOrderAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Customer Details Form */}
@@ -773,6 +903,20 @@ _Verified by MenuSnap — Prices & items locked in system_`;
                         className="flex-1 bg-transparent px-3 text-xs outline-none font-mono text-foreground placeholder:text-muted-foreground/50 h-full"
                       />
                     </div>
+                    {isCheckingMembership && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-1 animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                        <span>Checking loyalty membership...</span>
+                      </div>
+                    )}
+                    {membershipInfo && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 pt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        <span>
+                          Card <strong>#{membershipInfo.cardNumber}</strong> verified ({membershipInfo.tier} Member • {membershipInfo.discountPercent}% OFF)
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* If parlour: only special note (no tables). If restaurant with fixed table: special note. Otherwise: table + special note */}
@@ -833,7 +977,10 @@ _Verified by MenuSnap — Prices & items locked in system_`;
                       className="w-full h-11 text-sm font-bold bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl shadow-lg gap-2 transition-transform active:scale-98"
                     >
                       <span className="text-base">💬</span>
-                      <span>Place Order via WhatsApp • {currencySymbol}{totalOrderAmount.toLocaleString()}</span>
+                      <span>
+                        Place Order via WhatsApp • {currencySymbol}{finalPayableTotal.toLocaleString()}
+                        {discountAmount > 0 ? ` (${discountRate}% OFF applied)` : ''}
+                      </span>
                     </Button>
                     <p className="text-[10px] text-center text-muted-foreground mt-1.5">
                       Submits order and opens WhatsApp with pre-filled message for {isParlour ? 'the parlour' : 'the restaurant'}

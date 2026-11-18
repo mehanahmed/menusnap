@@ -52,7 +52,7 @@ export function HeroSection({
         videoRef.current.pause();
         setIsPlaying(false);
       } else {
-        videoRef.current.play().catch(() => {});
+        videoRef.current.play().catch(() => { });
         setIsPlaying(true);
       }
     } else {
@@ -109,7 +109,7 @@ export function HeroSection({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
         >
-     
+
         </motion.div>
 
         {/* 2. Main Headline */}
@@ -117,11 +117,11 @@ export function HeroSection({
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.12 }}
-          className="text-3xl sm:text-5xl md:text-6xl lg:text-[62px] font-extrabold text-[#111827] font-bengali tracking-tight leading-[1.2] sm:leading-[1.18] mb-5 text-center max-w-4xl mx-auto"
+          className="text-3xl sm:text-5xl md:text-6xl lg:text-[62px] font-extrabold text-[#111827] font-bengali tracking-tight leading-[1.2] sm:leading-[1.18] mb-5 text-center max-w-5xl mx-auto"
         >
           আপনার <span className="text-[#FF5A36]">Menu</span> থেকে Order
           <br />
-          Management সব এক জায়গায়।
+          Management সব এখন এক জায়গায়
         </motion.h1>
 
         {/* 4. Subtitle */}
@@ -131,7 +131,7 @@ export function HeroSection({
           transition={{ duration: 0.45, delay: 0.18 }}
           className="text-sm sm:text-base md:text-[17px] text-neutral-600 font-bengali max-w-3xl lg:max-w-4xl mx-auto text-center font-normal leading-relaxed sm:leading-[1.7] mb-8"
         >
-          ৫০০+ রেস্টুরেন্ট ও পার্লারের মেনু রেফারেন্স থেকে সহজেই তৈরি করুন আপনার প্রতিষ্ঠানের প্রফেশনাল মেনু। প্রতিটি আইটেমের Cost ও Pricing হিসাব করুন, Digital QR Menu-এর মাধ্যমে সরাসরি WhatsApp-এ অর্ডার গ্রহণ করুন। পাশাপাশি দৈনন্দিন Accounts Management, লোকেশনভিত্তিক Staff Attendance এবং প্রতিষ্ঠানের সম্পূর্ণ হিসাব-নিকাশ পরিচালনা করুন সবকিছু এক প্ল্যাটফর্মে।
+          ৩,০০০+ রেস্টুরেন্ট ও পার্লারের মেনু রেফারেন্স থেকে সহজেই তৈরি করুন আপনার প্রতিষ্ঠানের প্রফেশনাল মেনু। প্রতিটি আইটেমের Cost ও Pricing হিসাব করুন। Digital QR Menu-এর মাধ্যমে সরাসরি WhatsApp-এ অর্ডার গ্রহণ করুন। পাশাপাশি দৈনন্দিন Accounts Management, লোকেশনভিত্তিক Staff Attendance এবং প্রতিষ্ঠানের সম্পূর্ণ হিসাব-নিকাশ পরিচালনা করুন সবকিছু এক প্ল্যাটফর্মে।
         </motion.p>
 
         {/* 5. Action Buttons */}
@@ -155,7 +155,7 @@ export function HeroSection({
             }}
             className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-[#FF5A36] hover:bg-[#e84d2a] text-white font-semibold text-sm sm:text-base shadow-md shadow-[#FF5A36]/25 hover:shadow-lg hover:shadow-[#FF5A36]/35 hover:-translate-y-0.5 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span>Start building</span>
+            <span>Start Building</span>
             <ArrowRight className="w-4 h-4 ml-0.5" />
           </Link>
 
@@ -168,7 +168,7 @@ export function HeroSection({
             }}
             className="w-full sm:w-auto px-5 py-3.5 rounded-2xl bg-white/90 backdrop-blur-md border border-neutral-200/90 text-neutral-800 font-semibold text-sm shadow-sm hover:bg-neutral-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span>See how MenuSnap works</span>
+            <span>See How MenuSnap Works</span>
             <div className="w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600">
               <ArrowDown className="w-2.5 h-2.5" />
             </div>
@@ -184,7 +184,7 @@ export function HeroSection({
         >
           {/* Laptop Outer Aluminum Bezel */}
           <div className="bg-[#1e2022] p-2 sm:p-3 rounded-t-[28px] sm:rounded-t-[36px] shadow-[0_25px_70px_rgba(0,0,0,0.25)] border-t border-x border-neutral-700/60 relative">
-            
+
             {/* Webcam & Top Notch Indicator */}
             <div className="w-2 h-2 rounded-full bg-neutral-900 mx-auto mb-1.5 border border-neutral-700/50 flex items-center justify-center">
               <span className="w-0.5 h-0.5 rounded-full bg-emerald-500/70 animate-pulse" />
@@ -258,9 +258,8 @@ export function HeroSection({
                 <button
                   type="button"
                   onClick={togglePlay}
-                  className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-black/60 hover:bg-[#FF5A36] text-white flex items-center justify-center shadow-2xl backdrop-blur-md border border-white/30 transition-all transform hover:scale-105 pointer-events-auto cursor-pointer ${
-                    isPlaying && !showControls ? "opacity-0" : "opacity-100"
-                  }`}
+                  className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-black/60 hover:bg-[#FF5A36] text-white flex items-center justify-center shadow-2xl backdrop-blur-md border border-white/30 transition-all transform hover:scale-105 pointer-events-auto cursor-pointer ${isPlaying && !showControls ? "opacity-0" : "opacity-100"
+                    }`}
                   aria-label={isPlaying ? "Pause Demo" : "Play Demo"}
                 >
                   {isPlaying ? (

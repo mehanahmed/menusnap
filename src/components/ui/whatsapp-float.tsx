@@ -25,6 +25,7 @@ export function WhatsAppFloat({
   // Hide on dashboard/app pages (where AI Avatar chat button is active), login, admin, and free-design pages
   const isDashboardOrApp = pathname === '/dashboard' || 
                            pathname.startsWith('/dashboard/') || 
+                           pathname.startsWith('/crm') ||
                            pathname.startsWith('/magic-calculation') || 
                            pathname.startsWith('/magictab') || 
                            pathname.startsWith('/templates') || 
