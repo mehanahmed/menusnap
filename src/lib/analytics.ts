@@ -168,8 +168,8 @@ export function trackBeginCheckout({
       window.gtag("event", "begin_checkout", ecommercePayload);
     }
 
-    // 4. Forward to Meta Pixel only as fallback if GTM is not active
-    if (!isGtmActive() && typeof window.fbq === "function") {
+    // 4. Forward to Meta Pixel directly
+    if (typeof (window as any).fbq === "function") {
       const pixelPayload: Record<string, unknown> = {
         content_name: formattedItemName,
         content_category: "Software Subscription",
@@ -181,9 +181,9 @@ export function trackBeginCheckout({
       };
 
       if (eventId) {
-        window.fbq("track", "InitiateCheckout", pixelPayload, { eventID: eventId });
+        (window as any).fbq("track", "InitiateCheckout", pixelPayload, { eventID: eventId });
       } else {
-        window.fbq("track", "InitiateCheckout", pixelPayload);
+        (window as any).fbq("track", "InitiateCheckout", pixelPayload);
       }
     }
 

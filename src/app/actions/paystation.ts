@@ -616,12 +616,12 @@ export async function verifyPayStationTransaction(
       finalStatus = 'Failed';
     }
 
-    // 3. Update database record
-    await pool.execute(
+    // 3. Update database record (guard against concurrent GET/POST race conditions)
+    const [updateResult]: any = await pool.execute(
       `
       UPDATE paystation_transactions
       SET status = ?, trx_id = ?, payment_category = ?, raw_response = ?
-      WHERE invoice_number = ?
+      WHERE invoice_number = ? AND status != 'Successful'
     `,
       [
         finalStatus,
@@ -632,8 +632,11 @@ export async function verifyPayStationTransaction(
       ]
     );
 
-    // 4. If Successful, register or upgrade client in `clients` CRM table & record coupon usage
-    if (finalStatus === 'Successful') {
+    const isNewlySuccessful =
+      finalStatus === 'Successful' && updateResult.affectedRows > 0;
+
+    // 4. If Newly Successful, register or upgrade client in `clients` CRM table & record coupon usage
+    if (isNewlySuccessful) {
       try {
         await linkSubscriberToClientCRM({
           fullName: currentTx.customer_name,
@@ -652,10 +655,11 @@ export async function verifyPayStationTransaction(
       // Dispatch Meta Conversions API (CAPI) Purchase event for verified paid orders
       const paidAmount = Number(currentTx.amount) || 0;
       if (paidAmount > 0) {
+        const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://menusnap.colorhatbd.xyz').replace(/\/$/, '');
         sendMetaCapiEventAsync({
           eventName: 'Purchase',
           eventId: `purchase_${invoiceNumber}`,
-          eventSourceUrl: `/checkout/result?invoice=${encodeURIComponent(invoiceNumber)}`,
+          eventSourceUrl: `${appUrl}/checkout/result?invoice=${encodeURIComponent(invoiceNumber)}`,
           userData: {
             email: currentTx.customer_email,
             phone: currentTx.customer_phone,

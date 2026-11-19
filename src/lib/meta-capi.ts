@@ -197,12 +197,19 @@ export async function sendMetaCapiEvent(options: SendMetaCapiEventOptions): Prom
       fbc,
     });
 
+    const defaultOrigin = (process.env.NEXT_PUBLIC_APP_URL || 'https://menusnap.colorhatbd.xyz').replace(/\/$/, '');
+    const resolvedSourceUrl = options.eventSourceUrl
+      ? (options.eventSourceUrl.startsWith('http')
+          ? options.eventSourceUrl
+          : `${defaultOrigin}${options.eventSourceUrl.startsWith('/') ? '' : '/'}${options.eventSourceUrl}`)
+      : defaultOrigin;
+
     const eventPayload: Record<string, unknown> = {
       event_name: options.eventName,
       event_time: options.eventTime || Math.floor(Date.now() / 1000),
       event_id: options.eventId,
       action_source: 'website',
-      event_source_url: options.eventSourceUrl || 'https://menusnap.colorhatbd.xyz',
+      event_source_url: resolvedSourceUrl,
       user_data: compiledUserData,
     };
 

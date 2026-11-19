@@ -265,43 +265,35 @@ export function CheckoutModal({
   };
 
   const finalAmount = Math.max(0, basePrice - couponDiscount);
-  const hasTrackedCheckoutRef = React.useRef<string | null>(null);
-
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
       setIsSuccess(false);
       setIsProcessing(false);
       setErrorMessage(null);
-
-      // Track begin_checkout once per modal open/price change
-      if (basePrice > 0) {
-        const trackingKey = `${plan}-${finalAmount}-${appliedCoupon || ""}`;
-        if (hasTrackedCheckoutRef.current !== trackingKey) {
-          hasTrackedCheckoutRef.current = trackingKey;
-          trackBeginCheckout({
-            planId: plan,
-            planName: planDisplayName,
-            price: finalAmount,
-            currency: "BDT",
-            coupon: appliedCoupon || undefined,
-            checkoutMethod: "online",
-          });
-        }
-      }
     } else {
       document.body.style.overflow = "unset";
-      hasTrackedCheckoutRef.current = null;
     }
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [isOpen, plan, planDisplayName, basePrice, finalAmount, appliedCoupon]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Track InitiateCheckout on Meta Pixel & DataLayer immediately when user clicks payment (even if validation fails)
+    trackBeginCheckout({
+      planId: plan,
+      planName: planDisplayName,
+      price: finalAmount,
+      currency: "BDT",
+      coupon: appliedCoupon || undefined,
+      checkoutMethod: "online",
+    });
+
     if (isSamePlanAlreadyPurchased) {
       setErrorMessage(`Your account already has active lifetime access to ${planDisplayName}. Duplicate purchase is not permitted.`);
       return;

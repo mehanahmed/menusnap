@@ -299,31 +299,20 @@ function DedicatedCheckoutForm() {
 
   const finalAmount = Math.max(0, basePrice - couponDiscount);
 
-  // =========================================================================
-  // GTM DataLayer Event: begin_checkout / InitiateCheckout
-  // =========================================================================
-  const hasTrackedCheckoutRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (packagesLoaded && basePrice > 0) {
-      const trackingKey = `${rawPlan}-${finalAmount}-${appliedCoupon || ""}`;
-      if (hasTrackedCheckoutRef.current !== trackingKey) {
-        hasTrackedCheckoutRef.current = trackingKey;
-        trackBeginCheckout({
-          planId: rawPlan,
-          planName: planDisplayName,
-          price: finalAmount,
-          currency: "BDT",
-          coupon: appliedCoupon || undefined,
-          checkoutMethod: "online",
-        });
-      }
-    }
-  }, [packagesLoaded, rawPlan, planDisplayName, basePrice, finalAmount, appliedCoupon]);
-
   // Handle PayStation payment redirection
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Track InitiateCheckout on Meta Pixel & DataLayer immediately when user clicks payment (even if validation fails)
+    trackBeginCheckout({
+      planId: rawPlan,
+      planName: planDisplayName,
+      price: finalAmount,
+      currency: "BDT",
+      coupon: appliedCoupon || undefined,
+      checkoutMethod: "online",
+    });
+
     if (isSamePlanAlreadyPurchased) {
       setErrorMessage(
         `Your account already has active lifetime access to ${planDisplayName}. Duplicate purchase is not permitted.`

@@ -59,10 +59,26 @@ function CheckoutResultContent() {
   React.useEffect(() => {
     const cleanAmount = Number(amount) || 0;
     if (isSuccess && invoice && cleanAmount > 0 && !purchaseTrackedRef.current) {
+      // Guard against double firing on page reload, remounts, or history back/forward
+      const storageKey = `ms_purchase_tracked_${invoice}`;
+      if (typeof window !== 'undefined') {
+        try {
+          if (sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey)) {
+            purchaseTrackedRef.current = true;
+            return;
+          }
+          sessionStorage.setItem(storageKey, '1');
+          localStorage.setItem(storageKey, '1');
+        } catch {
+          // Continue if storage is restricted
+        }
+      }
+
       purchaseTrackedRef.current = true;
       const purchaseEventId = `purchase_${invoice}`;
 
       if (typeof window !== 'undefined') {
+        // Keep GTM DataLayer push intact for GA4 / GTM
         window.dataLayer = window.dataLayer || [];
         window.dataLayer.push({
           event: 'purchase',
@@ -82,23 +98,36 @@ function CheckoutResultContent() {
           },
         });
 
-        // Fallback: If GTM is active (google_tag_manager), GTM fires the tag via dataLayer.
-        // Direct fbq only fires as a backup if GTM is absent or blocked.
-        if (!isGtmActive() && typeof (window as any).fbq === 'function') {
-          (window as any).fbq(
-            'track',
-            'Purchase',
-            {
-              value: cleanAmount,
-              currency: 'BDT',
-              content_name: `MenuSnap ${plan}`,
-              content_type: 'product',
-              content_ids: [plan.toLowerCase().replace(/\s+/g, '-')],
-              num_items: 1,
-              order_id: invoice,
-            },
-            { eventID: purchaseEventId }
-          );
+        // Track directly on Meta Pixel with matching CAPI deduplication eventID
+        const trackMetaPixel = () => {
+          if (typeof (window as any).fbq === 'function') {
+            (window as any).fbq(
+              'track',
+              'Purchase',
+              {
+                value: cleanAmount,
+                currency: 'BDT',
+                content_name: `MenuSnap ${plan}`,
+                content_type: 'product',
+                content_ids: [plan.toLowerCase().replace(/\s+/g, '-')],
+                num_items: 1,
+                order_id: invoice,
+              },
+              { eventID: purchaseEventId }
+            );
+            return true;
+          }
+          return false;
+        };
+
+        if (!trackMetaPixel()) {
+          // If fbq is still initializing, retry briefly
+          const retryTimer = setInterval(() => {
+            if (trackMetaPixel()) {
+              clearInterval(retryTimer);
+            }
+          }, 150);
+          setTimeout(() => clearInterval(retryTimer), 3000);
         }
       }
     }

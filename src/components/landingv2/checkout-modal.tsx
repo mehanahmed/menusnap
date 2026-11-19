@@ -16,7 +16,7 @@ import {
   LogIn,
 } from "lucide-react";
 import { PlanTier, BillingPeriod, PaymentGateway, PricingPackage } from "@/lib/menusnap-types";
-import { trackEvent } from "@/lib/analytics";
+import { trackEvent, trackBeginCheckout } from "@/lib/analytics";
 import {
   initiatePayStationPaymentAction,
   getPayStationPublicStatus,
@@ -269,14 +269,13 @@ export function CheckoutModal({
       setIsSuccess(false);
       setIsProcessing(false);
       setErrorMessage(null);
-      trackEvent("checkout_started", { plan, duration, coupon });
     } else {
       document.body.style.overflow = "unset";
     }
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [isOpen, plan, duration, coupon]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -284,6 +283,17 @@ export function CheckoutModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Track InitiateCheckout on Meta Pixel & DataLayer immediately when user clicks payment (even if validation fails)
+    trackBeginCheckout({
+      planId: plan,
+      planName: planDisplayName,
+      price: finalAmount,
+      currency: "BDT",
+      coupon: appliedCoupon || undefined,
+      checkoutMethod: "online",
+    });
+
     if (isSamePlanAlreadyPurchased) {
       setErrorMessage(`Your account already has active lifetime access to ${planDisplayName}. Duplicate purchase is not permitted.`);
       return;
